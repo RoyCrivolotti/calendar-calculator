@@ -75,7 +75,7 @@ const Calendar: React.FC = () => {
     dispatch(setCurrentDate(info.start.toISOString()));
   };
 
-  const handleSaveEvent = (event: CalendarEvent) => {
+  const handleSaveEvent = async (event: CalendarEvent) => {
     if (events.find(e => e.id === event.id)) {
       // If event exists, update it
       dispatch(updateEvent(event));
@@ -83,12 +83,24 @@ const Calendar: React.FC = () => {
       // If it's a new event, add it
       dispatch(addEvent(event));
     }
+    
+    // Save to storage immediately
+    const updatedEvents = events.find(e => e.id === event.id)
+      ? events.map(e => e.id === event.id ? event : e)
+      : [...events, event];
+    await storageService.saveEvents(updatedEvents);
+    
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
   };
 
-  const handleDeleteEvent = (event: CalendarEvent) => {
+  const handleDeleteEvent = async (event: CalendarEvent) => {
     dispatch(deleteEvent(event.id));
+    
+    // Save to storage immediately
+    const updatedEvents = events.filter(e => e.id !== event.id);
+    await storageService.saveEvents(updatedEvents);
+    
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
   };
