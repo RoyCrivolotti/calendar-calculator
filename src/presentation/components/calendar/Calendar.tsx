@@ -57,19 +57,29 @@ const Calendar: React.FC = () => {
       type
     });
 
-    dispatch(addEvent(newEvent));
     dispatch(setSelectedEvent(newEvent));
     dispatch(setShowEventModal(true));
   };
 
   const handleSaveEvent = (event: CalendarEvent) => {
-    dispatch(updateEvent(event));
+    if (events.find(e => e.id === event.id)) {
+      // If event exists, update it
+      dispatch(updateEvent(event));
+    } else {
+      // If it's a new event, add it
+      dispatch(addEvent(event));
+    }
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
   };
 
   const handleDeleteEvent = (event: CalendarEvent) => {
     dispatch(deleteEvent(event.id));
+    dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
+  };
+
+  const handleCloseModal = () => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
   };
@@ -98,10 +108,7 @@ const Calendar: React.FC = () => {
           event={selectedEvent}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
-          onClose={() => {
-            dispatch(setShowEventModal(false));
-            dispatch(setSelectedEvent(null));
-          }}
+          onClose={handleCloseModal}
         />
       )}
     </CalendarContainer>
