@@ -4,7 +4,7 @@ import { storageService } from '../../services/storage';
 
 interface CalendarState {
   events: CalendarEvent[];
-  currentDate: Date;
+  currentDate: string;
   selectedEvent: CalendarEvent | null;
   showEventModal: boolean;
   showImportModal: boolean;
@@ -13,7 +13,7 @@ interface CalendarState {
 
 const initialState: CalendarState = {
   events: [],
-  currentDate: new Date(),
+  currentDate: new Date().toISOString(),
   selectedEvent: null,
   showEventModal: false,
   showImportModal: false,
@@ -25,17 +25,18 @@ const calendarSlice = createSlice({
   initialState,
   reducers: {
     setEvents: (state, action: PayloadAction<CalendarEvent[]>) => {
-      state.events = action.payload;
-      storageService.saveEvents(action.payload);
+      state.events = action.payload.map(event => new CalendarEvent(event));
+      storageService.saveEvents(state.events);
     },
     addEvent: (state, action: PayloadAction<CalendarEvent>) => {
-      state.events.push(action.payload);
+      const newEvent = new CalendarEvent(action.payload);
+      state.events.push(newEvent);
       storageService.saveEvents(state.events);
     },
     updateEvent: (state, action: PayloadAction<CalendarEvent>) => {
       const index = state.events.findIndex(event => event.id === action.payload.id);
       if (index !== -1) {
-        state.events[index] = action.payload;
+        state.events[index] = new CalendarEvent(action.payload);
         storageService.saveEvents(state.events);
       }
     },
@@ -44,10 +45,10 @@ const calendarSlice = createSlice({
       storageService.saveEvents(state.events);
     },
     setCurrentDate: (state, action: PayloadAction<Date>) => {
-      state.currentDate = action.payload;
+      state.currentDate = action.payload.toISOString();
     },
     setSelectedEvent: (state, action: PayloadAction<CalendarEvent | null>) => {
-      state.selectedEvent = action.payload;
+      state.selectedEvent = action.payload ? new CalendarEvent(action.payload) : null;
     },
     setShowEventModal: (state, action: PayloadAction<boolean>) => {
       state.showEventModal = action.payload;

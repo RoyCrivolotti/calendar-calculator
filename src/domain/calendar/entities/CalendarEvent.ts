@@ -4,8 +4,8 @@ export type EventType = 'oncall' | 'incident';
 
 export interface CalendarEventProps {
   id: string;
-  start: Date;
-  end: Date;
+  start: Date | string;
+  end: Date | string;
   type: EventType;
   isWeekend?: boolean;
   isNightShift?: boolean;
@@ -22,9 +22,15 @@ export class CalendarEvent {
   title?: string;
 
   constructor(props: CalendarEventProps) {
+    if (!props.id) {
+      throw new Error('CalendarEvent must have an id');
+    }
+    if (!props.type) {
+      throw new Error('CalendarEvent must have a type');
+    }
     this.id = props.id;
-    this.start = props.start;
-    this.end = props.end;
+    this.start = props.start instanceof Date ? props.start : new Date(props.start);
+    this.end = props.end instanceof Date ? props.end : new Date(props.end);
     this.type = props.type;
     this.isWeekend = props.isWeekend || false;
     this.isNightShift = props.isNightShift || false;
@@ -38,8 +44,8 @@ export class CalendarEvent {
   toJSON(): CalendarEventProps {
     return {
       id: this.id,
-      start: this.start,
-      end: this.end,
+      start: this.start.toISOString(),
+      end: this.end.toISOString(),
       type: this.type,
       isWeekend: this.isWeekend,
       isNightShift: this.isNightShift,
@@ -49,11 +55,15 @@ export class CalendarEvent {
 }
 
 export function createCalendarEvent(props: Omit<CalendarEventProps, 'isWeekend' | 'isNightShift'>): CalendarEvent {
-  const isWeekendValue = isWeekend(props.start);
-  const isNightShiftValue = calculateNightShiftHours(props.start, props.end) > 0;
+  const start = props.start instanceof Date ? props.start : new Date(props.start);
+  const end = props.end instanceof Date ? props.end : new Date(props.end);
+  const isWeekendValue = isWeekend(start);
+  const isNightShiftValue = calculateNightShiftHours(start, end) > 0;
 
   return new CalendarEvent({
     ...props,
+    start,
+    end,
     isWeekend: isWeekendValue,
     isNightShift: isNightShiftValue
   });

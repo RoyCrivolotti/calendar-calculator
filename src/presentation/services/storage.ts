@@ -34,7 +34,12 @@ class StorageService {
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          // Create object store with id as the key path
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          // Create indexes for better querying
+          store.createIndex('start', 'start', { unique: false });
+          store.createIndex('end', 'end', { unique: false });
+          store.createIndex('type', 'type', { unique: false });
         }
       };
     });
@@ -54,7 +59,7 @@ class StorageService {
     try {
       const events = await this.loadFromIndexedDB();
       // Update localStorage as a backup
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
       console.log('Calendar data synced to storage');
     } catch (error) {
       console.error('Error syncing to storage:', error);
@@ -77,11 +82,7 @@ class StorageService {
       const request = store.getAll();
 
       request.onsuccess = () => {
-        const events = request.result.map((event: any) => ({
-          ...event,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        }));
+        const events = request.result.map((event: any) => new CalendarEvent(event));
         resolve(events);
       };
 
@@ -96,11 +97,7 @@ class StorageService {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
-        return JSON.parse(data).map((event: any) => ({
-          ...event,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        }));
+        return JSON.parse(data).map((event: any) => new CalendarEvent(event));
       }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
@@ -131,19 +128,23 @@ class StorageService {
 
       // Add new events
       for (const event of events) {
+        if (!event.id) {
+          console.warn('Skipping event without ID:', event);
+          continue;
+        }
         await new Promise((resolve, reject) => {
-          const request = store.add(event);
+          const request = store.put(event.toJSON());
           request.onsuccess = resolve;
           request.onerror = () => reject(request.error);
         });
       }
 
       // Also update localStorage as a backup
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
     } catch (error) {
       console.error('Error saving events:', error);
       // Fallback to localStorage only if IndexedDB fails
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
     }
   }
 

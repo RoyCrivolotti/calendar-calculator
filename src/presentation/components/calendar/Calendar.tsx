@@ -72,7 +72,6 @@ const Calendar: React.FC = () => {
   };
 
   const handleViewChange = (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
-    // Use the start date of the visible range to determine the month
     dispatch(setCurrentDate(info.start));
   };
 
@@ -115,10 +114,10 @@ const Calendar: React.FC = () => {
       />
       <CompensationSection
         events={events}
-        currentDate={currentDate}
+        currentDate={new Date(currentDate)}
         onDateChange={(date: Date) => dispatch(setCurrentDate(date))}
       />
-      <MonthlyCompensationSummary data={getCompensationData(currentDate)} />
+      <MonthlyCompensationSummary data={getCompensationData(new Date(currentDate))} />
       {showEventModal && selectedEvent && (
         <EventDetailsModal
           event={selectedEvent}
