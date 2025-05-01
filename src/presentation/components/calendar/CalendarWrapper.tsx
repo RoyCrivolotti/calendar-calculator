@@ -109,10 +109,29 @@ const CalendarContainer = styled.div`
 
   .fc {
     height: 100%;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
   .fc-view-harness {
-    height: calc(100% - 50px) !important;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
+
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 4px;
+      border: 2px solid #f1f5f9;
+    }
   }
 
   .fc-scroller {
@@ -150,6 +169,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
     const SCROLL_THRESHOLD = 15;
     const [showEventTypeSelector, setShowEventTypeSelector] = useState(false);
     const [pendingEventInfo, setPendingEventInfo] = useState<DateSelectArg | null>(null);
+    const calendarContainerRef = useRef<HTMLDivElement>(null);
 
     const handleDateSelect = (selectInfo: DateSelectArg) => {
       setPendingEventInfo(selectInfo);
@@ -186,60 +206,23 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
     }, [showEventTypeSelector]);
 
     useEffect(() => {
-      const handleWheel = (e: Event) => {
-        const wheelEvent = e as WheelEvent;
-        const target = e.target as HTMLElement;
-        
-        // Check if the event is within the calendar view area
-        const isInCalendarView = target.closest('.fc-view-harness') !== null;
-        if (!isInCalendarView) return;
+      const container = calendarContainerRef.current;
+      if (!container) return;
 
-        if (wheelEvent.ctrlKey || wheelEvent.metaKey) {
-          // Allow zooming with ctrl/cmd + scroll
-          return;
-        }
+      const handleWheel = (e: WheelEvent) => {
+        const calendarEl = container.querySelector('.fc-view-harness');
+        if (!calendarEl) return;
 
-        const calendar = ref as React.RefObject<FullCalendar>;
-        if (!calendar.current) return;
-
-        const view = calendar.current.getApi().view;
-        const isWeekView = view.type === 'timeGridWeek';
-        const isMonthView = view.type === 'dayGridMonth';
-
-        if (isWeekView && Math.abs(wheelEvent.deltaX) > Math.abs(wheelEvent.deltaY)) {
-          // In week view, only handle horizontal scrolling
+        // Only prevent default if we're actually scrolling the calendar
+        if (calendarEl.scrollHeight > calendarEl.clientHeight) {
           e.preventDefault();
-          scrollAccumulator.current += wheelEvent.deltaX;
-
-          if (Math.abs(scrollAccumulator.current) >= SCROLL_THRESHOLD) {
-            const direction = scrollAccumulator.current > 0 ? 1 : -1;
-            calendar.current.getApi().incrementDate({ days: direction });
-            scrollAccumulator.current = 0;
-          }
-        } else if (isMonthView && Math.abs(wheelEvent.deltaY) > Math.abs(wheelEvent.deltaX)) {
-          // In month view, only handle vertical scrolling
-          e.preventDefault();
-          scrollAccumulator.current += wheelEvent.deltaY;
-
-          if (Math.abs(scrollAccumulator.current) >= SCROLL_THRESHOLD) {
-            const direction = scrollAccumulator.current > 0 ? 1 : -1;
-            calendar.current.getApi().incrementDate({ weeks: direction });
-            scrollAccumulator.current = 0;
-          }
+          calendarEl.scrollTop += e.deltaY;
         }
       };
 
-      const calendarElement = document.querySelector('.fc');
-      if (calendarElement) {
-        calendarElement.addEventListener('wheel', handleWheel, { passive: false });
-      }
-
-      return () => {
-        if (calendarElement) {
-          calendarElement.removeEventListener('wheel', handleWheel);
-        }
-      };
-    }, [ref]);
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
+    }, []);
 
     const formatEventTitle = (event: CalendarEvent) => {
       if (event.title) return event.title;
@@ -255,7 +238,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     return (
       <>
-        <CalendarContainer>
+        <CalendarContainer ref={calendarContainerRef}>
           <FullCalendar
             ref={ref}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
