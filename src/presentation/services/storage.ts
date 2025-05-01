@@ -35,7 +35,7 @@ class StorageService {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           // Create object store with id as the key path
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: false });
           // Create indexes for better querying
           store.createIndex('start', 'start', { unique: false });
           store.createIndex('end', 'end', { unique: false });
@@ -133,7 +133,8 @@ class StorageService {
           continue;
         }
         await new Promise((resolve, reject) => {
-          const request = store.put(event.toJSON());
+          const eventData = event.toJSON();
+          const request = store.put(eventData, eventData.id);
           request.onsuccess = resolve;
           request.onerror = () => reject(request.error);
         });

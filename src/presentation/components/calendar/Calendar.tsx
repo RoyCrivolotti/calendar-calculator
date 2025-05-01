@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
-import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, createCalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import CompensationSection from './CompensationSection';
 import EventDetailsModal from './EventDetailsModal';
@@ -43,7 +43,7 @@ const Calendar: React.FC = () => {
   useEffect(() => {
     const loadEvents = async () => {
       const loadedEvents = await storageService.loadEvents();
-      dispatch(setEvents(loadedEvents));
+      dispatch(setEvents(loadedEvents.map(event => event.toJSON())));
     };
     loadEvents();
   }, [dispatch]);
@@ -67,7 +67,7 @@ const Calendar: React.FC = () => {
       type
     });
 
-    dispatch(setSelectedEvent(newEvent));
+    dispatch(setSelectedEvent(newEvent.toJSON()));
     dispatch(setShowEventModal(true));
   };
 
@@ -76,19 +76,14 @@ const Calendar: React.FC = () => {
   };
 
   const handleSaveEvent = async (event: CalendarEvent) => {
+    const eventProps = event.toJSON();
     if (events.find(e => e.id === event.id)) {
       // If event exists, update it
-      dispatch(updateEvent(event));
+      dispatch(updateEvent(eventProps));
     } else {
       // If it's a new event, add it
-      dispatch(addEvent(event));
+      dispatch(addEvent(eventProps));
     }
-    
-    // Save to storage immediately
-    const updatedEvents = events.find(e => e.id === event.id)
-      ? events.map(e => e.id === event.id ? event : e)
-      : [...events, event];
-    await storageService.saveEvents(updatedEvents);
     
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
@@ -96,11 +91,6 @@ const Calendar: React.FC = () => {
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
     dispatch(deleteEvent(event.id));
-    
-    // Save to storage immediately
-    const updatedEvents = events.filter(e => e.id !== event.id);
-    await storageService.saveEvents(updatedEvents);
-    
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
   };
@@ -112,27 +102,30 @@ const Calendar: React.FC = () => {
 
   const getCompensationData = (date: Date): CompensationBreakdown[] => {
     const calculator = new CompensationCalculator();
-    return calculator.calculateMonthlyCompensation(events, date);
+    return calculator.calculateMonthlyCompensation(
+      events.map(event => new CalendarEvent(event)),
+      date
+    );
   };
 
   return (
     <CalendarContainer>
       <CalendarWrapper
         ref={calendarRef}
-        events={events}
+        events={events.map(event => new CalendarEvent(event))}
         onEventClick={handleEventClick}
         onDateSelect={handleDateSelect}
         onViewChange={handleViewChange}
       />
       <CompensationSection
-        events={events}
+        events={events.map(event => new CalendarEvent(event))}
         currentDate={new Date(currentDate)}
         onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
       />
       <MonthlyCompensationSummary data={getCompensationData(new Date(currentDate))} />
       {showEventModal && selectedEvent && (
         <EventDetailsModal
-          event={selectedEvent}
+          event={new CalendarEvent(selectedEvent)}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={handleCloseModal}

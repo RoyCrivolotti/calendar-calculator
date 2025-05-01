@@ -1,11 +1,11 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
 import { storageService } from '../../services/storage';
 
 interface CalendarState {
-  events: CalendarEvent[];
+  events: CalendarEventProps[];
   currentDate: string;
-  selectedEvent: CalendarEvent | null;
+  selectedEvent: CalendarEventProps | null;
   showEventModal: boolean;
   showImportModal: boolean;
   importText: string;
@@ -24,31 +24,30 @@ const calendarSlice = createSlice({
   name: 'calendar',
   initialState,
   reducers: {
-    setEvents: (state, action: PayloadAction<CalendarEvent[]>) => {
-      state.events = action.payload.map(event => new CalendarEvent(event));
-      storageService.saveEvents(state.events);
+    setEvents: (state, action: PayloadAction<CalendarEventProps[]>) => {
+      state.events = action.payload;
+      storageService.saveEvents(action.payload.map(event => new CalendarEvent(event)));
     },
-    addEvent: (state, action: PayloadAction<CalendarEvent>) => {
-      const newEvent = new CalendarEvent(action.payload);
-      state.events.push(newEvent);
-      storageService.saveEvents(state.events);
+    addEvent: (state, action: PayloadAction<CalendarEventProps>) => {
+      state.events.push(action.payload);
+      storageService.saveEvents(state.events.map(event => new CalendarEvent(event)));
     },
-    updateEvent: (state, action: PayloadAction<CalendarEvent>) => {
+    updateEvent: (state, action: PayloadAction<CalendarEventProps>) => {
       const index = state.events.findIndex(event => event.id === action.payload.id);
       if (index !== -1) {
-        state.events[index] = new CalendarEvent(action.payload);
-        storageService.saveEvents(state.events);
+        state.events[index] = action.payload;
+        storageService.saveEvents(state.events.map(event => new CalendarEvent(event)));
       }
     },
     deleteEvent: (state, action: PayloadAction<string>) => {
       state.events = state.events.filter(event => event.id !== action.payload);
-      storageService.saveEvents(state.events);
+      storageService.saveEvents(state.events.map(event => new CalendarEvent(event)));
     },
     setCurrentDate: (state, action: PayloadAction<string>) => {
       state.currentDate = action.payload;
     },
-    setSelectedEvent: (state, action: PayloadAction<CalendarEvent | null>) => {
-      state.selectedEvent = action.payload ? new CalendarEvent(action.payload) : null;
+    setSelectedEvent: (state, action: PayloadAction<CalendarEventProps | null>) => {
+      state.selectedEvent = action.payload;
     },
     setShowEventModal: (state, action: PayloadAction<boolean>) => {
       state.showEventModal = action.payload;

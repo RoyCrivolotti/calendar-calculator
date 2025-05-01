@@ -165,7 +165,7 @@ const CloseButton = styled.button`
 
 interface MonthData {
   date: Date;
-  data: CompensationBreakdown;
+  data: CompensationBreakdown[];
 }
 
 interface MonthlyCompensationSummaryProps {
@@ -179,37 +179,17 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   // Generate list of months (last 12 months)
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
+    const currentDate = new Date();
     
-    // Get all unique months from the compensation data
-    const uniqueMonths = new Set(
-      data.map(data => {
-        const date = new Date(data.date);
-        return `${date.getFullYear()}-${date.getMonth()}`;
-      })
-    );
-
-    // Convert unique months to Date objects and sort them
-    const months = Array.from(uniqueMonths).map(monthStr => {
-      const [year, month] = monthStr.split('-').map(Number);
-      return new Date(year, month, 1);
-    }).sort((a, b) => a.getTime() - b.getTime());
-
-    // Add each month to the result
-    months.forEach(date => {
-      const monthData = data.find(
-        data => {
-          const dataDate = new Date(data.date);
-          return dataDate.getMonth() === date.getMonth() && 
-                 dataDate.getFullYear() === date.getFullYear();
-        }
-      );
-      if (monthData) {
-        result.push({
-          date,
-          data: monthData
-        });
-      }
-    });
+    // Get last 12 months
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(currentDate);
+      date.setMonth(date.getMonth() - i);
+      result.push({
+        date,
+        data: data.filter(d => d.type === 'total')
+      });
+    }
 
     return result;
   }, [data]);
@@ -251,7 +231,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             onClick={() => handleMonthClick(date)}
           >
             <MonthTitle>{format(date, 'MMMM yyyy')}</MonthTitle>
-            <MonthValue>{data.totalCompensation.toFixed(2)}€</MonthValue>
+            <MonthValue>
+              {data.reduce((sum, d) => sum + d.amount, 0).toFixed(2)}€
+            </MonthValue>
           </MonthBox>
         ))}
       </ScrollContainer>
@@ -262,84 +244,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           <ModalContent onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
             <CloseButton onClick={handleCloseModal}>×</CloseButton>
             <h2>{format(selectedMonth, 'MMMM yyyy')}</h2>
-            {data
-              .filter(data => {
-                const dataDate = new Date(data.date);
-                return dataDate.getMonth() === selectedMonth.getMonth() && 
-                       dataDate.getFullYear() === selectedMonth.getFullYear();
-              })
-              .map((comp, index) => (
-                <div key={index} style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  <h3>On-Call Shifts</h3>
-                  {comp.onCallShifts?.length > 0 ? (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0' }}>
-                      {comp.onCallShifts.map((shift, i) => (
-                        <li key={i} style={{ marginBottom: '0.5rem' }}>
-                          {format(new Date(shift.start), 'MMM dd')}: {format(new Date(shift.start), 'HH:mm')} - {format(new Date(shift.end), 'MMM dd HH:mm')}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>No on-call shifts this month</p>
-                  )}
-
-                  <h3>Incidents</h3>
-                  {comp.incidents?.length > 0 ? (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0' }}>
-                      {comp.incidents.map((incident, i) => (
-                        <li key={i} style={{ marginBottom: '0.5rem' }}>
-                          {format(new Date(incident.start), 'MMM dd')}: {format(new Date(incident.start), 'HH:mm')} - {format(new Date(incident.end), 'HH:mm')}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>No incidents this month</p>
-                  )}
-
-                  <div style={{ marginTop: '1rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
-                    <h4>Hours Summary</h4>
-                    <p>Weekday On-Call Hours: {comp.weekdayOnCallHours.toFixed(1)}</p>
-                    <p>Weekend On-Call Hours: {comp.weekendOnCallHours.toFixed(1)}</p>
-                    <p>Weekday Incident Hours: {comp.weekdayIncidentHours.toFixed(1)}</p>
-                    <p>Weekend Incident Hours: {comp.weekendIncidentHours.toFixed(1)}</p>
-                    {comp.nightShiftHours > 0 && (
-                      <>
-                        <p style={{ color: '#dc2626', marginTop: '0.5rem' }}>
-                          Night Shift Hours (Incidents Only):
-                        </p>
-                        <p style={{ color: '#dc2626', marginLeft: '1rem' }}>
-                          Weekday: {comp.incidents
-                            .filter(inc => !isWeekend(new Date(inc.start)))
-                            .reduce((acc, inc) => acc + calculateNightShiftHours(new Date(inc.start), new Date(inc.end)), 0)
-                            .toFixed(1)}h
-                        </p>
-                        <p style={{ color: '#dc2626', marginLeft: '1rem' }}>
-                          Weekend: {comp.incidents
-                            .filter(inc => isWeekend(new Date(inc.start)))
-                            .reduce((acc, inc) => acc + calculateNightShiftHours(new Date(inc.start), new Date(inc.end)), 0)
-                            .toFixed(1)}h
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: '1rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
-                    <h4>Compensation Breakdown</h4>
-                    <p>Weekday On-Call: €{comp.breakdown?.weekdayOnCallCompensation?.toFixed(2) || '0.00'}</p>
-                    <p>Weekend On-Call: €{comp.breakdown?.weekendOnCallCompensation?.toFixed(2) || '0.00'}</p>
-                    <p>Weekday Incidents: €{comp.breakdown?.weekdayIncidentCompensation?.toFixed(2) || '0.00'}</p>
-                    <p>Weekend Incidents: €{comp.breakdown?.weekendIncidentCompensation?.toFixed(2) || '0.00'}</p>
-                    {comp.breakdown?.nightShiftIncidentBonus > 0 && (
-                      <p style={{ color: '#dc2626' }}>
-                        Night Shift Bonus (Incidents Only): €{comp.breakdown.nightShiftIncidentBonus.toFixed(2)}
-                      </p>
-                    )}
-                    <p style={{ fontWeight: '600', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
-                      Total Compensation: €{comp.totalCompensation?.toFixed(2) || '0.00'}
-                    </p>
-                  </div>
+            {data.map((comp, index) => (
+              <div key={index} style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
+                <h3>{comp.description}</h3>
+                <p>Count: {comp.count}</p>
+                <div style={{ marginTop: '1rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
+                  <h4>Compensation Breakdown</h4>
+                  <p style={{ fontWeight: '600', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
+                    Total Compensation: €{comp.amount.toFixed(2)}
+                  </p>
                 </div>
-              ))}
+              </div>
+            ))}
           </ModalContent>
         </Modal>
       )}
