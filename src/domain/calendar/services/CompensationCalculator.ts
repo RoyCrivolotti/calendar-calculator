@@ -26,28 +26,41 @@ export class CompensationCalculator {
            hour < OFFICE_HOURS.end;
   }
 
-  private calculateCompensableHours(event: CalendarEvent): { weekday: number; weekend: number } {
+  private calculateCompensableHours(event: CalendarEvent): { weekday: number; weekend: number; weekdayNightShift: number; weekendNightShift: number } {
     const start = new Date(event.start);
     const end = new Date(event.end);
     let weekdayHours = 0;
     let weekendHours = 0;
+    let weekdayNightShiftHours = 0;
+    let weekendNightShiftHours = 0;
 
     // Iterate through each hour of the event
     for (let d = new Date(start); d < end; d.setHours(d.getHours() + 1)) {
-      // Skip office hours
-      if (this.isWithinOfficeHours(d)) {
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const isNightShift = d.getHours() >= 22 || d.getHours() < 6;
+      const isOfficeHour = !isWeekend && d.getHours() >= 9 && d.getHours() < 18;
+
+      // Skip office hours for on-call shifts
+      if (event.type === 'oncall' && isOfficeHour) {
         continue;
       }
 
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       if (isWeekend) {
-        weekendHours++;
+        if (isNightShift) {
+          weekendNightShiftHours++;
+        } else {
+          weekendHours++;
+        }
       } else {
-        weekdayHours++;
+        if (isNightShift) {
+          weekdayNightShiftHours++;
+        } else {
+          weekdayHours++;
+        }
       }
     }
 
-    return { weekday: weekdayHours, weekend: weekendHours };
+    return { weekday: weekdayHours, weekend: weekendHours, weekdayNightShift: weekdayNightShiftHours, weekendNightShift: weekendNightShiftHours };
   }
 
   private calculateEventCompensation(event: CalendarEvent): { weekday: number; weekend: number; nightShift: number } {
@@ -60,18 +73,19 @@ export class CompensationCalculator {
       weekdayComp = hours.weekday * RATES.weekdayOnCallRate;
       weekendComp = hours.weekend * RATES.weekendOnCallRate;
     } else if (event.type === 'incident') {
-      const totalHours = hours.weekday + hours.weekend;
       const isWeekend = event.isWeekend;
       const multiplier = isWeekend ? RATES.weekendIncidentMultiplier : RATES.weekdayIncidentMultiplier;
       
-      if (isWeekend) {
-        weekendComp = totalHours * RATES.baseHourlySalary * multiplier;
-      } else {
-        weekdayComp = totalHours * RATES.baseHourlySalary * multiplier;
-      }
+      // Calculate base compensation for regular hours
+      weekdayComp = hours.weekday * RATES.baseHourlySalary * multiplier;
+      weekendComp = hours.weekend * RATES.baseHourlySalary * multiplier;
 
-      if (event.isNightShift) {
-        nightShiftComp = totalHours * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1);
+      // Add night shift bonus for both weekday and weekend night shifts
+      if (hours.weekdayNightShift > 0) {
+        nightShiftComp += hours.weekdayNightShift * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1);
+      }
+      if (hours.weekendNightShift > 0) {
+        nightShiftComp += hours.weekendNightShift * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1);
       }
     }
 
@@ -92,7 +106,8 @@ export class CompensationCalculator {
     let totalWeekendOnCallHours = 0;
     let totalWeekdayIncidentHours = 0;
     let totalWeekendIncidentHours = 0;
-    let totalNightShiftHours = 0;
+    let totalWeekdayNightShiftHours = 0;
+    let totalWeekendNightShiftHours = 0;
     let totalCompensation = 0;
 
     // Calculate on-call compensation
@@ -107,14 +122,10 @@ export class CompensationCalculator {
     // Calculate incident compensation
     incidentEvents.forEach(event => {
       const hours = this.calculateCompensableHours(event);
-      if (event.isWeekend) {
-        totalWeekendIncidentHours += hours.weekday + hours.weekend;
-      } else {
-        totalWeekdayIncidentHours += hours.weekday + hours.weekend;
-      }
-      if (event.isNightShift) {
-        totalNightShiftHours += hours.weekday + hours.weekend;
-      }
+      totalWeekdayIncidentHours += hours.weekday;
+      totalWeekendIncidentHours += hours.weekend;
+      totalWeekdayNightShiftHours += hours.weekdayNightShift;
+      totalWeekendNightShiftHours += hours.weekendNightShift;
       const comp = this.calculateEventCompensation(event);
       totalCompensation += comp.weekday + comp.weekend + comp.nightShift;
     });
@@ -130,14 +141,15 @@ export class CompensationCalculator {
       });
     }
 
-    if (totalWeekdayIncidentHours > 0 || totalWeekendIncidentHours > 0) {
+    if (totalWeekdayIncidentHours > 0 || totalWeekendIncidentHours > 0 || totalWeekdayNightShiftHours > 0 || totalWeekendNightShiftHours > 0) {
       breakdown.push({
         type: 'incident',
         amount: totalWeekdayIncidentHours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier +
                 totalWeekendIncidentHours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier +
-                totalNightShiftHours * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1),
+                totalWeekdayNightShiftHours * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1) +
+                totalWeekendNightShiftHours * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1),
         count: incidentEvents.length,
-        description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalNightShiftHours}h night shift)`
+        description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night shift, ${totalWeekendNightShiftHours}h weekend night shift)`
       });
     }
 
