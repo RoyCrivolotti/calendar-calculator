@@ -1,208 +1,203 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from '@emotion/styled';
 import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { isWeekend, calculateNightShiftHours } from '../../../utils/calendarUtils';
 import { calculateMonthlyCompensation } from '../../../utils/compensation';
 import { format } from 'date-fns';
+import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
+import { CompensationCalculator } from '../../../domain/calendar/services/CompensationCalculator';
 
-const CompensationSection = styled.section`
-  padding: 2rem;
+const Section = styled.div`
   background: white;
   border-radius: 12px;
+  padding: 1.5rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  margin: 2rem;
+  border: 2px solid #e2e8f0;
 `;
 
-const CompensationContainer = styled.div`
-  max-width: 1200px;
-  margin: 0 auto;
-`;
-
-const CompensationTitle = styled.h2`
+const Title = styled.h2`
+  margin: 0 0 1rem 0;
   color: #0f172a;
   font-size: 1.5rem;
   font-weight: 600;
-  margin-bottom: 2rem;
 `;
 
-const CompensationGrid = styled.div`
+const Breakdown = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-`;
-
-const CompensationItem = styled.div`
-  background: #f8fafc;
-  padding: 1.5rem;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-`;
-
-const CompensationLabel = styled.div`
-  color: #64748b;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-`;
-
-const CompensationValue = styled.div`
-  color: #0f172a;
-  font-size: 1.5rem;
-  font-weight: 600;
-`;
-
-const TotalCompensation = styled.div`
-  background: #f1f5f9;
-  padding: 1.5rem;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  margin-top: 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const DateSelector = styled.div`
-  display: flex;
-  align-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
+  margin-top: 1rem;
+`;
 
-  button {
-    padding: 0.5rem 1rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-    background: white;
-    cursor: pointer;
-    transition: all 0.2s;
+const BreakdownItem = styled.div`
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
 
-    &:hover {
-      background: #f8fafc;
-    }
+  h3 {
+    margin: 0 0 0.5rem 0;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 500;
   }
 
-  span {
-    font-weight: 500;
+  p {
+    margin: 0;
     color: #64748b;
+    font-size: 0.875rem;
+  }
+
+  .amount {
+    color: #0f172a;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
   }
 `;
 
-export interface CompensationSectionProps {
+const MonthSelector = styled.div`
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
+`;
+
+const MonthButton = styled.button`
+  padding: 0.5rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+  color: #0f172a;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const MonthList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+`;
+
+const MonthTag = styled.button`
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: white;
+  color: #0f172a;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+  }
+
+  &.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+  }
+`;
+
+interface CompensationSectionProps {
   events: CalendarEvent[];
   currentDate: Date;
   onDateChange: (date: Date) => void;
 }
 
-const getPaymentMonth = (date: Date): Date => {
-  // Print the date but in a readable way, saying the day, month and year
-  console.log('getPaymentMonth', date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }));
-  const paymentDate = new Date(date);
-  if (date.getDate() >= 27) {
-    paymentDate.setMonth(paymentDate.getMonth() + 1);
-  }
-  return paymentDate;
-};
-
-const groupEventsByMonth = (events: CalendarEvent[]): Map<string, CalendarEvent[]> => {
-  const grouped = new Map<string, CalendarEvent[]>();
-  
-  events.forEach(event => {
-    const paymentMonth = getPaymentMonth(event.start);
-    const key = `${paymentMonth.getFullYear()}-${paymentMonth.getMonth() + 1}`;
-    
-    if (!grouped.has(key)) {
-      grouped.set(key, []);
-    }
-    grouped.get(key)?.push(event);
-  });
-  
-  return grouped;
-};
-
-const CompensationSectionComponent: React.FC<CompensationSectionProps> = ({ 
+const CompensationSection: React.FC<CompensationSectionProps> = ({
   events,
   currentDate,
   onDateChange
 }) => {
-  const currentMonth = getPaymentMonth(currentDate);
-  const monthKey = `${currentMonth.getFullYear()}-${currentMonth.getMonth() + 1}`;
-  const monthEvents = groupEventsByMonth(events).get(monthKey) || [];
+  const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<Date[]>([]);
 
-  // Use calculateMonthlyCompensation for all values
-  const compensation = calculateMonthlyCompensation(monthEvents);
-  const totalCompensation = compensation.totalCompensation;
+  useEffect(() => {
+    const calculator = new CompensationCalculator();
+    const newBreakdown = calculator.calculateMonthlyCompensation(events, currentDate);
+    setBreakdown(newBreakdown);
 
-  // Calculate night shift hours for incidents, split by weekday/weekend
-  const nightShiftHours = monthEvents
-    .filter(event => event.type === 'incident')
-    .reduce((acc, event) => {
-      const start = new Date(event.start);
-      const end = new Date(event.end);
-      const hours = calculateNightShiftHours(start, end);
-      
-      if (isWeekend(start)) {
-        acc.weekend += hours;
-      } else {
-        acc.weekday += hours;
-      }
-      return acc;
-    }, { weekday: 0, weekend: 0 });
+    // Get unique months from events
+    const months = new Set<string>();
+    events.forEach(event => {
+      const monthKey = `${event.start.getFullYear()}-${event.start.getMonth() + 1}`;
+      months.add(monthKey);
+    });
 
-  const handleDateChange = (date: Date) => {
+    const monthDates = Array.from(months).map(key => {
+      const [year, month] = key.split('-').map(Number);
+      return new Date(year, month - 1);
+    });
+
+    setAvailableMonths(monthDates.sort((a, b) => b.getTime() - a.getTime()));
+  }, [events, currentDate]);
+
+  const handlePreviousMonth = () => {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() - 1);
+    onDateChange(newDate);
+  };
+
+  const handleNextMonth = () => {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() + 1);
+    onDateChange(newDate);
+  };
+
+  const handleMonthSelect = (date: Date) => {
     onDateChange(date);
   };
 
+  const formatMonth = (date: Date) => {
+    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
   return (
-    <CompensationSection id="compensation-section">
-      <CompensationContainer>
-        <CompensationTitle>
-          Compensation Breakdown for {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-        </CompensationTitle>
+    <Section>
+      <Title>Compensation Breakdown for {formatMonth(currentDate)}</Title>
+      
+      <MonthSelector>
+        <MonthButton onClick={handlePreviousMonth}>Previous Month</MonthButton>
+        <MonthList>
+          {availableMonths.map((date) => (
+            <MonthTag
+              key={date.toISOString()}
+              className={date.getMonth() === currentDate.getMonth() && 
+                        date.getFullYear() === currentDate.getFullYear() ? 'active' : ''}
+              onClick={() => handleMonthSelect(date)}
+            >
+              {formatMonth(date)}
+            </MonthTag>
+          ))}
+        </MonthList>
+        <MonthButton onClick={handleNextMonth}>Next Month</MonthButton>
+      </MonthSelector>
 
-        <DateSelector>
-          <button onClick={() => handleDateChange(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}>
-            Previous Month
-          </button>
-          <span>{format(currentDate, 'MMMM yyyy')}</span>
-          <button onClick={() => handleDateChange(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}>
-            Next Month
-          </button>
-        </DateSelector>
-
-        <CompensationGrid>
-          <CompensationItem>
-            <CompensationLabel>Weekday On-Call Hours</CompensationLabel>
-            <CompensationValue>{compensation.weekdayOnCallHours.toFixed(1)}h</CompensationValue>
-          </CompensationItem>
-          <CompensationItem>
-            <CompensationLabel>Weekend On-Call Hours</CompensationLabel>
-            <CompensationValue>{compensation.weekendOnCallHours.toFixed(1)}h</CompensationValue>
-          </CompensationItem>
-          <CompensationItem>
-            <CompensationLabel>Weekday Incident Hours</CompensationLabel>
-            <CompensationValue>{compensation.weekdayIncidentHours.toFixed(1)}h</CompensationValue>
-          </CompensationItem>
-          <CompensationItem>
-            <CompensationLabel>Weekend Incident Hours</CompensationLabel>
-            <CompensationValue>{compensation.weekendIncidentHours.toFixed(1)}h</CompensationValue>
-          </CompensationItem>
-          <CompensationItem>
-            <CompensationLabel>Weekday Night Shift Hours</CompensationLabel>
-            <CompensationValue>{nightShiftHours.weekday.toFixed(1)}h</CompensationValue>
-          </CompensationItem>
-          <CompensationItem>
-            <CompensationLabel>Weekend Night Shift Hours</CompensationLabel>
-            <CompensationValue>{nightShiftHours.weekend.toFixed(1)}h</CompensationValue>
-          </CompensationItem>
-        </CompensationGrid>
-
-        <TotalCompensation>
-          <CompensationLabel>Total Compensation</CompensationLabel>
-          <CompensationValue>{totalCompensation.toFixed(2)}€</CompensationValue>
-        </TotalCompensation>
-      </CompensationContainer>
-    </CompensationSection>
+      <Breakdown>
+        {breakdown.map((item, index) => (
+          <BreakdownItem key={index}>
+            <h3>{item.description}</h3>
+            <p>Count: {item.count}</p>
+            <div className="amount">€{item.amount.toFixed(2)}</div>
+          </BreakdownItem>
+        ))}
+      </Breakdown>
+    </Section>
   );
 };
 
-export default CompensationSectionComponent; 
+export default CompensationSection; 
