@@ -125,10 +125,16 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 }) => {
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
   const [availableMonths, setAvailableMonths] = useState<Date[]>([]);
+  const calculator = useMemo(() => new CompensationCalculator(), []);
 
   useEffect(() => {
-    const calculator = new CompensationCalculator();
     const newBreakdown = calculator.calculateMonthlyCompensation(events, currentDate);
+    console.log('Calculating compensation for events:', events.map(e => ({
+      start: e.start.toISOString(),
+      end: e.end.toISOString(),
+      type: e.type
+    })));
+    console.log('Breakdown:', newBreakdown);
     setBreakdown(newBreakdown);
 
     // Get unique months from events
@@ -144,7 +150,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     });
 
     setAvailableMonths(monthDates.sort((a, b) => b.getTime() - a.getTime()));
-  }, [events, currentDate]);
+  }, [events, currentDate, calculator]);
 
   const months = useMemo(() => {
     const result = [];
