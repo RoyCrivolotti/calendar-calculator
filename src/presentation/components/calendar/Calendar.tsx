@@ -140,6 +140,7 @@ const Calendar: React.FC = () => {
         onEventClick={handleEventClick}
         onDateSelect={handleDateSelect}
         onViewChange={handleViewChange}
+        currentDate={new Date(currentDate)}
       />
       <CompensationSection
         events={events.map(event => new CalendarEvent(event))}

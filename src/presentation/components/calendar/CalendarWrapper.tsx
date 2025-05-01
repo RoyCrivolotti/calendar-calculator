@@ -161,15 +161,24 @@ interface CalendarWrapperProps {
   onEventClick: (clickInfo: EventClickArg) => void;
   onDateSelect: (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => void;
   onViewChange: (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => void;
+  currentDate: Date;
 }
 
 const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
-  ({ events, onEventClick, onDateSelect, onViewChange }, ref) => {
+  ({ events, onEventClick, onDateSelect, onViewChange, currentDate }, ref) => {
     const [showEventTypeSelector, setShowEventTypeSelector] = useState(false);
     const [pendingEventInfo, setPendingEventInfo] = useState<DateSelectArg | null>(null);
     const calendarContainerRef = useRef<HTMLDivElement>(null);
     const scrollAccumulator = useRef({ x: 0, y: 0 });
     const SCROLL_THRESHOLD = 50;
+
+    // Update calendar view when currentDate changes
+    useEffect(() => {
+      const calendar = ref as React.RefObject<FullCalendar>;
+      if (calendar.current) {
+        calendar.current.getApi().gotoDate(currentDate);
+      }
+    }, [currentDate, ref]);
 
     const handleDateSelect = (selectInfo: DateSelectArg) => {
       setPendingEventInfo(selectInfo);
