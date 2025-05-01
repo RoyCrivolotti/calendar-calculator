@@ -46,7 +46,7 @@ const Calendar: React.FC = () => {
     }
   };
 
-  const handleDateSelect = (selectInfo: DateSelectArg) => {
+  const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => {
     const start = new Date(selectInfo.start);
     const end = new Date(selectInfo.end);
 
@@ -54,7 +54,7 @@ const Calendar: React.FC = () => {
       id: Date.now().toString(),
       start,
       end,
-      type: 'oncall'
+      type
     });
 
     dispatch(addEvent(newEvent));
@@ -63,12 +63,9 @@ const Calendar: React.FC = () => {
   };
 
   const handleSaveEvent = (event: CalendarEvent) => {
-    if (event.id) {
-      dispatch(updateEvent(event));
-    } else {
-      dispatch(addEvent(event));
-    }
+    dispatch(updateEvent(event));
     dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
   };
 
   const handleDeleteEvent = (event: CalendarEvent) => {

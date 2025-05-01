@@ -222,7 +222,8 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     const updatedEvent = createCalendarEvent({
       ...event,
       start: newStart,
-      end: newEnd
+      end: newEnd,
+      type: event.type
     });
 
     onSave(updatedEvent);

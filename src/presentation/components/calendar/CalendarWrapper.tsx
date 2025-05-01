@@ -140,7 +140,7 @@ const CalendarContainer = styled.div`
 interface CalendarWrapperProps {
   events: CalendarEvent[];
   onEventClick: (clickInfo: EventClickArg) => void;
-  onDateSelect: (selectInfo: DateSelectArg) => void;
+  onDateSelect: (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => void;
 }
 
 const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
@@ -157,13 +157,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     const handleEventTypeSelect = (type: 'oncall' | 'incident') => {
       if (pendingEventInfo) {
-        const newEvent = createCalendarEvent({
-          id: Date.now().toString(),
-          start: pendingEventInfo.start,
-          end: pendingEventInfo.end,
-          type
-        });
-        onDateSelect(pendingEventInfo);
+        onDateSelect(pendingEventInfo, type);
       }
       setShowEventTypeSelector(false);
       setPendingEventInfo(null);
