@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import styled from '@emotion/styled';
 import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { isWeekend, calculateNightShiftHours } from '../../../utils/calendarUtils';
@@ -146,47 +146,44 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     setAvailableMonths(monthDates.sort((a, b) => b.getTime() - a.getTime()));
   }, [events, currentDate]);
 
-  const handlePreviousMonth = () => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() - 1);
-    onDateChange(newDate);
-  };
-
-  const handleNextMonth = () => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() + 1);
-    onDateChange(newDate);
-  };
-
-  const handleMonthSelect = (date: Date) => {
-    onDateChange(date);
-  };
-
-  const formatMonth = (date: Date) => {
-    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
-  };
+  const months = useMemo(() => {
+    const result = [];
+    // Add previous month
+    const prevMonth = new Date(currentDate);
+    prevMonth.setMonth(currentDate.getMonth() - 1);
+    result.push(prevMonth);
+    
+    // Add current month
+    result.push(new Date(currentDate));
+    
+    // Add next month
+    const nextMonth = new Date(currentDate);
+    nextMonth.setMonth(currentDate.getMonth() + 1);
+    result.push(nextMonth);
+    
+    return result;
+  }, [currentDate]);
 
   return (
     <Section>
-      <Title>Compensation Breakdown for {formatMonth(currentDate)}</Title>
-      
+      <Title>Compensation Breakdown for {format(currentDate, 'MMMM yyyy')}</Title>
       <MonthSelector>
-        <MonthButton onClick={handlePreviousMonth}>Previous Month</MonthButton>
-        <MonthList>
-          {availableMonths.map((date) => (
-            <MonthTag
-              key={date.toISOString()}
-              className={date.getMonth() === currentDate.getMonth() && 
-                        date.getFullYear() === currentDate.getFullYear() ? 'active' : ''}
-              onClick={() => handleMonthSelect(date)}
-            >
-              {formatMonth(date)}
-            </MonthTag>
-          ))}
-        </MonthList>
-        <MonthButton onClick={handleNextMonth}>Next Month</MonthButton>
+        <MonthButton onClick={() => onDateChange(months[0])}>
+          Previous Month
+        </MonthButton>
+        {months.map(month => (
+          <MonthButton
+            key={month.toISOString()}
+            onClick={() => onDateChange(month)}
+            disabled={month.getTime() === currentDate.getTime()}
+          >
+            {format(month, 'MMMM yyyy')}
+          </MonthButton>
+        ))}
+        <MonthButton onClick={() => onDateChange(months[2])}>
+          Next Month
+        </MonthButton>
       </MonthSelector>
-
       <Breakdown>
         {breakdown.map((item, index) => (
           <BreakdownItem key={index}>
