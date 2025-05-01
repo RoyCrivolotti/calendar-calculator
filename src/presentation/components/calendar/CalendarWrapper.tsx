@@ -60,7 +60,7 @@ interface CalendarWrapperProps {
 const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
   ({ events, onEventClick, onDateSelect }, ref) => {
     const scrollAccumulator = useRef(0);
-    const SCROLL_THRESHOLD = 20;
+    const SCROLL_THRESHOLD = 15;
 
     useEffect(() => {
       const handleWheel = (e: Event) => {
@@ -89,18 +89,19 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
           scrollAccumulator.current += wheelEvent.deltaX;
 
           if (Math.abs(scrollAccumulator.current) >= SCROLL_THRESHOLD) {
-            const direction = scrollAccumulator.current > 0 ? 1 : -1; // Fixed direction
+            const direction = scrollAccumulator.current > 0 ? 1 : -1;
             calendar.current.getApi().incrementDate({ days: direction });
             scrollAccumulator.current = 0;
           }
         } else if (isMonthView) {
-          // In month view, scroll vertically
-          const scrollContainer = document.querySelector('.fc-scroller-canvas');
-          if (scrollContainer) {
-            e.preventDefault();
-            // Smooth scrolling with reduced sensitivity
-            const scrollAmount = wheelEvent.deltaY * 0.5;
-            scrollContainer.scrollTop += scrollAmount;
+          // In month view, navigate weeks vertically
+          e.preventDefault();
+          scrollAccumulator.current += wheelEvent.deltaY;
+
+          if (Math.abs(scrollAccumulator.current) >= SCROLL_THRESHOLD) {
+            const direction = scrollAccumulator.current > 0 ? 1 : -1;
+            calendar.current.getApi().incrementDate({ weeks: direction });
+            scrollAccumulator.current = 0;
           }
         }
       };
