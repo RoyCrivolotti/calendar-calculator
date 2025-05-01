@@ -41,6 +41,14 @@ const CalendarContainer = styled.div`
   .fc-timegrid-slot {
     height: 48px !important;
   }
+
+  .fc-daygrid-body {
+    width: 100% !important;
+  }
+
+  .fc-scroller-canvas {
+    overflow-y: auto !important;
+  }
 `;
 
 interface CalendarWrapperProps {
@@ -52,7 +60,7 @@ interface CalendarWrapperProps {
 const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
   ({ events, onEventClick, onDateSelect }, ref) => {
     const scrollAccumulator = useRef(0);
-    const SCROLL_THRESHOLD = 20; // Reduced threshold for better sensitivity
+    const SCROLL_THRESHOLD = 20;
 
     useEffect(() => {
       const handleWheel = (e: Event) => {
@@ -78,20 +86,21 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
         if (isWeekView) {
           // In week view, navigate days horizontally with accumulation
           e.preventDefault();
-          // Use deltaX for horizontal scrolling
           scrollAccumulator.current += wheelEvent.deltaX;
 
           if (Math.abs(scrollAccumulator.current) >= SCROLL_THRESHOLD) {
-            const direction = scrollAccumulator.current > 0 ? -1 : 1; // Invert direction for natural feel
+            const direction = scrollAccumulator.current > 0 ? 1 : -1; // Fixed direction
             calendar.current.getApi().incrementDate({ days: direction });
             scrollAccumulator.current = 0;
           }
         } else if (isMonthView) {
           // In month view, scroll vertically
-          const scrollContainer = document.querySelector('.fc-scroller');
+          const scrollContainer = document.querySelector('.fc-scroller-canvas');
           if (scrollContainer) {
             e.preventDefault();
-            scrollContainer.scrollTop += wheelEvent.deltaY;
+            // Smooth scrolling with reduced sensitivity
+            const scrollAmount = wheelEvent.deltaY * 0.5;
+            scrollContainer.scrollTop += scrollAmount;
           }
         }
       };
