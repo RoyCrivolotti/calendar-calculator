@@ -229,6 +229,11 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     onClose();
   };
 
+  const handleDelete = () => {
+    onClose();
+    onDelete(event);
+  };
+
   return (
     <ModalOverlay>
       <EventTypeSelector>
@@ -267,7 +272,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           </EventTypeButton>
           <EventTypeButton
             className="incident"
-            onClick={() => onDelete(event)}
+            onClick={handleDelete}
           >
             Delete Event
           </EventTypeButton>
