@@ -4,7 +4,7 @@ import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import styled from '@emotion/styled';
 
 const EventTypeSelector = styled.div`

@@ -1,4 +1,4 @@
-import { CalendarEvent } from '../types/calendar';
+import { CalendarEvent } from '../domain/calendar/entities/CalendarEvent';
 import { isWeekend, startOfHour, eachHourOfInterval } from 'date-fns';
 
 interface HourBlock {

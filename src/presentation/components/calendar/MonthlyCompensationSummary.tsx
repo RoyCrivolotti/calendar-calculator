@@ -2,7 +2,6 @@ import React, { useState, useRef, useMemo } from 'react';
 import styled from '@emotion/styled';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
-import { isWeekend, calculateNightShiftHours } from '../../../utils/calendarUtils';
 
 const Container = styled.div`
   width: 93%;

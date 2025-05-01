@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
-import { CalendarEvent, createCalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import CompensationSection from './CompensationSection';
 import EventDetailsModal from './EventDetailsModal';
@@ -100,7 +100,7 @@ const Calendar: React.FC = () => {
     dispatch(setSelectedEvent(null));
   };
 
-  const getCompensationData = (date: Date): CompensationBreakdown[] => {
+  const getCompensationData = (): CompensationBreakdown[] => {
     const calculator = new CompensationCalculator();
     const calendarEvents = events.map(event => new CalendarEvent(event));
     
@@ -147,7 +147,7 @@ const Calendar: React.FC = () => {
         currentDate={new Date(currentDate)}
         onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
       />
-      <MonthlyCompensationSummary data={getCompensationData(new Date(currentDate))} />
+      <MonthlyCompensationSummary data={getCompensationData()} />
       {showEventModal && selectedEvent && (
         <EventDetailsModal
           event={new CalendarEvent(selectedEvent)}
