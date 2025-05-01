@@ -44,8 +44,8 @@ const calendarSlice = createSlice({
       state.events = state.events.filter(event => event.id !== action.payload);
       storageService.saveEvents(state.events);
     },
-    setCurrentDate: (state, action: PayloadAction<Date>) => {
-      state.currentDate = action.payload.toISOString();
+    setCurrentDate: (state, action: PayloadAction<string>) => {
+      state.currentDate = action.payload;
     },
     setSelectedEvent: (state, action: PayloadAction<CalendarEvent | null>) => {
       state.selectedEvent = action.payload ? new CalendarEvent(action.payload) : null;

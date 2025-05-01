@@ -72,7 +72,7 @@ const Calendar: React.FC = () => {
   };
 
   const handleViewChange = (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
-    dispatch(setCurrentDate(info.start));
+    dispatch(setCurrentDate(info.start.toISOString()));
   };
 
   const handleSaveEvent = (event: CalendarEvent) => {
@@ -115,7 +115,7 @@ const Calendar: React.FC = () => {
       <CompensationSection
         events={events}
         currentDate={new Date(currentDate)}
-        onDateChange={(date: Date) => dispatch(setCurrentDate(date))}
+        onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
       />
       <MonthlyCompensationSummary data={getCompensationData(new Date(currentDate))} />
       {showEventModal && selectedEvent && (
