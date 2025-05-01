@@ -165,11 +165,11 @@ interface CalendarWrapperProps {
 
 const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
   ({ events, onEventClick, onDateSelect, onViewChange }, ref) => {
-    const scrollAccumulator = useRef(0);
-    const SCROLL_THRESHOLD = 15;
     const [showEventTypeSelector, setShowEventTypeSelector] = useState(false);
     const [pendingEventInfo, setPendingEventInfo] = useState<DateSelectArg | null>(null);
     const calendarContainerRef = useRef<HTMLDivElement>(null);
+    const scrollAccumulator = useRef({ x: 0, y: 0 });
+    const SCROLL_THRESHOLD = 50;
 
     const handleDateSelect = (selectInfo: DateSelectArg) => {
       setPendingEventInfo(selectInfo);
@@ -187,7 +187,6 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
     const handleClose = () => {
       setShowEventTypeSelector(false);
       setPendingEventInfo(null);
-      // Clear the calendar selection
       const calendar = ref as React.RefObject<FullCalendar>;
       if (calendar.current) {
         calendar.current.getApi().unselect();
@@ -210,10 +209,44 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
       if (!container) return;
 
       const handleWheel = (e: WheelEvent) => {
+        const calendar = ref as React.RefObject<FullCalendar>;
+        if (!calendar.current) return;
+
+        const view = calendar.current.getApi().view;
+        const isMonthView = view.type === 'dayGridMonth';
+        const isWeekView = view.type === 'timeGridWeek';
+
+        // Get the calendar element
         const calendarEl = container.querySelector('.fc-view-harness');
         if (!calendarEl) return;
 
-        // Only prevent default if we're actually scrolling the calendar
+        // Handle horizontal scroll for week view
+        if (isWeekView && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+          e.preventDefault();
+          scrollAccumulator.current.x += e.deltaX;
+
+          if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
+            const direction = scrollAccumulator.current.x > 0 ? 1 : -1;
+            calendar.current.getApi().incrementDate({ days: direction });
+            scrollAccumulator.current.x = 0;
+          }
+          return;
+        }
+
+        // Handle vertical scroll for month view
+        if (isMonthView && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          e.preventDefault();
+          scrollAccumulator.current.y += e.deltaY;
+
+          if (Math.abs(scrollAccumulator.current.y) >= SCROLL_THRESHOLD) {
+            const direction = scrollAccumulator.current.y > 0 ? 1 : -1;
+            calendar.current.getApi().incrementDate({ weeks: direction });
+            scrollAccumulator.current.y = 0;
+          }
+          return;
+        }
+
+        // Handle vertical scroll for time grid view
         if (calendarEl.scrollHeight > calendarEl.clientHeight) {
           e.preventDefault();
           calendarEl.scrollTop += e.deltaY;
@@ -222,7 +255,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
 
       container.addEventListener('wheel', handleWheel, { passive: false });
       return () => container.removeEventListener('wheel', handleWheel);
-    }, []);
+    }, [ref]);
 
     const formatEventTitle = (event: CalendarEvent) => {
       if (event.title) return event.title;
