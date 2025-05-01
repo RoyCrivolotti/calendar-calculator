@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
@@ -16,8 +16,10 @@ import {
   setCurrentDate,
   setSelectedEvent,
   setShowEventModal,
+  setEvents,
 } from '../../store/slices/calendarSlice';
 import { CompensationCalculator } from '../../../domain/calendar/services/CompensationCalculator';
+import { storageService } from '../../services/storage';
 
 const CalendarContainer = styled.div`
   display: flex;
@@ -37,6 +39,14 @@ const Calendar: React.FC = () => {
   } = useAppSelector(state => state.calendar);
 
   const calendarRef = useRef<FullCalendar>(null);
+
+  useEffect(() => {
+    const loadEvents = async () => {
+      const loadedEvents = await storageService.loadEvents();
+      dispatch(setEvents(loadedEvents));
+    };
+    loadEvents();
+  }, [dispatch]);
 
   const handleEventClick = (clickInfo: EventClickArg) => {
     const event = events.find(e => e.id === clickInfo.event.id);

@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { CalendarEvent } from '../../types/calendar';
+import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
+import { storageService } from '../../services/storage';
 
 interface CalendarState {
   events: CalendarEvent[];
@@ -25,18 +26,22 @@ const calendarSlice = createSlice({
   reducers: {
     setEvents: (state, action: PayloadAction<CalendarEvent[]>) => {
       state.events = action.payload;
+      storageService.saveEvents(action.payload);
     },
     addEvent: (state, action: PayloadAction<CalendarEvent>) => {
       state.events.push(action.payload);
+      storageService.saveEvents(state.events);
     },
     updateEvent: (state, action: PayloadAction<CalendarEvent>) => {
       const index = state.events.findIndex(event => event.id === action.payload.id);
       if (index !== -1) {
         state.events[index] = action.payload;
+        storageService.saveEvents(state.events);
       }
     },
     deleteEvent: (state, action: PayloadAction<string>) => {
       state.events = state.events.filter(event => event.id !== action.payload);
+      storageService.saveEvents(state.events);
     },
     setCurrentDate: (state, action: PayloadAction<Date>) => {
       state.currentDate = action.payload;
