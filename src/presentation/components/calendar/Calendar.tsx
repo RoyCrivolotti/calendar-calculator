@@ -4,7 +4,6 @@ import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
 import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
-import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
 import CompensationSection from './CompensationSection';
 import EventDetailsModal from './EventDetailsModal';
 import CalendarWrapper from './CalendarWrapper';
@@ -37,8 +36,6 @@ const Calendar: React.FC = () => {
     showEventModal,
   } = useAppSelector(state => state.calendar);
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
   const calendarRef = useRef<FullCalendar>(null);
 
   const handleEventClick = (clickInfo: EventClickArg) => {
@@ -75,16 +72,9 @@ const Calendar: React.FC = () => {
   };
 
   const handleDeleteEvent = (event: CalendarEvent) => {
-    setEventToDelete(event);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = () => {
-    if (eventToDelete) {
-      dispatch(deleteEvent(eventToDelete.id));
-    setShowDeleteModal(false);
-      setEventToDelete(null);
-    }
+    dispatch(deleteEvent(event.id));
+    dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
   };
 
   const getCompensationData = (date: Date): CompensationBreakdown[] => {
@@ -117,16 +107,8 @@ const Calendar: React.FC = () => {
           }}
         />
       )}
-      {showDeleteModal && eventToDelete && (
-        <DeleteConfirmationModal
-          isOpen={showDeleteModal}
-          onClose={() => setShowDeleteModal(false)}
-          onConfirm={confirmDelete}
-          eventTitle={eventToDelete.title || 'Untitled Event'}
-        />
-      )}
     </CalendarContainer>
   );
-}; 
+};
 
 export default Calendar; 
