@@ -141,10 +141,11 @@ interface CalendarWrapperProps {
   events: CalendarEvent[];
   onEventClick: (clickInfo: EventClickArg) => void;
   onDateSelect: (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => void;
+  onViewChange: (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => void;
 }
 
 const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
-  ({ events, onEventClick, onDateSelect }, ref) => {
+  ({ events, onEventClick, onDateSelect, onViewChange }, ref) => {
     const scrollAccumulator = useRef(0);
     const SCROLL_THRESHOLD = 15;
     const [showEventTypeSelector, setShowEventTypeSelector] = useState(false);
@@ -280,6 +281,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
             }))}
             eventClick={onEventClick}
             select={handleDateSelect}
+            datesSet={onViewChange}
             height="100%"
             slotMinTime="00:00:00"
             slotMaxTime="24:00:00"

@@ -59,7 +59,7 @@ const Calendar: React.FC = () => {
   const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => {
     const start = new Date(selectInfo.start);
     const end = new Date(selectInfo.end);
-
+    
     const newEvent = createCalendarEvent({
       id: Date.now().toString(),
       start,
@@ -69,6 +69,11 @@ const Calendar: React.FC = () => {
 
     dispatch(setSelectedEvent(newEvent));
     dispatch(setShowEventModal(true));
+  };
+
+  const handleViewChange = (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
+    // Use the start date of the visible range to determine the month
+    dispatch(setCurrentDate(info.start));
   };
 
   const handleSaveEvent = (event: CalendarEvent) => {
@@ -106,6 +111,7 @@ const Calendar: React.FC = () => {
         events={events}
         onEventClick={handleEventClick}
         onDateSelect={handleDateSelect}
+        onViewChange={handleViewChange}
       />
       <CompensationSection
         events={events}
