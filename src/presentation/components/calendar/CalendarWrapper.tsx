@@ -234,14 +234,19 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
         }
 
         // Handle vertical scroll for month view
-        if (isMonthView && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        if (isMonthView) {
+          // Always prevent default for month view to avoid website scroll
           e.preventDefault();
-          scrollAccumulator.current.y += e.deltaY;
+          
+          // Only accumulate vertical scroll
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            scrollAccumulator.current.y += e.deltaY;
 
-          if (Math.abs(scrollAccumulator.current.y) >= SCROLL_THRESHOLD) {
-            const direction = scrollAccumulator.current.y > 0 ? 1 : -1;
-            calendar.current.getApi().incrementDate({ weeks: direction });
-            scrollAccumulator.current.y = 0;
+            if (Math.abs(scrollAccumulator.current.y) >= SCROLL_THRESHOLD) {
+              const direction = scrollAccumulator.current.y > 0 ? 1 : -1;
+              calendar.current.getApi().incrementDate({ weeks: direction });
+              scrollAccumulator.current.y = 0;
+            }
           }
           return;
         }
@@ -253,6 +258,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
         }
       };
 
+      // Add wheel event listener with passive: false to allow preventDefault
       container.addEventListener('wheel', handleWheel, { passive: false });
       return () => container.removeEventListener('wheel', handleWheel);
     }, [ref]);
