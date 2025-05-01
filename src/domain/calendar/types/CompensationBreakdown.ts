@@ -5,4 +5,5 @@ export interface CompensationBreakdown {
   amount: number;
   count: number;
   description: string;
+  month?: Date;
 } 

@@ -102,10 +102,34 @@ const Calendar: React.FC = () => {
 
   const getCompensationData = (date: Date): CompensationBreakdown[] => {
     const calculator = new CompensationCalculator();
-    return calculator.calculateMonthlyCompensation(
-      events.map(event => new CalendarEvent(event)),
-      date
-    );
+    const calendarEvents = events.map(event => new CalendarEvent(event));
+    
+    // Get unique months from events
+    const months = new Set<string>();
+    calendarEvents.forEach(event => {
+      const monthKey = `${event.start.getFullYear()}-${event.start.getMonth() + 1}`;
+      months.add(monthKey);
+    });
+
+    // Calculate compensation for each month with events
+    const allData: CompensationBreakdown[] = [];
+    Array.from(months).forEach(monthKey => {
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthDate = new Date(year, month - 1);
+      const monthEvents = calendarEvents.filter(event => {
+        const eventMonthKey = `${event.start.getFullYear()}-${event.start.getMonth() + 1}`;
+        return eventMonthKey === monthKey;
+      });
+      const monthData = calculator.calculateMonthlyCompensation(monthEvents, monthDate);
+      if (monthData.find(d => d.type === 'total' && d.amount > 0)) {
+        allData.push(...monthData.map(d => ({
+          ...d,
+          month: monthDate
+        })));
+      }
+    });
+
+    return allData;
   };
 
   return (

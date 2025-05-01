@@ -179,19 +179,29 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   // Generate list of months (last 12 months)
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
-    const currentDate = new Date();
     
-    // Get last 12 months
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(currentDate);
-      date.setMonth(date.getMonth() - i);
-      result.push({
-        date,
-        data: data.filter(d => d.type === 'total')
-      });
-    }
+    // Get unique months from data
+    const months = new Set<string>();
+    data.forEach(d => {
+      if (d.type === 'total' && d.amount > 0 && d.month) {
+        const monthKey = d.month.toISOString();
+        months.add(monthKey);
+      }
+    });
 
-    return result;
+    // Add months with data
+    Array.from(months).forEach(monthKey => {
+      const monthData = data.filter(d => d.type === 'total' && d.amount > 0 && d.month?.toISOString() === monthKey);
+      if (monthData.length > 0) {
+        result.push({
+          date: new Date(monthKey),
+          data: monthData
+        });
+      }
+    });
+
+    // Sort by date, most recent first
+    return result.sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [data]);
 
   const handleMonthClick = (month: Date) => {
