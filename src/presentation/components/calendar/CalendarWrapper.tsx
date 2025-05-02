@@ -88,6 +88,14 @@ const EventTypeButton = styled.button`
       background: #dc2626;
     }
   }
+
+  &.holiday {
+    background: #6b7280;
+    color: white;
+    &:hover {
+      background: #4b5563;
+    }
+  }
 `;
 
 const ModalTitle = styled.h3`
@@ -159,7 +167,7 @@ const CalendarContainer = styled.div`
 interface CalendarWrapperProps {
   events: CalendarEvent[];
   onEventClick: (clickInfo: EventClickArg) => void;
-  onDateSelect: (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => void;
+  onDateSelect: (selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => void;
   onViewChange: (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => void;
   currentDate: Date;
 }
@@ -185,7 +193,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
       setShowEventTypeSelector(true);
     };
 
-    const handleEventTypeSelect = (type: 'oncall' | 'incident') => {
+    const handleEventTypeSelect = (type: 'oncall' | 'incident' | 'holiday') => {
       if (pendingEventInfo) {
         onDateSelect(pendingEventInfo, type);
       }
@@ -274,14 +282,26 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     const formatEventTitle = (event: CalendarEvent) => {
       if (event.title) return event.title;
-      return event.type === 'oncall' ? 'On-Call Shift' : 'Incident';
+      switch (event.type) {
+        case 'oncall':
+          return 'On-Call Shift';
+        case 'incident':
+          return 'Incident';
+        case 'holiday':
+          return 'Holiday';
+        default:
+          return event.type;
+      }
     };
 
     const formatEventColor = (event: CalendarEvent) => {
       if (event.type === 'oncall') {
         return event.isWeekend ? '#f59e0b' : '#3b82f6';
       }
-      return event.isWeekend ? '#dc2626' : '#ef4444';
+      if (event.type === 'incident') {
+        return event.isWeekend ? '#dc2626' : '#ef4444';
+      }
+      return '#6b7280'; // Gray color for holidays
     };
 
     return (
@@ -382,6 +402,12 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
                 onClick={() => handleEventTypeSelect('incident')}
               >
                 Incident
+              </EventTypeButton>
+              <EventTypeButton
+                className="holiday"
+                onClick={() => handleEventTypeSelect('holiday')}
+              >
+                Holiday
               </EventTypeButton>
             </EventTypeSelector>
           </ModalOverlay>

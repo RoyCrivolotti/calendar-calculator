@@ -6,6 +6,7 @@ interface HourBlock {
   isIncident: boolean;
   isNightShift: boolean;
   isWeekend: boolean;
+  isHoliday: boolean;
 }
 
 export interface MonthlyCompensation {
@@ -35,6 +36,23 @@ export const calculateMonthlyCompensation = (
   const getEffectiveHourRange = (start: Date, end: Date): Date[] =>
     eachHourOfInterval({ start: startOfHour(start), end: new Date(end.getTime() - 1) });
 
+  // First, mark all holiday hours
+  events
+    .filter(event => event.type === 'holiday')
+    .forEach(event => {
+      const hours = getEffectiveHourRange(event.start, event.end);
+      hours.forEach(hour => {
+        const timestamp = hour.getTime();
+        hourBlocks.set(timestamp, {
+          isOnCall: false,
+          isIncident: false,
+          isNightShift: hour.getHours() >= 22 || hour.getHours() < 7,
+          isWeekend: isWeekend(hour),
+          isHoliday: true
+        });
+      });
+    });
+
   // Process on-call events
   events
     .filter(event => event.type === 'oncall')
@@ -43,11 +61,15 @@ export const calculateMonthlyCompensation = (
 
       hours.forEach(hour => {
         const timestamp = hour.getTime();
+        const existing = hourBlocks.get(timestamp);
+        const isHoliday = existing?.isHoliday || false;
+        
         hourBlocks.set(timestamp, {
           isOnCall: true,
           isIncident: false,
           isNightShift: hour.getHours() >= 22 || hour.getHours() < 7,
-          isWeekend: isWeekend(hour)
+          isWeekend: isWeekend(hour) || isHoliday,
+          isHoliday
         });
       });
     });
@@ -66,16 +88,17 @@ export const calculateMonthlyCompensation = (
 
         const timestamp = hour.getTime();
         const existing = hourBlocks.get(timestamp);
+        const isHoliday = existing?.isHoliday || false;
         
         if (existing) {
           existing.isIncident = true;
         } else {
-          // Create a new block for incident hours even if there's no on-call
           hourBlocks.set(timestamp, {
             isOnCall: false,
             isIncident: true,
             isNightShift: hour.getHours() >= 22 || hour.getHours() < 7,
-            isWeekend: isWeekend(hour)
+            isWeekend: isWeekend(hour) || isHoliday,
+            isHoliday
           });
         }
       });

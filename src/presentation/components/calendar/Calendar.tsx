@@ -57,21 +57,34 @@ const Calendar: React.FC = () => {
     }
   };
 
-  const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => {
+  const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
     const start = new Date(selectInfo.start);
     const end = new Date(selectInfo.end);
     end.setDate(end.getDate() - 1); // Subtract one day since end is exclusive
     
-    // Set default times
-    start.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
-    end.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
+    if (type === 'holiday') {
+      // For holidays, set to full day (00:00 to 23:59)
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      // For on-call and incidents, use default times
+      start.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
+      
+      // If it's a single day event, set end to start of next day
+      if (start.toDateString() === end.toDateString()) {
+        end.setDate(end.getDate() + 1);
+        end.setHours(0, 0, 0, 0);
+      } else {
+        end.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
+      }
+    }
 
     const newEvent = createCalendarEvent({
       id: Date.now().toString(),
       start,
       end,
       type,
-      title: type === 'oncall' ? 'On-Call Shift' : 'Incident'
+      title: type === 'oncall' ? 'On-Call Shift' : type === 'incident' ? 'Incident' : 'Holiday'
     });
 
     dispatch(setSelectedEvent(newEvent));
