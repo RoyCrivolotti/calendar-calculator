@@ -20,6 +20,7 @@ import {
 } from '../../store/slices/calendarSlice';
 import { CompensationCalculator } from '../../../domain/calendar/services/CompensationCalculator';
 import { storageService } from '../../services/storage';
+import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
 
 const CalendarContainer = styled.div`
   display: flex;
@@ -59,15 +60,21 @@ const Calendar: React.FC = () => {
   const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident') => {
     const start = new Date(selectInfo.start);
     const end = new Date(selectInfo.end);
+    end.setDate(end.getDate() - 1); // Subtract one day since end is exclusive
     
+    // Set default times
+    start.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
+    end.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
+
     const newEvent = createCalendarEvent({
       id: Date.now().toString(),
       start,
       end,
-      type
+      type,
+      title: type === 'oncall' ? 'On-Call Shift' : 'Incident'
     });
 
-    dispatch(setSelectedEvent(newEvent.toJSON()));
+    dispatch(setSelectedEvent(newEvent));
     dispatch(setShowEventModal(true));
   };
 
@@ -138,7 +145,7 @@ const Calendar: React.FC = () => {
         ref={calendarRef}
         events={events.map(event => new CalendarEvent(event))}
         onEventClick={handleEventClick}
-        onDateSelect={handleDateSelect}
+        onDateSelect={(selectInfo, type) => handleDateSelect(selectInfo, type)}
         onViewChange={handleViewChange}
         currentDate={new Date(currentDate)}
       />
