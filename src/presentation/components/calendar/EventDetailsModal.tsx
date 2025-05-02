@@ -260,7 +260,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
               />
             </TimeInput>
           </TimeInputGroup>
-          <p><strong>Duration:</strong> {((event.end.getTime() - event.start.getTime()) / (1000 * 60 * 60)).toFixed(1)} hours</p>
+          <p><strong>Duration:</strong> {((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1)} hours</p>
           <p><strong>Weekend:</strong> {event.isWeekend ? 'Yes' : 'No'}</p>
           <p><strong>Night Shift:</strong> {event.isNightShift ? 'Yes' : 'No'}</p>
         </EventDetails>
