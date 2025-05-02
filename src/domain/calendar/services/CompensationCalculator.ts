@@ -17,6 +17,24 @@ const OFFICE_HOURS = {
 };
 
 export class CompensationCalculator {
+  private isWeekend(date: Date): boolean {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  }
+
+  private isNightShift(date: Date): boolean {
+    const hour = date.getHours();
+    return hour >= 22 || hour < 6;
+  }
+
+  private isHoliday(date: Date, events: CalendarEvent[]): boolean {
+    return events.some(event => 
+      event.type === 'holiday' && 
+      date >= event.start && 
+      date < event.end
+    );
+  }
+
   private isWithinOfficeHours(date: Date): boolean {
     const hour = date.getHours();
     const day = date.getDay();
@@ -26,7 +44,7 @@ export class CompensationCalculator {
            hour < OFFICE_HOURS.end;
   }
 
-  private calculateCompensableHours(event: CalendarEvent): { weekday: number; weekend: number; weekdayNightShift: number; weekendNightShift: number } {
+  private calculateCompensableHours(event: CalendarEvent, allEvents: CalendarEvent[]): { weekday: number; weekend: number; weekdayNightShift: number; weekendNightShift: number } {
     const start = new Date(event.start);
     const end = new Date(event.end);
     let weekdayHours = 0;
@@ -43,7 +61,7 @@ export class CompensationCalculator {
         const nextDay = new Date(currentDay);
         nextDay.setDate(nextDay.getDate() + 1);
         
-        const isWeekend = currentDay.getDay() === 0 || currentDay.getDay() === 6;
+        const isWeekendDay = this.isWeekend(currentDay);
         const isFirstDay = currentDay.getTime() === new Date(start).setHours(0, 0, 0, 0);
         const isLastDay = nextDay.getTime() > end.getTime();
         
@@ -51,7 +69,7 @@ export class CompensationCalculator {
         let dayEnd = isLastDay ? end : nextDay;
         
         // Skip office hours (9:00-18:00) on weekdays
-        if (!isWeekend) {
+        if (!isWeekendDay) {
           const officeStart = new Date(dayStart);
           officeStart.setHours(9, 0, 0, 0);
           const officeEnd = new Date(dayStart);
@@ -83,32 +101,49 @@ export class CompensationCalculator {
         currentDay = nextDay;
       }
     } else {
-      // For incidents, keep the existing logic
-      for (let d = new Date(start); d < end; d.setHours(d.getHours() + 1)) {
-        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-        const isNightShift = d.getHours() >= 22 || d.getHours() < 6;
-
-        if (isWeekend) {
-          if (isNightShift) {
-            weekendNightShiftHours++;
+      // For incidents, handle each day separately
+      let currentDay = new Date(start);
+      currentDay.setHours(0, 0, 0, 0);
+      
+      while (currentDay < end) {
+        const nextDay = new Date(currentDay);
+        nextDay.setDate(nextDay.getDate() + 1);
+        
+        const isWeekendDay = this.isWeekend(currentDay) || this.isHoliday(currentDay, allEvents);
+        const isFirstDay = currentDay.getTime() === new Date(start).setHours(0, 0, 0, 0);
+        const isLastDay = nextDay.getTime() > end.getTime();
+        
+        let dayStart = isFirstDay ? start : new Date(currentDay);
+        let dayEnd = isLastDay ? end : nextDay;
+        
+        // For each hour in the day
+        for (let d = new Date(dayStart); d < dayEnd; d.setHours(d.getHours() + 1)) {
+          const isNightShiftHour = this.isNightShift(d);
+          
+          if (isWeekendDay) {
+            if (isNightShiftHour) {
+              weekendNightShiftHours++;
+            } else {
+              weekendHours++;
+            }
           } else {
-            weekendHours++;
-          }
-        } else {
-          if (isNightShift) {
-            weekdayNightShiftHours++;
-          } else {
-            weekdayHours++;
+            if (isNightShiftHour) {
+              weekdayNightShiftHours++;
+            } else {
+              weekdayHours++;
+            }
           }
         }
+        
+        currentDay = nextDay;
       }
     }
 
     return { weekday: weekdayHours, weekend: weekendHours, weekdayNightShift: weekdayNightShiftHours, weekendNightShift: weekendNightShiftHours };
   }
 
-  private calculateEventCompensation(event: CalendarEvent): { weekday: number; weekend: number; nightShift: number } {
-    const hours = this.calculateCompensableHours(event);
+  private calculateEventCompensation(event: CalendarEvent, allEvents: CalendarEvent[]): { weekday: number; weekend: number; nightShift: number } {
+    const hours = this.calculateCompensableHours(event, allEvents);
     let weekdayComp = 0;
     let weekendComp = 0;
     let nightShiftComp = 0;
@@ -117,7 +152,7 @@ export class CompensationCalculator {
       weekdayComp = hours.weekday * RATES.weekdayOnCallRate;
       weekendComp = hours.weekend * RATES.weekendOnCallRate;
     } else if (event.type === 'incident') {
-      const isWeekend = event.isWeekend;
+      const isWeekend = this.isWeekend(event.start) || this.isHoliday(event.start, allEvents);
       const multiplier = isWeekend ? RATES.weekendIncidentMultiplier : RATES.weekdayIncidentMultiplier;
       
       // Calculate base compensation for regular hours
@@ -137,27 +172,13 @@ export class CompensationCalculator {
   }
 
   calculateMonthlyCompensation(events: CalendarEvent[], date: Date): CompensationBreakdown[] {
-    console.log('All events:', events.map(e => ({
-      start: e.start.toISOString(),
-      end: e.end.toISOString(),
-      type: e.type
-    })));
-    
     const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-    console.log('Filtering for month:', monthKey);
     
     const monthEvents = events.filter(event => {
       const eventMonthKey = `${event.start.getFullYear()}-${event.start.getMonth() + 1}`;
       const isInMonth = eventMonthKey === monthKey;
-      console.log(`Event ${event.start.toISOString()} to ${event.end.toISOString()}: ${eventMonthKey} === ${monthKey}? ${isInMonth}`);
       return isInMonth;
     });
-
-    console.log('Filtered month events:', monthEvents.map(e => ({
-      start: e.start.toISOString(),
-      end: e.end.toISOString(),
-      type: e.type
-    })));
 
     const oncallEvents = monthEvents.filter(event => event.type === 'oncall');
     const incidentEvents = monthEvents.filter(event => event.type === 'incident');
@@ -172,24 +193,21 @@ export class CompensationCalculator {
 
     // Calculate on-call compensation
     oncallEvents.forEach(event => {
-      const hours = this.calculateCompensableHours(event);
-      console.log(`On-call shift ${event.start.toISOString()} to ${event.end.toISOString()}:`, hours);
+      const hours = this.calculateCompensableHours(event, monthEvents);
       totalWeekdayOnCallHours += hours.weekday;
       totalWeekendOnCallHours += hours.weekend;
-      const comp = this.calculateEventCompensation(event);
+      const comp = this.calculateEventCompensation(event, monthEvents);
       totalCompensation += comp.weekday + comp.weekend;
     });
 
-    console.log('Total on-call hours:', { weekday: totalWeekdayOnCallHours, weekend: totalWeekendOnCallHours });
-
     // Calculate incident compensation
     incidentEvents.forEach(event => {
-      const hours = this.calculateCompensableHours(event);
+      const hours = this.calculateCompensableHours(event, monthEvents);
       totalWeekdayIncidentHours += hours.weekday;
       totalWeekendIncidentHours += hours.weekend;
       totalWeekdayNightShiftHours += hours.weekdayNightShift;
       totalWeekendNightShiftHours += hours.weekendNightShift;
-      const comp = this.calculateEventCompensation(event);
+      const comp = this.calculateEventCompensation(event, monthEvents);
       totalCompensation += comp.weekday + comp.weekend + comp.nightShift;
     });
 
@@ -230,7 +248,7 @@ export class CompensationCalculator {
 
   calculateTotalCompensation(events: CalendarEvent[]): number {
     return events.reduce((total, event) => {
-      const comp = this.calculateEventCompensation(event);
+      const comp = this.calculateEventCompensation(event, events);
       return total + comp.weekday + comp.weekend + comp.nightShift;
     }, 0);
   }

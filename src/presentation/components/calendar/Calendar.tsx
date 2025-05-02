@@ -87,7 +87,7 @@ const Calendar: React.FC = () => {
       title: type === 'oncall' ? 'On-Call Shift' : type === 'incident' ? 'Incident' : 'Holiday'
     });
 
-    dispatch(setSelectedEvent(newEvent));
+    dispatch(setSelectedEvent(newEvent.toJSON()));
     dispatch(setShowEventModal(true));
   };
 

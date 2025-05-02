@@ -60,7 +60,6 @@ class StorageService {
       const events = await this.loadFromIndexedDB();
       // Update localStorage as a backup
       localStorage.setItem(STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
-      console.log('Calendar data synced to storage');
     } catch (error) {
       console.error('Error syncing to storage:', error);
     }

@@ -263,8 +263,8 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
             </TimeInput>
           </TimeInputGroup>
           <p><strong>Duration:</strong> {((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1)} hours</p>
-          <p><strong>Weekend:</strong> {event.isWeekend ? 'Yes' : 'No'}</p>
-          <p><strong>Night Shift:</strong> {event.isNightShift ? 'Yes' : 'No'}</p>
+          <p><strong>Weekend:</strong> {(event.start.getDay() === 0 || event.start.getDay() === 6) ? 'Yes' : 'No'}</p>
+          <p><strong>Night Shift:</strong> {(event.start.getHours() >= 22 || event.start.getHours() < 6) ? 'Yes' : 'No'}</p>
           {event.type === 'holiday' && <p><em>Holiday events span the entire day and cannot be modified</em></p>}
         </EventDetails>
         <ButtonGroup>

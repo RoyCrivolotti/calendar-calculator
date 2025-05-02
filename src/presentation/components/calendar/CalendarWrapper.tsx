@@ -295,11 +295,12 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
     };
 
     const formatEventColor = (event: CalendarEvent) => {
+      const isWeekend = event.start.getDay() === 0 || event.start.getDay() === 6;
       if (event.type === 'oncall') {
-        return event.isWeekend ? '#f59e0b' : '#3b82f6';
+        return isWeekend ? '#f59e0b' : '#3b82f6';
       }
       if (event.type === 'incident') {
-        return event.isWeekend ? '#dc2626' : '#ef4444';
+        return isWeekend ? '#dc2626' : '#ef4444';
       }
       return '#6b7280'; // Gray color for holidays
     };

@@ -98,12 +98,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 
   useEffect(() => {
     const newBreakdown = calculator.calculateMonthlyCompensation(events, currentDate);
-    console.log('Calculating compensation for events:', events.map(e => ({
-      start: e.start.toISOString(),
-      end: e.end.toISOString(),
-      type: e.type
-    })));
-    console.log('Breakdown:', newBreakdown);
     setBreakdown(newBreakdown);
 
     // Get unique months from events
