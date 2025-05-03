@@ -95,12 +95,17 @@ export class CompensationService {
   calculateMonthlyCompensation(events: CalendarEvent[], subEvents: SubEvent[], date: Date): CompensationBreakdown[] {
     const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
     
+    console.debug(`Calculating compensation for month: ${monthKey}`);
+    console.debug(`Total events: ${events.length}, Total subEvents: ${subEvents.length}`);
+    
     // Filter events for the current month
     const monthEvents = events.filter(event => {
       const eventDate = new Date(event.start);
       const eventMonthKey = `${eventDate.getFullYear()}-${eventDate.getMonth() + 1}`;
       return eventMonthKey === monthKey;
     });
+    
+    console.debug(`Events for month ${monthKey}: ${monthEvents.length}`);
     
     // Get all parent event IDs for the month
     const monthEventIds = monthEvents.map(event => event.id);
@@ -196,7 +201,8 @@ export class CompensationService {
         type: 'oncall',
         amount: totalOnCallComp,
         count: oncallEvents.length,
-        description: `On-call shifts (${totalWeekdayOnCallHours}h weekday, ${totalWeekendOnCallHours}h weekend)`
+        description: `On-call shifts (${totalWeekdayOnCallHours}h weekday, ${totalWeekendOnCallHours}h weekend)`,
+        month: new Date(date)
       });
     }
 
@@ -216,7 +222,8 @@ export class CompensationService {
         type: 'incident',
         amount: totalIncidentComp,
         count: incidentEvents.length,
-        description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night shift, ${totalWeekendNightShiftHours}h weekend night shift)`
+        description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night shift, ${totalWeekendNightShiftHours}h weekend night shift)`,
+        month: new Date(date)
       });
     }
 
@@ -226,9 +233,16 @@ export class CompensationService {
         type: 'total',
         amount: totalCompensation,
         count: monthEvents.length,
-        description: 'Total compensation'
+        description: 'Total compensation',
+        month: new Date(date)
       });
     }
+
+    console.debug(`Compensation breakdown for ${monthKey}:`, breakdown.map(b => ({
+      type: b.type,
+      amount: b.amount,
+      month: b.month ? b.month.toISOString() : 'undefined'
+    })));
 
     return breakdown;
   }

@@ -270,14 +270,31 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const months = new Set<string>();
     data.forEach(d => {
       if (d.type === 'total' && d.amount > 0 && d.month) {
-        const monthKey = d.month.toISOString();
-        months.add(monthKey);
+        try {
+          // Ensure month is treated as a Date object
+          const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
+          const monthKey = monthDate.toISOString();
+          months.add(monthKey);
+        } catch (error) {
+          console.error('Error processing month:', d.month, error);
+        }
       }
     });
 
     // Add months with data
     Array.from(months).forEach(monthKey => {
-      const monthData = data.filter(d => d.type === 'total' && d.amount > 0 && d.month?.toISOString() === monthKey);
+      const monthData = data.filter(d => {
+        if (d.type === 'total' && d.amount > 0 && d.month) {
+          try {
+            const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
+            return monthDate.toISOString() === monthKey;
+          } catch (error) {
+            return false;
+          }
+        }
+        return false;
+      });
+      
       if (monthData.length > 0) {
         result.push({
           date: new Date(monthKey),
