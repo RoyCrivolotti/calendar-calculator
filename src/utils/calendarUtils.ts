@@ -3,9 +3,14 @@ export const isWeekend = (date: Date): boolean => {
   return day === 0 || day === 6;
 };
 
+/**
+ * Determines if a time period is during night shift hours (22:00-6:00)
+ * Only checks the starting hour to determine if it's a night shift
+ */
 export const isNightShift = (start: Date, end: Date): boolean => {
   // Only check the starting hour to determine if it's a night shift
   const startHour = start.getHours();
+  
   // Night shift is from 22:00 to 6:00
   return startHour >= 22 || startHour < 6;
 };
@@ -48,6 +53,9 @@ export const calculateCompensatedHours = (start: Date, end: Date, isOnCall: bool
   return totalHours;
 };
 
+/**
+ * Calculates how many hours within a time period fall during night shift hours (22:00-6:00)
+ */
 export const calculateNightShiftHours = (start: Date, end: Date): number => {
   if (!isNightShift(start, end)) return 0;
   

@@ -1,22 +1,22 @@
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
-import { SubEventCompensationCalculator } from '../../../domain/calendar/services/SubEventCompensationCalculator';
+import { CompensationService } from '../../../domain/calendar/services/CompensationService';
 
 export class CalculateCompensationUseCase {
-  private calculator: SubEventCompensationCalculator;
+  private compensationService: CompensationService;
 
   constructor(
     private eventRepository: CalendarEventRepository,
     private subEventRepository: SubEventRepository
   ) {
-    this.calculator = new SubEventCompensationCalculator();
+    this.compensationService = new CompensationService();
   }
 
   async execute(date?: Date): Promise<CompensationBreakdown[]> {
     const events = await this.eventRepository.getAll();
     const subEvents = await this.subEventRepository.getAll();
     
-    return this.calculator.calculateMonthlyCompensation(events, subEvents, date || new Date());
+    return this.compensationService.calculateMonthlyCompensation(events, subEvents, date || new Date());
   }
 } 

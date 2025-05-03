@@ -1,12 +1,13 @@
 import { CalendarEventRepository } from '../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../domain/calendar/repositories/SubEventRepository';
-import { LocalStorageCalendarEventRepository } from '../infrastructure/storage/LocalStorageCalendarEventRepository';
-import { LocalStorageSubEventRepository } from '../infrastructure/storage/LocalStorageSubEventRepository';
+import { IndexedDBCalendarEventRepository } from '../infrastructure/storage/IndexedDBCalendarEventRepository';
+import { IndexedDBSubEventRepository } from '../infrastructure/storage/IndexedDBSubEventRepository';
 import { CreateEventUseCase } from '../application/calendar/use-cases/CreateEvent';
 import { UpdateEventUseCase } from '../application/calendar/use-cases/UpdateEvent';
 import { DeleteEventUseCase } from '../application/calendar/use-cases/DeleteEvent';
 import { CalculateCompensationUseCase } from '../application/calendar/use-cases/CalculateCompensation';
 import { SubEventFactory } from '../domain/calendar/services/SubEventFactory';
+import { CompensationService } from '../domain/calendar/services/CompensationService';
 
 class Container {
   private static instance: Container;
@@ -25,11 +26,12 @@ class Container {
 
   private registerServices() {
     // Repositories
-    this.services.set('calendarEventRepository', new LocalStorageCalendarEventRepository());
-    this.services.set('subEventRepository', new LocalStorageSubEventRepository());
+    this.services.set('calendarEventRepository', new IndexedDBCalendarEventRepository());
+    this.services.set('subEventRepository', new IndexedDBSubEventRepository());
 
     // Services
     this.services.set('subEventFactory', new SubEventFactory());
+    this.services.set('compensationService', new CompensationService());
 
     // Use cases
     this.services.set(
