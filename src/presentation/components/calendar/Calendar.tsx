@@ -94,7 +94,8 @@ const Calendar: React.FC = () => {
       // Create direct monthly data
       for (const [monthKey, monthEvents] of eventsByMonth.entries()) {
         const [year, month] = monthKey.split('-').map(Number);
-        const monthDate = new Date(year, month - 1);
+        const monthDate = new Date(year, month - 1, 1); // Set to first day of month
+        monthDate.setHours(0, 0, 0, 0); // Reset time to midnight
         
         // Count by event type
         const oncallCount = monthEvents.filter(e => e.type === 'oncall').length;
@@ -107,7 +108,7 @@ const Calendar: React.FC = () => {
             amount: oncallCount * 100, // Dummy value
             count: oncallCount,
             description: `On-call shifts (${oncallCount})`,
-            month: monthDate
+            month: new Date(monthDate)
           });
         }
         
@@ -117,7 +118,7 @@ const Calendar: React.FC = () => {
             amount: incidentCount * 200, // Dummy value
             count: incidentCount,
             description: `Incidents (${incidentCount})`,
-            month: monthDate
+            month: new Date(monthDate)
           });
         }
         
@@ -128,7 +129,7 @@ const Calendar: React.FC = () => {
           amount: totalAmount,
           count: monthEvents.length,
           description: 'Total compensation',
-          month: monthDate
+          month: new Date(monthDate)
         });
       }
     } catch (error) {
@@ -166,7 +167,8 @@ const Calendar: React.FC = () => {
       // For each month with events, calculate compensation
       for (const monthKey of Array.from(months)) {
         const [year, month] = monthKey.split('-').map(Number);
-        const monthDate = new Date(year, month - 1); // Month is 0-indexed in Date constructor
+        const monthDate = new Date(year, month - 1, 1); // Month is 0-indexed in Date constructor
+        monthDate.setHours(0, 0, 0, 0); // Reset time to midnight
         
         console.log(`Calculating compensation for month: ${year}-${month}`);
         

@@ -9,6 +9,8 @@ export class SubEventFactory {
     const start = new Date(event.start);
     const end = new Date(event.end);
     
+    console.log(`Generating sub-events for ${event.type} event: ${start.toISOString()} - ${end.toISOString()}`);
+    
     // Create hourly sub-events
     const currentTime = new Date(start);
     currentTime.setMinutes(0, 0, 0); // Round to the nearest hour start
@@ -31,14 +33,15 @@ export class SubEventFactory {
       const isNightShiftHour = isNightShift(currentTime, subEventEnd);
       const isOfficeHoursTime = isOfficeHours(currentTime);
       
-      console.debug(`Creating sub-event for ${currentTime.toISOString()}: isWeekend=${isWeekendHour}, isHoliday=${isHolidayHour}, isNightShift=${isNightShiftHour}, isOfficeHours=${isOfficeHoursTime}`);
+      const hourString = `${currentTime.getHours().toString().padStart(2, '0')}:00`;
+      console.log(`Sub-event at ${hourString}: Weekend: ${isWeekendHour}, Holiday: ${isHolidayHour}, Night Shift: ${isNightShiftHour}, Office Hours: ${isOfficeHoursTime}`);
       
       // Create the sub-event
       const subEvent = SubEvent.create({
         id: crypto.randomUUID(),
         parentEventId: event.id,
-        start: currentTime,
-        end: subEventEnd,
+        start: new Date(currentTime),
+        end: new Date(subEventEnd),
         isWeekday: !isWeekendHour && !isHolidayHour,
         isWeekend: isWeekendHour || isHolidayHour,
         isHoliday: isHolidayHour,
@@ -52,6 +55,14 @@ export class SubEventFactory {
       // Move to the next hour
       currentTime.setTime(nextHour.getTime());
     }
+    
+    console.log(`Generated ${subEvents.length} sub-events for ${event.type} event`);
+    
+    // Verify night shift and office hour coverage
+    const nightShiftSubEvents = subEvents.filter(se => se.isNightShift);
+    const officeHoursSubEvents = subEvents.filter(se => se.isOfficeHours);
+    
+    console.log(`Night shift sub-events: ${nightShiftSubEvents.length}, Office hours sub-events: ${officeHoursSubEvents.length}`);
     
     return subEvents;
   }

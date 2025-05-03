@@ -3,7 +3,9 @@ import styled from '@emotion/styled';
 import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
-import { CompensationCalculator } from '../../../domain/calendar/services/CompensationCalculator';
+import { CompensationService } from '../../../domain/calendar/services/CompensationService';
+import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
+import { storageService } from '../../services/storage';
 
 const Section = styled.div`
   background: white;
@@ -94,19 +96,29 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   onDateChange
 }) => {
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
-  const calculator = useMemo(() => new CompensationCalculator(), []);
+  const [subEvents, setSubEvents] = useState<SubEvent[]>([]);
+  const compensationService = useMemo(() => new CompensationService(), []);
 
   useEffect(() => {
-    const newBreakdown = calculator.calculateMonthlyCompensation(events, currentDate);
-    setBreakdown(newBreakdown);
+    // Load sub-events from storage
+    const fetchSubEvents = async () => {
+      try {
+        const loadedSubEvents = await storageService.loadSubEvents();
+        setSubEvents(loadedSubEvents);
+      } catch (error) {
+        console.error('Error loading sub-events:', error);
+      }
+    };
+    
+    fetchSubEvents();
+  }, []);
 
-    // Get unique months from events
-    const months = new Set<string>();
-    events.forEach(event => {
-      const monthKey = `${event.start.getFullYear()}-${event.start.getMonth() + 1}`;
-      months.add(monthKey);
-    });
-  }, [events, currentDate, calculator]);
+  useEffect(() => {
+    if (subEvents.length > 0) {
+      const newBreakdown = compensationService.calculateMonthlyCompensation(events, subEvents, currentDate);
+      setBreakdown(newBreakdown);
+    }
+  }, [events, subEvents, currentDate, compensationService]);
 
   const months = useMemo(() => {
     const result = [];

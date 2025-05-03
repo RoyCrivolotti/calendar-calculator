@@ -266,6 +266,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
     
+    console.log('Monthly Summary Data:', data);
+    
     // Get unique months from data
     const months = new Set<string>();
     data.forEach(d => {
@@ -275,11 +277,14 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
           const monthKey = monthDate.toISOString();
           months.add(monthKey);
+          console.log(`Found month: ${monthDate.toLocaleString()} from ${d.type} with amount ${d.amount}`);
         } catch (error) {
           console.error('Error processing month:', d.month, error);
         }
       }
     });
+
+    console.log(`Found ${months.size} unique months`);
 
     // Add months with data
     Array.from(months).forEach(monthKey => {
@@ -296,15 +301,17 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       });
       
       if (monthData.length > 0) {
+        const monthDate = new Date(monthKey);
+        console.log(`Adding month ${monthDate.toLocaleDateString()} with ${monthData.length} records`);
         result.push({
-          date: new Date(monthKey),
+          date: monthDate,
           data: monthData
         });
       }
     });
 
     // Sort by date, most recent first
-    return result.sort((a, b) => a.date.getTime() - b.date.getTime());
+    return result.sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [data]);
 
   const handleMonthClick = (month: Date) => {

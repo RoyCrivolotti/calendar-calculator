@@ -1,3 +1,5 @@
+import { OFFICE_HOURS } from '../domain/calendar/constants/CompensationRates';
+
 export const isWeekend = (date: Date): boolean => {
   const day = date.getDay();
   return day === 0 || day === 6;
@@ -8,33 +10,33 @@ export const isWeekend = (date: Date): boolean => {
  * Only checks the starting hour to determine if it's a night shift
  */
 export const isNightShift = (start: Date, end: Date): boolean => {
-  // Only check the starting hour to determine if it's a night shift
   const startHour = start.getHours();
   
   // Night shift is from 22:00 to 6:00
-  return startHour >= 22 || startHour < 6;
+  const isNight = startHour >= 22 || startHour < 6;
+  
+  console.debug(`isNightShift check: ${start.toISOString()} (hour: ${startHour}) => ${isNight}`);
+  
+  return isNight;
 };
 
 export const isOfficeHours = (date: Date): boolean => {
   const hour = date.getHours();
-  const minutes = date.getMinutes();
   const day = date.getDay();
-  const timeInMinutes = hour * 60 + minutes;
   
-  // Check if it's a weekday (1-5) and between 9am (540 minutes) and 5pm (1020 minutes)
-  // Note: 5pm is 17:00 which is 17*60 = 1020 minutes
-  const isWeekday = day >= 1 && day <= 5;
-  const isDuringWorkingHours = timeInMinutes >= 540 && timeInMinutes < 1020;
-  const result = isWeekday && isDuringWorkingHours;
+  // Check if it's a weekday in the OFFICE_HOURS.days array and between OFFICE_HOURS.start and OFFICE_HOURS.end
+  const isWorkingDay = OFFICE_HOURS.days.includes(day);
+  const isDuringWorkingHours = hour >= OFFICE_HOURS.start && hour < OFFICE_HOURS.end;
+  const result = isWorkingDay && isDuringWorkingHours;
   
   // Add more detailed debugging
-  const timeString = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  const timeString = `${hour.toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayName = dayNames[day];
   
   console.debug(
     `isOfficeHours: ${date.toISOString()} (${dayName} ${timeString}) => ` +
-    `isWeekday: ${isWeekday}, isDuringWorkingHours: ${isDuringWorkingHours}, RESULT: ${result}`
+    `isWorkingDay: ${isWorkingDay}, isDuringWorkingHours: ${isDuringWorkingHours}, RESULT: ${result}`
   );
   
   return result;

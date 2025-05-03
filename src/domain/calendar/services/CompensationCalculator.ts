@@ -1,20 +1,6 @@
 import { CalendarEvent } from '../entities/CalendarEvent';
 import { CompensationBreakdown } from '../types/CompensationBreakdown';
-
-const RATES = {
-  weekdayOnCallRate: 3.90,      // €3.90/hr for weekday on-call outside office hours
-  weekendOnCallRate: 7.34,      // €7.34/hr for weekend on-call
-  baseHourlySalary: 35.58,      // €35.58 base hourly salary
-  weekdayIncidentMultiplier: 1.8, // 1.8x for weekday incidents
-  weekendIncidentMultiplier: 2.0, // 2x for weekend incidents
-  nightShiftBonusMultiplier: 1.4  // 1.4x (40% bonus) for night shift incidents
-};
-
-const OFFICE_HOURS = {
-  start: 9, // 9 AM
-  end: 18, // 6 PM
-  days: [1, 2, 3, 4, 5] // Monday to Friday (0 is Sunday, 6 is Saturday)
-};
+import { COMPENSATION_RATES, OFFICE_HOURS } from '../constants/CompensationRates';
 
 export class CompensationCalculator {
   private isWeekend(date: Date): boolean {
@@ -176,30 +162,30 @@ export class CompensationCalculator {
     let nightShiftComp = 0;
 
     if (event.type === 'oncall') {
-      weekdayComp = hours.weekday * RATES.weekdayOnCallRate;
-      weekendComp = hours.weekend * RATES.weekendOnCallRate;
+      weekdayComp = hours.weekday * COMPENSATION_RATES.weekdayOnCallRate;
+      weekendComp = hours.weekend * COMPENSATION_RATES.weekendOnCallRate;
     } else if (event.type === 'incident') {
       // Calculate base compensation for regular hours
-      weekdayComp = hours.weekday * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
-      weekendComp = hours.weekend * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
+      weekdayComp = hours.weekday * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekdayIncidentMultiplier;
+      weekendComp = hours.weekend * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekendIncidentMultiplier;
 
       // For night shifts, apply the full multiplier chain (not just the bonus)
       if (hours.weekdayNightShift > 0) {
         // Full calculation: base salary * weekday multiplier * night shift multiplier
-        nightShiftComp += hours.weekdayNightShift * RATES.baseHourlySalary * 
-                        RATES.weekdayIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+        nightShiftComp += hours.weekdayNightShift * COMPENSATION_RATES.baseHourlySalary * 
+                        COMPENSATION_RATES.weekdayIncidentMultiplier * COMPENSATION_RATES.nightShiftBonusMultiplier;
         
         // We already counted the base weekday rate, so subtract it
-        nightShiftComp -= hours.weekdayNightShift * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
+        nightShiftComp -= hours.weekdayNightShift * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekdayIncidentMultiplier;
       }
       
       if (hours.weekendNightShift > 0) {
         // Full calculation: base salary * weekend multiplier * night shift multiplier
-        nightShiftComp += hours.weekendNightShift * RATES.baseHourlySalary * 
-                        RATES.weekendIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+        nightShiftComp += hours.weekendNightShift * COMPENSATION_RATES.baseHourlySalary * 
+                        COMPENSATION_RATES.weekendIncidentMultiplier * COMPENSATION_RATES.nightShiftBonusMultiplier;
         
         // We already counted the base weekend rate, so subtract it
-        nightShiftComp -= hours.weekendNightShift * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
+        nightShiftComp -= hours.weekendNightShift * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekendIncidentMultiplier;
       }
     }
 
@@ -247,37 +233,39 @@ export class CompensationCalculator {
     });
 
     const breakdown: CompensationBreakdown[] = [];
+    
+    // Make sure we have a proper date object for the month
+    const monthDate = new Date(date);
 
     if (totalWeekdayOnCallHours > 0 || totalWeekendOnCallHours > 0) {
       breakdown.push({
         type: 'oncall',
-        amount: totalWeekdayOnCallHours * RATES.weekdayOnCallRate + totalWeekendOnCallHours * RATES.weekendOnCallRate,
+        amount: totalWeekdayOnCallHours * COMPENSATION_RATES.weekdayOnCallRate + totalWeekendOnCallHours * COMPENSATION_RATES.weekendOnCallRate,
         count: oncallEvents.length,
-        description: `On-call shifts (${totalWeekdayOnCallHours}h weekday, ${totalWeekendOnCallHours}h weekend)`
+        description: `On-call shifts (${totalWeekdayOnCallHours.toFixed(1)}h weekday, ${totalWeekendOnCallHours.toFixed(1)}h weekend)`,
+        month: monthDate
       });
     }
 
     if (totalWeekdayIncidentHours > 0 || totalWeekendIncidentHours > 0 || totalWeekdayNightShiftHours > 0 || totalWeekendNightShiftHours > 0) {
       // Calculate each component separately for clarity
-      const weekdayRegularComp = totalWeekdayIncidentHours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
-      const weekendRegularComp = totalWeekendIncidentHours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
+      const weekdayRegularComp = totalWeekdayIncidentHours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekdayIncidentMultiplier;
+      const weekendRegularComp = totalWeekendIncidentHours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekendIncidentMultiplier;
       
       // Calculate night shift compensation using full multipliers
-      const weekdayNightComp = totalWeekdayNightShiftHours * RATES.baseHourlySalary * 
-                             RATES.weekdayIncidentMultiplier * RATES.nightShiftBonusMultiplier;
-      const weekendNightComp = totalWeekendNightShiftHours * RATES.baseHourlySalary * 
-                             RATES.weekendIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+      const weekdayNightComp = totalWeekdayNightShiftHours * COMPENSATION_RATES.baseHourlySalary * 
+                             COMPENSATION_RATES.weekdayIncidentMultiplier * COMPENSATION_RATES.nightShiftBonusMultiplier;
+      const weekendNightComp = totalWeekendNightShiftHours * COMPENSATION_RATES.baseHourlySalary * 
+                             COMPENSATION_RATES.weekendIncidentMultiplier * COMPENSATION_RATES.nightShiftBonusMultiplier;
       
       const totalIncidentComp = weekdayRegularComp + weekendRegularComp + weekdayNightComp + weekendNightComp;
-      
-      // Add debug logs
-      console.debug(`COMPENSATION BREAKDOWN: Weekend night shift: ${totalWeekendNightShiftHours}h * ${RATES.baseHourlySalary} * ${RATES.weekendIncidentMultiplier} * ${RATES.nightShiftBonusMultiplier} = ${weekendNightComp.toFixed(2)}`);
       
       breakdown.push({
         type: 'incident',
         amount: totalIncidentComp,
         count: incidentEvents.length,
-        description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night shift, ${totalWeekendNightShiftHours}h weekend night shift)`
+        description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night shift, ${totalWeekendNightShiftHours}h weekend night shift)`,
+        month: monthDate
       });
     }
 
@@ -286,7 +274,18 @@ export class CompensationCalculator {
         type: 'total',
         amount: totalCompensation,
         count: monthEvents.length,
-        description: 'Total compensation'
+        description: 'Total compensation',
+        month: monthDate
+      });
+    } else if (monthEvents.length > 0) {
+      // Even if total compensation is 0, still add a total item if there are events
+      // This ensures that the month appears in the summary
+      breakdown.push({
+        type: 'total',
+        amount: 0,
+        count: monthEvents.length,
+        description: 'No compensation calculated',
+        month: monthDate
       });
     }
 
