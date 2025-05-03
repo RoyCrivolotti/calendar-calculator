@@ -23,10 +23,12 @@
     "@fullcalendar/scrollgrid": "^6.1.17",
     "@fullcalendar/timegrid": "^6.1.10",
     "@reduxjs/toolkit": "^2.7.0",
+    "@types/uuid": "^10.0.0",
     "date-fns": "^2.30.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-redux": "^9.2.0"
+    "react-redux": "^9.2.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.22.0",

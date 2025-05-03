@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
@@ -10,15 +10,16 @@ import CalendarWrapper from './CalendarWrapper';
 import MonthlyCompensationSummary from './MonthlyCompensationSummary';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
-  addEvent,
-  updateEvent,
-  deleteEvent,
   setCurrentDate,
   setSelectedEvent,
   setShowEventModal,
   setEvents,
+  createEventAsync,
+  updateEventAsync,
+  deleteEventAsync
 } from '../../store/slices/calendarSlice';
-import { CompensationCalculator } from '../../../domain/calendar/services/CompensationCalculator';
+import { container } from '../../../config/container';
+import { CalculateCompensationUseCase } from '../../../application/calendar/use-cases/CalculateCompensation';
 import { storageService } from '../../services/storage';
 import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
 
@@ -38,6 +39,7 @@ const Calendar: React.FC = () => {
     selectedEvent,
     showEventModal,
   } = useAppSelector(state => state.calendar);
+  const [compensationData, setCompensationData] = useState<CompensationBreakdown[]>([]);
 
   const calendarRef = useRef<FullCalendar>(null);
 
@@ -49,6 +51,43 @@ const Calendar: React.FC = () => {
     loadEvents();
   }, [dispatch]);
 
+  // Update compensation data when events or current date changes
+  useEffect(() => {
+    updateCompensationData();
+  }, [events, currentDate]);
+
+  const updateCompensationData = async () => {
+    const calculateCompensationUseCase = container.get<CalculateCompensationUseCase>('calculateCompensationUseCase');
+    
+    // Get unique months from events
+    const months = new Set<string>();
+    events.forEach(event => {
+      const date = new Date(event.start);
+      const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+      months.add(monthKey);
+    });
+
+    // Calculate compensation for each month with events
+    const allData: CompensationBreakdown[] = [];
+    for (const monthKey of Array.from(months)) {
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthDate = new Date(year, month - 1);
+      
+      // Calculate compensation for this month
+      const monthData = await calculateCompensationUseCase.execute(monthDate);
+      
+      // Add to the breakdown with the month date
+      if (monthData.length > 0) {
+        allData.push(...monthData.map(d => ({
+          ...d,
+          month: monthDate
+        })));
+      }
+    }
+
+    setCompensationData(allData);
+  };
+
   const handleEventClick = (clickInfo: EventClickArg) => {
     const event = events.find(e => e.id === clickInfo.event.id);
     if (event) {
@@ -59,21 +98,35 @@ const Calendar: React.FC = () => {
 
   const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
     const start = new Date(selectInfo.start);
-    const end = new Date(selectInfo.end);
+    let end = new Date(selectInfo.end);
     end.setDate(end.getDate() - 1); // Subtract one day since end is exclusive
     
     if (type === 'holiday') {
       // For holidays, set to full day (00:00 to 23:59)
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
-    } else {
-      // For on-call and incidents, use default times
-      start.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
+    } else if (type === 'oncall') {
+      // For on-call, set to full 24 hours (00:00 to 00:00 next day)
+      start.setHours(0, 0, 0, 0);
       
-      // If it's a single day event, set end to start of next day
+      // If it's a single day event, set end to 00:00 the next day
       if (start.toDateString() === end.toDateString()) {
         end.setDate(end.getDate() + 1);
         end.setHours(0, 0, 0, 0);
+      } else {
+        // For multi-day on-call, end at 00:00 of the day after the last selected day
+        end.setDate(end.getDate() + 1);
+        end.setHours(0, 0, 0, 0);
+      }
+    } else if (type === 'incident') {
+      // Use default times for incidents, but ensure they span at least 1 hour
+      start.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
+      
+      // If it's a single day incident, set end to 1 hour after start
+      if (start.toDateString() === end.toDateString()) {
+        const endTime = new Date(start);
+        endTime.setHours(endTime.getHours() + 1);
+        end = endTime;
       } else {
         end.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
       }
@@ -99,10 +152,10 @@ const Calendar: React.FC = () => {
     const eventProps = event.toJSON();
     if (events.find(e => e.id === event.id)) {
       // If event exists, update it
-      dispatch(updateEvent(eventProps));
+      dispatch(updateEventAsync(eventProps));
     } else {
       // If it's a new event, add it
-      dispatch(addEvent(eventProps));
+      dispatch(createEventAsync(eventProps));
     }
     
     dispatch(setShowEventModal(false));
@@ -110,7 +163,7 @@ const Calendar: React.FC = () => {
   };
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
-    dispatch(deleteEvent(event.id));
+    dispatch(deleteEventAsync(event.id));
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
   };
@@ -118,38 +171,6 @@ const Calendar: React.FC = () => {
   const handleCloseModal = () => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
-  };
-
-  const getCompensationData = (): CompensationBreakdown[] => {
-    const calculator = new CompensationCalculator();
-    const calendarEvents = events.map(event => new CalendarEvent(event));
-    
-    // Get unique months from events
-    const months = new Set<string>();
-    calendarEvents.forEach(event => {
-      const monthKey = `${event.start.getFullYear()}-${event.start.getMonth() + 1}`;
-      months.add(monthKey);
-    });
-
-    // Calculate compensation for each month with events
-    const allData: CompensationBreakdown[] = [];
-    Array.from(months).forEach(monthKey => {
-      const [year, month] = monthKey.split('-').map(Number);
-      const monthDate = new Date(year, month - 1);
-      const monthEvents = calendarEvents.filter(event => {
-        const eventMonthKey = `${event.start.getFullYear()}-${event.start.getMonth() + 1}`;
-        return eventMonthKey === monthKey;
-      });
-      const monthData = calculator.calculateMonthlyCompensation(monthEvents, monthDate);
-      if (monthData.find(d => d.type === 'total' && d.amount > 0)) {
-        allData.push(...monthData.map(d => ({
-          ...d,
-          month: monthDate
-        })));
-      }
-    });
-
-    return allData;
   };
 
   return (
@@ -167,7 +188,7 @@ const Calendar: React.FC = () => {
         currentDate={new Date(currentDate)}
         onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
       />
-      <MonthlyCompensationSummary data={getCompensationData()} />
+      <MonthlyCompensationSummary data={compensationData} />
       {showEventModal && selectedEvent && (
         <EventDetailsModal
           event={new CalendarEvent(selectedEvent)}
