@@ -4,9 +4,10 @@ export const isWeekend = (date: Date): boolean => {
 };
 
 export const isNightShift = (start: Date, end: Date): boolean => {
+  // Only check the starting hour to determine if it's a night shift
   const startHour = start.getHours();
-  const endHour = end.getHours();
-  return startHour >= 22 || startHour < 6 || endHour >= 22 || endHour < 6;
+  // Night shift is from 22:00 to 6:00
+  return startHour >= 22 || startHour < 6;
 };
 
 export const isOfficeHours = (date: Date): boolean => {

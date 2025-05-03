@@ -48,7 +48,8 @@ export class SubEventCompensationCalculator {
 
     // Process on-call sub-events
     oncallSubEvents.forEach(subEvent => {
-      if (!subEvent.isOfficeHours) { // Skip office hours for on-call
+      // Also include night shift hours for on-call, even during office hours
+      if (!subEvent.isOfficeHours || subEvent.isNightShift) {
         const hours = this.calculateHoursInSubEvent(subEvent);
         
         if (subEvent.isWeekend) {
@@ -85,16 +86,20 @@ export class SubEventCompensationCalculator {
     // Calculate compensation for weekday incidents
     const weekdayRegularIncidentComp = totalWeekdayIncidentHours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
     
-    // Calculate compensation for weekday nightshift incidents (with both multipliers)
-    const weekdayNightshiftIncidentComp = totalWeekdayNightShiftHours * RATES.baseHourlySalary 
-                                      * RATES.weekdayIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+    // Calculate compensation for weekday nightshift incidents 
+    // Night shift hours get the base compensation PLUS the additional bonus
+    const weekdayNightshiftBaseComp = totalWeekdayNightShiftHours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
+    const weekdayNightshiftBonusComp = totalWeekdayNightShiftHours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier * (RATES.nightShiftBonusMultiplier - 1);
+    const weekdayNightshiftIncidentComp = weekdayNightshiftBaseComp + weekdayNightshiftBonusComp;
     
     // Calculate compensation for weekend incidents
     const weekendRegularIncidentComp = totalWeekendIncidentHours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
     
-    // Calculate compensation for weekend nightshift incidents (with both multipliers)
-    const weekendNightshiftIncidentComp = totalWeekendNightShiftHours * RATES.baseHourlySalary 
-                                      * RATES.weekendIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+    // Calculate compensation for weekend nightshift incidents
+    // Night shift hours get the base compensation PLUS the additional bonus
+    const weekendNightshiftBaseComp = totalWeekendNightShiftHours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
+    const weekendNightshiftBonusComp = totalWeekendNightShiftHours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier * (RATES.nightShiftBonusMultiplier - 1);
+    const weekendNightshiftIncidentComp = weekendNightshiftBaseComp + weekendNightshiftBonusComp;
     
     // Calculate total on-call compensation
     const totalOnCallComp = weekdayOnCallComp + weekendOnCallComp;
@@ -147,7 +152,7 @@ export class SubEventCompensationCalculator {
     const end = new Date(subEvent.end);
     const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     
-    // For incidents, round up to the nearest hour
+    // For incidents, round up to the nearest hour even if just a few minutes
     if (subEvent.type === 'incident') {
       return Math.ceil(hours);
     }
@@ -165,7 +170,9 @@ export class SubEventCompensationCalculator {
     // Process on-call sub-events
     const oncallSubEvents = allSubEvents.filter(subEvent => subEvent.type === 'oncall');
     oncallSubEvents.forEach(subEvent => {
-      if (!subEvent.isOfficeHours) { // Skip office hours for on-call
+      // Calculate hours for any non-office-hour subevent
+      // for on-call shifts, including night shifts
+      if (!subEvent.isOfficeHours || subEvent.isNightShift) {
         const hours = this.calculateHoursInSubEvent(subEvent);
         const rate = subEvent.isWeekend ? RATES.weekendOnCallRate : RATES.weekdayOnCallRate;
         totalCompensation += hours * rate;
@@ -179,16 +186,20 @@ export class SubEventCompensationCalculator {
       
       if (subEvent.isWeekend) {
         if (subEvent.isNightShift) {
-          // Weekend night shift - full calculation with both multipliers
-          totalCompensation += hours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+          // Weekend night shift - apply base weekend rate plus night shift bonus
+          const baseComp = hours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
+          const bonusComp = hours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier * (RATES.nightShiftBonusMultiplier - 1);
+          totalCompensation += baseComp + bonusComp;
         } else {
           // Regular weekend incident
           totalCompensation += hours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
         }
       } else {
         if (subEvent.isNightShift) {
-          // Weekday night shift - full calculation with both multipliers
-          totalCompensation += hours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+          // Weekday night shift - apply base weekday rate plus night shift bonus
+          const baseComp = hours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
+          const bonusComp = hours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier * (RATES.nightShiftBonusMultiplier - 1);
+          totalCompensation += baseComp + bonusComp;
         } else {
           // Regular weekday incident
           totalCompensation += hours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
