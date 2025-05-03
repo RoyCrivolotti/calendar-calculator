@@ -133,7 +133,7 @@ const Calendar: React.FC = () => {
     }
 
     const newEvent = createCalendarEvent({
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       start,
       end,
       type,

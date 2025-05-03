@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import styled from '@emotion/styled';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
+import { storageService } from '../../services/storage';
 
 const Container = styled.div`
   width: 93%;
@@ -162,6 +163,91 @@ const CloseButton = styled.button`
   }
 `;
 
+const ClearDataSection = styled.div`
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const ClearDataButton = styled.button`
+  background-color: #d9534f;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  
+  &:hover {
+    background-color: #c9302c;
+  }
+`;
+
+const ClearDataWarning = styled.p`
+  color: #d9534f;
+  font-size: 12px;
+  margin-top: 8px;
+`;
+
+// Updated modal content for confirmation dialog
+const ConfirmModalContent = styled(ModalContent)`
+  max-width: 450px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const ConfirmTitle = styled.h3`
+  color: #d9534f;
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  font-weight: bold;
+`;
+
+const ConfirmMessage = styled.p`
+  margin-bottom: 2rem;
+  font-size: 1rem;
+  line-height: 1.5;
+`;
+
+const ConfirmButtonContainer = styled.div`
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+`;
+
+const CancelButton = styled.button`
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  
+  &:hover {
+    background-color: #5a6268;
+  }
+`;
+
+const ConfirmButton = styled.button`
+  background-color: #d9534f;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  
+  &:hover {
+    background-color: #c9302c;
+  }
+`;
+
 interface MonthData {
   date: Date;
   data: CompensationBreakdown[];
@@ -173,6 +259,7 @@ interface MonthlyCompensationSummaryProps {
 
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Generate list of months (last 12 months)
@@ -229,6 +316,28 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     }
   };
 
+  // Updated to show modal instead of browser confirm
+  const handleClearAllData = () => {
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmClear = async () => {
+    try {
+      await storageService.clearAllData();
+      // Reload the page to reflect the cleared data
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to clear data:', error);
+      alert('Failed to clear data. See console for details.');
+    } finally {
+      setShowConfirmModal(false);
+    }
+  };
+
+  const handleCancelClear = () => {
+    setShowConfirmModal(false);
+  };
+
   return (
     <Container>
       <ScrollButton className="left" onClick={scrollLeft}>←</ScrollButton>
@@ -268,6 +377,30 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           </ModalContent>
         </Modal>
       )}
+
+      {showConfirmModal && (
+        <Modal onClick={handleCancelClear}>
+          <ConfirmModalContent onClick={e => e.stopPropagation()}>
+            <CloseButton onClick={handleCancelClear}>×</CloseButton>
+            <ConfirmTitle>Clear All Data</ConfirmTitle>
+            <ConfirmMessage>
+              Are you sure you want to clear all calendar data? <br />
+              This action cannot be undone and will remove all events and compensation data.
+            </ConfirmMessage>
+            <ConfirmButtonContainer>
+              <CancelButton onClick={handleCancelClear}>Cancel</CancelButton>
+              <ConfirmButton onClick={handleConfirmClear}>Delete All Data</ConfirmButton>
+            </ConfirmButtonContainer>
+          </ConfirmModalContent>
+        </Modal>
+      )}
+
+      <ClearDataSection>
+        <ClearDataButton onClick={handleClearAllData}>
+          Clear All Calendar Data
+        </ClearDataButton>
+        <ClearDataWarning>Warning: This will permanently delete all events and compensation data.</ClearDataWarning>
+      </ClearDataSection>
     </Container>
   );
 };

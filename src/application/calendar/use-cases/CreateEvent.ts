@@ -21,9 +21,10 @@ export class CreateEventUseCase {
   }
 
   async execute(props: CreateEventProps): Promise<CalendarEvent> {
-    // Create the main event
+    // Create the main event with a guaranteed unique ID
+    const eventId = crypto.randomUUID();
     const event = CalendarEvent.create({
-      id: crypto.randomUUID(),
+      id: eventId,
       start: props.start,
       end: props.end,
       type: props.type

@@ -119,7 +119,7 @@ class StorageService {
               console.error('Error parsing event:', eventData, err);
               return null;
             }
-          }).filter(Boolean);
+          }).filter((event): event is CalendarEvent => event !== null);
           resolve(events);
         };
 
@@ -172,7 +172,7 @@ class StorageService {
               console.error('Error parsing sub-event:', subEventData, err);
               return null;
             }
-          }).filter(Boolean);
+          }).filter((subEvent): subEvent is SubEvent => subEvent !== null);
           resolve(subEvents);
         };
 
@@ -375,6 +375,33 @@ class StorageService {
 
     // Fallback to localStorage if IndexedDB fails or is empty
     return this.loadSubEventsFromLocalStorage();
+  }
+
+  async clearAllData(): Promise<void> {
+    try {
+      // Clear IndexedDB
+      if (this.db) {
+        const eventsTransaction = this.db.transaction(EVENTS_STORE_NAME, 'readwrite');
+        const eventsStore = eventsTransaction.objectStore(EVENTS_STORE_NAME);
+        eventsStore.clear();
+        
+        const subEventsTransaction = this.db.transaction(SUBEVENTS_STORE_NAME, 'readwrite');
+        const subEventsStore = subEventsTransaction.objectStore(SUBEVENTS_STORE_NAME);
+        subEventsStore.clear();
+        
+        console.log('Cleared all data from IndexedDB');
+      }
+      
+      // Clear localStorage
+      localStorage.removeItem(EVENTS_STORAGE_KEY);
+      localStorage.removeItem(SUBEVENTS_STORAGE_KEY);
+      console.log('Cleared all data from localStorage');
+      
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error clearing data:', error);
+      return Promise.reject(error);
+    }
   }
 }
 
