@@ -209,13 +209,51 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
 
   const [startTime, setStartTime] = useState(formatDateForInput(event.start));
   const [endTime, setEndTime] = useState(formatDateForInput(event.end));
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const validateTimes = (start: string, end: string): boolean => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    
+    if (startDate >= endDate) {
+      setValidationError('End time must be after start time');
+      return false;
+    }
+    
+    setValidationError(null);
+    return true;
+  };
+
+  const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newStartTime = e.target.value;
+    setStartTime(newStartTime);
+    
+    // If new start time is after end time, adjust end time
+    const newStart = new Date(newStartTime);
+    const currentEnd = new Date(endTime);
+    
+    if (newStart >= currentEnd) {
+      // Set end time to start time + 1 hour
+      const adjustedEnd = new Date(newStart);
+      adjustedEnd.setHours(adjustedEnd.getHours() + 1);
+      setEndTime(formatDateForInput(adjustedEnd));
+    } else {
+      validateTimes(newStartTime, endTime);
+    }
+  };
+
+  const handleEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newEndTime = e.target.value;
+    setEndTime(newEndTime);
+    validateTimes(startTime, newEndTime);
+  };
 
   const handleSave = () => {
     const newStart = new Date(startTime);
     const newEnd = new Date(endTime);
 
     if (newStart >= newEnd) {
-      alert('End time must be after start time');
+      setValidationError('End time must be after start time');
       return;
     }
 
@@ -248,7 +286,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
               <input
                 type="datetime-local"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={handleStartTimeChange}
                 disabled={event.type === 'holiday'}
               />
             </TimeInput>
@@ -257,11 +295,12 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
               <input
                 type="datetime-local"
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={handleEndTimeChange}
                 disabled={event.type === 'holiday'}
               />
             </TimeInput>
           </TimeInputGroup>
+          {validationError && <p style={{ color: '#e53e3e', marginTop: '-0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem' }}>{validationError}</p>}
           <p><strong>Duration:</strong> {((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1)} hours</p>
           <p><strong>Weekend:</strong> {(event.start.getDay() === 0 || event.start.getDay() === 6) ? 'Yes' : 'No'}</p>
           <p><strong>Night Shift:</strong> {(event.start.getHours() >= 22 || event.start.getHours() < 6) ? 'Yes' : 'No'}</p>

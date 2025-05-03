@@ -181,6 +181,57 @@ const Calendar: React.FC = () => {
 
   const handleSaveEvent = async (event: CalendarEvent) => {
     const eventProps = event.toJSON();
+    
+    // Check for holiday conflicts if this is a holiday event
+    if (event.type === 'holiday') {
+      const conflictingEvents = findConflictingEvents(event, events);
+      
+      if (conflictingEvents.length > 0) {
+        // Get event types for a more informative message
+        const conflictTypes = conflictingEvents.map(e => 
+          e.type === 'oncall' ? 'on-call shift' : e.type
+        );
+        const uniqueTypes = [...new Set(conflictTypes)];
+        
+        // Ask for confirmation
+        const confirmMessage = `This holiday overlaps with existing events (${uniqueTypes.join(', ')}). Saving will not automatically adjust these events. Continue?`;
+        
+        if (!window.confirm(confirmMessage)) {
+          return; // User cancelled
+        }
+        
+        // Log the conflicts for debugging
+        logger.info(`Proceeding with holiday despite conflicts with ${conflictingEvents.length} events`);
+      }
+    }
+    
+    // Check if any existing events conflict with this event if it's not a holiday
+    if (event.type !== 'holiday') {
+      const holidays = events.filter(e => 
+        e.type === 'holiday' && 
+        e.id !== event.id // Don't check against itself if updating
+      );
+      
+      const conflictingHolidays = holidays.filter(holiday => 
+        eventsOverlap(event, new CalendarEvent(holiday))
+      );
+      
+      if (conflictingHolidays.length > 0) {
+        // Inform the user about holiday conflicts
+        const holidayDates = conflictingHolidays.map(h => 
+          new Date(h.start).toLocaleDateString()
+        ).join(', ');
+        
+        const confirmMessage = `This event overlaps with holidays on ${holidayDates}. Continue anyway?`;
+        
+        if (!window.confirm(confirmMessage)) {
+          return; // User cancelled
+        }
+        
+        logger.info(`Proceeding with event despite conflicts with ${conflictingHolidays.length} holidays`);
+      }
+    }
+    
     if (events.find(e => e.id === event.id)) {
       // If event exists, update it
       dispatch(updateEventAsync(eventProps));
@@ -191,6 +242,29 @@ const Calendar: React.FC = () => {
     
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
+  };
+
+  /**
+   * Check if two events overlap in time
+   */
+  const eventsOverlap = (event1: CalendarEvent, event2: CalendarEvent): boolean => {
+    const start1 = new Date(event1.start).getTime();
+    const end1 = new Date(event1.end).getTime();
+    const start2 = new Date(event2.start).getTime();
+    const end2 = new Date(event2.end).getTime();
+    
+    return (start1 < end2 && end1 > start2);
+  };
+
+  /**
+   * Find events that conflict with the given event
+   */
+  const findConflictingEvents = (event: CalendarEvent, allEvents: CalendarEventProps[]): CalendarEventProps[] => {
+    // Skip checking against itself if it already exists
+    return allEvents.filter(existingEvent => 
+      existingEvent.id !== event.id && 
+      eventsOverlap(event, new CalendarEvent(existingEvent))
+    );
   };
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
