@@ -269,7 +269,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     // Get unique months from data
     const months = new Set<string>();
     data.forEach(d => {
-      if (d.type === 'total' && d.amount > 0 && d.month) {
+      if (d.type === 'total' && d.month) {
         try {
           // Ensure month is treated as a Date object
           const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
@@ -284,7 +284,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     // Add months with data
     Array.from(months).forEach(monthKey => {
       const monthData = data.filter(d => {
-        if (d.type === 'total' && d.amount > 0 && d.month) {
+        if (d.type === 'total' && d.month) {
           try {
             const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
             return monthDate.toISOString() === monthKey;

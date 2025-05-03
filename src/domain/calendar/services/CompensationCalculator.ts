@@ -73,28 +73,43 @@ export class CompensationCalculator {
         
         console.debug(`Processing day: ${currentDay.toISOString()} (${isWeekendDay ? 'Weekend' : 'Weekday'}), first day: ${isFirstDay}, last day: ${isLastDay}`);
         
-        // Skip office hours (9:00-18:00) on weekdays
+        // For weekdays, handle office hours
         if (!isWeekendDay) {
           const officeStart = new Date(dayStart);
           officeStart.setHours(OFFICE_HOURS.start, 0, 0, 0);
           const officeEnd = new Date(dayStart);
           officeEnd.setHours(OFFICE_HOURS.end, 0, 0, 0);
           
-          // For first day, if start is before office hours, count from start to office start
-          if (isFirstDay && start < officeStart) {
-            const preOfficeHours = (officeStart.getTime() - start.getTime()) / (1000 * 60 * 60);
-            weekdayHours += preOfficeHours;
-            console.debug(`  Before office hours: ${preOfficeHours.toFixed(2)}h`);
+          // Special case: 24-hour shift (midnight to midnight on the same day)
+          if (isFirstDay && isLastDay && 
+              start.getHours() === 0 && start.getMinutes() === 0 &&
+              end.getHours() === 0 && end.getMinutes() === 0 &&
+              end.getDate() === start.getDate() + 1) {
+            
+            // For a 24h shift, we count all hours outside of office hours
+            const morningHours = OFFICE_HOURS.start; // Hours from midnight to office start
+            const eveningHours = 24 - OFFICE_HOURS.end; // Hours from office end to midnight
+            weekdayHours += morningHours + eveningHours;
+            console.debug(`  24-hour shift detected - Adding non-office hours: ${morningHours + eveningHours}h (${morningHours}h morning + ${eveningHours}h evening)`);
+            
+          } else {
+            // Normal cases - partial days
+            // For first day, if start is before office hours, count from start to office start
+            if (isFirstDay && start < officeStart) {
+              const preOfficeHours = (officeStart.getTime() - start.getTime()) / (1000 * 60 * 60);
+              weekdayHours += preOfficeHours;
+              console.debug(`  Before office hours: ${preOfficeHours.toFixed(2)}h`);
+            }
+            
+            // For last day, if end is after office hours, count from office end to end
+            if (isLastDay && end > officeEnd) {
+              const postOfficeHours = (end.getTime() - officeEnd.getTime()) / (1000 * 60 * 60);
+              weekdayHours += postOfficeHours;
+              console.debug(`  After office hours: ${postOfficeHours.toFixed(2)}h`);
+            }
           }
           
-          // For last day, if end is after office hours, count from office end to end
-          if (isLastDay && end > officeEnd) {
-            const postOfficeHours = (end.getTime() - officeEnd.getTime()) / (1000 * 60 * 60);
-            weekdayHours += postOfficeHours;
-            console.debug(`  After office hours: ${postOfficeHours.toFixed(2)}h`);
-          }
-          
-          // For full days, count from midnight to office start and from office end to midnight
+          // For full days that are neither first nor last, count standard non-office hours
           if (!isFirstDay && !isLastDay) {
             const morningHours = OFFICE_HOURS.start; // Hours from midnight to office start
             const eveningHours = 24 - OFFICE_HOURS.end; // Hours from office end to midnight
