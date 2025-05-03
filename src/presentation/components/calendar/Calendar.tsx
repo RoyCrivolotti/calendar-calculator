@@ -3,11 +3,14 @@ import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
 import { CalendarEvent, createCalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
+import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import CompensationSection from './CompensationSection';
 import EventDetailsModal from './EventDetailsModal';
 import CalendarWrapper from './CalendarWrapper';
 import MonthlyCompensationSummary from './MonthlyCompensationSummary';
+import HolidayConflictModal from './HolidayConflictModal';
+import HolidayDeleteModal from './HolidayDeleteModal';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
   setCurrentDate,
@@ -44,6 +47,12 @@ const Calendar: React.FC = () => {
   } = useAppSelector(state => state.calendar);
   const [compensationData, setCompensationData] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [conflictingEvents, setConflictingEvents] = useState<CalendarEventProps[]>([]);
+  const [pendingEventSave, setPendingEventSave] = useState<CalendarEvent | null>(null);
+  const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
+  const [isHolidayConflict, setIsHolidayConflict] = useState(false);
   const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
 
   const calendarRef = useRef<FullCalendar>(null);
@@ -179,71 +188,6 @@ const Calendar: React.FC = () => {
     dispatch(setCurrentDate(info.start.toISOString()));
   };
 
-  const handleSaveEvent = async (event: CalendarEvent) => {
-    const eventProps = event.toJSON();
-    
-    // Check for holiday conflicts if this is a holiday event
-    if (event.type === 'holiday') {
-      const conflictingEvents = findConflictingEvents(event, events);
-      
-      if (conflictingEvents.length > 0) {
-        // Get event types for a more informative message
-        const conflictTypes = conflictingEvents.map(e => 
-          e.type === 'oncall' ? 'on-call shift' : e.type
-        );
-        const uniqueTypes = [...new Set(conflictTypes)];
-        
-        // Ask for confirmation
-        const confirmMessage = `This holiday overlaps with existing events (${uniqueTypes.join(', ')}). Saving will not automatically adjust these events. Continue?`;
-        
-        if (!window.confirm(confirmMessage)) {
-          return; // User cancelled
-        }
-        
-        // Log the conflicts for debugging
-        logger.info(`Proceeding with holiday despite conflicts with ${conflictingEvents.length} events`);
-      }
-    }
-    
-    // Check if any existing events conflict with this event if it's not a holiday
-    if (event.type !== 'holiday') {
-      const holidays = events.filter(e => 
-        e.type === 'holiday' && 
-        e.id !== event.id // Don't check against itself if updating
-      );
-      
-      const conflictingHolidays = holidays.filter(holiday => 
-        eventsOverlap(event, new CalendarEvent(holiday))
-      );
-      
-      if (conflictingHolidays.length > 0) {
-        // Inform the user about holiday conflicts
-        const holidayDates = conflictingHolidays.map(h => 
-          new Date(h.start).toLocaleDateString()
-        ).join(', ');
-        
-        const confirmMessage = `This event overlaps with holidays on ${holidayDates}. Continue anyway?`;
-        
-        if (!window.confirm(confirmMessage)) {
-          return; // User cancelled
-        }
-        
-        logger.info(`Proceeding with event despite conflicts with ${conflictingHolidays.length} holidays`);
-      }
-    }
-    
-    if (events.find(e => e.id === event.id)) {
-      // If event exists, update it
-      dispatch(updateEventAsync(eventProps));
-    } else {
-      // If it's a new event, add it
-      dispatch(createEventAsync(eventProps));
-    }
-    
-    dispatch(setShowEventModal(false));
-    dispatch(setSelectedEvent(null));
-  };
-
   /**
    * Check if two events overlap in time
    */
@@ -267,15 +211,366 @@ const Calendar: React.FC = () => {
     );
   };
 
+  /**
+   * Regenerate sub-events for all events that conflict with a holiday
+   * This function ensures all events are properly regenerated with the latest holiday information
+   * @param skipHolidaySave if true, assumes the holiday is already saved and doesn't save it again
+   */
+  const regenerateConflictingSubEvents = async (
+    holidayEvent: CalendarEvent, 
+    conflictingEvents: CalendarEventProps[],
+    skipHolidaySave: boolean = false
+  ): Promise<void> => {
+    try {
+      logger.info(`Regenerating sub-events for ${conflictingEvents.length} events that conflict with holiday ${holidayEvent.id}`);
+      
+      // First, ensure the holiday is saved and fully available in the events list
+      // This is critical - we need to make sure the holiday event is in the events array
+      // before regenerating sub-events that depend on it
+      
+      const holidayProps = holidayEvent.toJSON();
+      const holidayExists = events.some(e => e.id === holidayEvent.id);
+      
+      if (!holidayExists && !skipHolidaySave) {
+        logger.info(`Holiday ${holidayEvent.id} not found in events array, adding it first`);
+        
+        // We need to add the holiday to the local events array first to ensure
+        // the HolidayChecker can find it when regenerating sub-events
+        const updatedEvents = [...events, holidayProps];
+        
+        // Update the Redux store
+        dispatch(setEvents(updatedEvents));
+        
+        // Also save it to storage directly
+        try {
+          dispatch(createEventAsync(holidayProps));
+          logger.info(`Holiday ${holidayEvent.id} saved to storage`);
+        } catch (error) {
+          logger.error(`Error saving holiday ${holidayEvent.id}:`, error);
+        }
+      } else {
+        logger.info(`Holiday ${holidayEvent.id} already exists or skipHolidaySave is true, skipping save`);
+      }
+      
+      // Give the system a moment to commit the holiday update
+      // This small delay helps ensure the holiday is available in the events array
+      // before we attempt to regenerate sub-events
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Make sure the holiday is in the events array when we regenerate sub-events
+      const allCurrentEvents = [...events];
+      if (!holidayExists && !allCurrentEvents.some(e => e.id === holidayEvent.id)) {
+        allCurrentEvents.push(holidayProps);
+        logger.info(`Added holiday to local events array for sub-event regeneration`);
+      }
+      
+      // For each conflicting event, we need to "update" it to regenerate sub-events
+      // This will trigger the UpdateEventUseCase which recreates sub-events with the new holiday consideration
+      for (const eventProps of conflictingEvents) {
+        // Skip if it's a holiday itself - we don't need to adjust holidays
+        if (eventProps.type === 'holiday') continue;
+        
+        logger.info(`Regenerating sub-events for ${eventProps.type} event ${eventProps.id}`);
+        
+        // Simply dispatch the update action with the same event properties
+        // The sub-events will be regenerated considering the new holiday
+        dispatch(updateEventAsync({
+          ...eventProps,
+          title: eventProps.title || (eventProps.type === 'oncall' ? 'On-Call Shift' : eventProps.type === 'incident' ? 'Incident' : 'Holiday')
+        }));
+      }
+      
+      // Ensure compensation data is updated after regeneration
+      setTimeout(() => {
+        logger.info('Updating compensation data after holiday-related changes');
+        updateCompensationData();
+      }, 500);
+      
+    } catch (error) {
+      logger.error('Error regenerating conflicting sub-events:', error);
+      alert('There was an error adjusting events. Compensation calculations may be affected.');
+    }
+  };
+
+  const handleSaveEvent = async (event: CalendarEvent) => {
+    const eventProps = event.toJSON();
+    
+    // Check for holiday conflicts if this is a holiday event
+    if (event.type === 'holiday') {
+      const conflicts = findConflictingEvents(event, events);
+      
+      if (conflicts.length > 0) {
+        // Store the event and conflicts for the modal
+        setPendingEventSave(event);
+        setConflictingEvents(conflicts);
+        setIsHolidayConflict(true);
+        setShowConflictModal(true);
+        return;
+      }
+    }
+    
+    // Check if any existing events conflict with this event if it's not a holiday
+    if (event.type !== 'holiday') {
+      const holidays = events.filter(e => 
+        e.type === 'holiday' && 
+        e.id !== event.id // Don't check against itself if updating
+      );
+      
+      const conflictingHolidays = holidays.filter(holiday => 
+        eventsOverlap(event, new CalendarEvent(holiday))
+      );
+      
+      if (conflictingHolidays.length > 0) {
+        // Store the event and conflicts for the modal
+        setPendingEventSave(event);
+        setConflictingEvents(conflictingHolidays);
+        setIsHolidayConflict(false);
+        setShowConflictModal(true);
+        return;
+      }
+    }
+    
+    // No conflicts, proceed with save
+    saveEventWithoutConflictCheck(event);
+  };
+  
+  const saveEventWithoutConflictCheck = (event: CalendarEvent) => {
+    const eventProps = event.toJSON();
+    
+    if (events.find(e => e.id === event.id)) {
+      // If event exists, update it
+      dispatch(updateEventAsync(eventProps));
+    } else {
+      // If it's a new event, add it
+      dispatch(createEventAsync(eventProps));
+    }
+    
+    dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
+  };
+  
+  const handleConflictModalAdjust = async () => {
+    if (!pendingEventSave) return;
+    
+    // Only save the event once, and only here
+    // We'll let regenerateConflictingSubEvents use the event without saving it again
+    saveEventWithoutConflictCheck(pendingEventSave);
+    
+    // For holiday conflicts, regenerate sub-events
+    // Pass true for skipHolidaySave to prevent duplicate saving
+    if (isHolidayConflict) {
+      await regenerateConflictingSubEvents(pendingEventSave, conflictingEvents, true);
+    }
+    
+    // Close the modal
+    setShowConflictModal(false);
+    setPendingEventSave(null);
+    setConflictingEvents([]);
+    
+    // Run diagnostic after a delay
+    setTimeout(() => analyzeHolidayDetection(), 1000);
+  };
+  
+  const handleConflictModalContinue = () => {
+    if (!pendingEventSave) return;
+    
+    // Save the event without adjusting conflicting events
+    saveEventWithoutConflictCheck(pendingEventSave);
+    
+    // Close the modal
+    setShowConflictModal(false);
+    setPendingEventSave(null);
+    setConflictingEvents([]);
+  };
+  
+  const handleConflictModalCancel = () => {
+    // Just close the modal without saving anything
+    setShowConflictModal(false);
+    setPendingEventSave(null);
+    setConflictingEvents([]);
+  };
+
   const handleDeleteEvent = async (event: CalendarEvent) => {
+    // Check if it's a holiday that might affect other events
+    if (event.type === 'holiday') {
+      const affectedEvents = findConflictingEvents(event, events);
+      
+      if (affectedEvents.length > 0) {
+        // Store the holiday and affected events for the modal
+        setPendingEventDelete(event);
+        setConflictingEvents(affectedEvents);
+        setShowDeleteModal(true);
+        return;
+      }
+    }
+    
+    // No need for special handling, proceed with delete
+    deleteEventWithoutConfirmation(event);
+  };
+  
+  const deleteEventWithoutConfirmation = (event: CalendarEvent) => {
     dispatch(deleteEventAsync(event.id));
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
+  };
+  
+  const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
+    if (!pendingEventDelete) return;
+    
+    // Store the holiday info before deleting
+    const holidayId = pendingEventDelete.id;
+    logger.info(`Deleting holiday ${holidayId}`);
+    
+    // Delete the holiday first
+    deleteEventWithoutConfirmation(pendingEventDelete);
+    
+    // If user chose to regenerate events, do so
+    if (shouldRegenerateEvents && conflictingEvents.length > 0) {
+      try {
+        logger.info(`Regenerating ${conflictingEvents.length} events affected by holiday deletion`);
+        
+        // Wait a moment for the deletion to propagate
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // For each affected event, we need to "update" it to regenerate sub-events
+        for (const eventProps of conflictingEvents) {
+          // Skip if it's a holiday itself - we don't need to adjust holidays
+          if (eventProps.type === 'holiday') continue;
+          
+          logger.info(`Regenerating sub-events for ${eventProps.type} event ${eventProps.id}`);
+          
+          // Update with the same event properties
+          // The sub-events will be regenerated without considering the deleted holiday
+          dispatch(updateEventAsync({
+            ...eventProps,
+            title: eventProps.title || (eventProps.type === 'oncall' ? 'On-Call Shift' : eventProps.type === 'incident' ? 'Incident' : 'Holiday')
+          }));
+        }
+        
+        // Ensure compensation data is updated after regeneration
+        setTimeout(() => {
+          logger.info('Updating compensation data after holiday deletion');
+          updateCompensationData();
+        }, 500);
+        
+      } catch (error) {
+        logger.error('Error regenerating events after holiday deletion:', error);
+        alert('Holiday deleted, but there was an error recalculating affected events. Compensation calculations may be affected.');
+      }
+    }
+    
+    // Reset state
+    setShowDeleteModal(false);
+    setPendingEventDelete(null);
+    setConflictingEvents([]);
+    
+    // Run diagnostic after a delay
+    setTimeout(() => analyzeHolidayDetection(), 1000);
+  };
+  
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setPendingEventDelete(null);
+    setConflictingEvents([]);
   };
 
   const handleCloseModal = () => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
+  };
+
+  /**
+   * Diagnostic function to analyze event sub-events and verify holiday detection
+   * This is for debugging purposes only and can be removed in production
+   */
+  const analyzeHolidayDetection = (targetDate?: Date) => {
+    // Use current date as default if none provided
+    const dateToAnalyze = targetDate || new Date();
+    const dateString = dateToAnalyze.toLocaleDateString();
+    
+    logger.info(`=== HOLIDAY DETECTION ANALYSIS for ${dateString} ===`);
+    
+    // 1. Check if any holiday events exist for this date
+    const holidayEvents = events.filter(event => {
+      if (event.type !== 'holiday') return false;
+      
+      const eventStart = new Date(event.start);
+      eventStart.setHours(0, 0, 0, 0);
+      
+      const eventEnd = new Date(event.end);
+      eventEnd.setHours(0, 0, 0, 0);
+      
+      const targetDateCopy = new Date(dateToAnalyze);
+      targetDateCopy.setHours(0, 0, 0, 0);
+      
+      return targetDateCopy >= eventStart && targetDateCopy <= eventEnd;
+    });
+    
+    if (holidayEvents.length === 0) {
+      logger.info(`No holiday events found for ${dateString}`);
+    } else {
+      logger.info(`Found ${holidayEvents.length} holiday events for ${dateString}:`);
+      holidayEvents.forEach(holiday => {
+        logger.info(`- Holiday ID: ${holiday.id}, Start: ${new Date(holiday.start).toLocaleDateString()}, End: ${new Date(holiday.end).toLocaleDateString()}`);
+      });
+    }
+    
+    // 2. Find all events with sub-events on this date
+    const allSubEvents = storageService.loadSubEvents();
+    
+    // Wait for the Promise to resolve
+    allSubEvents.then(subEvents => {
+      // Filter for sub-events on this date
+      const targetDateCopy = new Date(dateToAnalyze);
+      targetDateCopy.setHours(0, 0, 0, 0);
+      
+      const relevantSubEvents = subEvents.filter(subEvent => {
+        const subEventDate = new Date(subEvent.start);
+        subEventDate.setHours(0, 0, 0, 0);
+        return subEventDate.getTime() === targetDateCopy.getTime();
+      });
+      
+      if (relevantSubEvents.length === 0) {
+        logger.info(`No sub-events found for ${dateString}`);
+        return;
+      }
+      
+      logger.info(`Found ${relevantSubEvents.length} sub-events for ${dateString}`);
+      
+      // Group by parent event
+      const subEventsByParent: Record<string, SubEvent[]> = {};
+      relevantSubEvents.forEach(subEvent => {
+        if (!subEventsByParent[subEvent.parentEventId]) {
+          subEventsByParent[subEvent.parentEventId] = [];
+        }
+        subEventsByParent[subEvent.parentEventId].push(subEvent);
+      });
+      
+      // Analyze each parent event's sub-events
+      Object.entries(subEventsByParent).forEach(([parentId, subEvents]) => {
+        const parentEvent = events.find(e => e.id === parentId);
+        if (!parentEvent) {
+          logger.info(`Sub-events found for unknown parent: ${parentId}`);
+          return;
+        }
+        
+        logger.info(`Event: ${parentEvent.id} (${parentEvent.type})`);
+        
+        // Count how many sub-events have holiday flag set
+        const holidaySubEvents = subEvents.filter(se => se.isHoliday);
+        const weekendSubEvents = subEvents.filter(se => se.isWeekend);
+        
+        logger.info(`- ${subEvents.length} total sub-events`);
+        logger.info(`- ${holidaySubEvents.length} marked as holiday`);
+        logger.info(`- ${weekendSubEvents.length} marked as weekend`);
+        
+        if (holidayEvents.length > 0 && holidaySubEvents.length === 0) {
+          logger.warn(`⚠️ ISSUE DETECTED: Event has no holiday sub-events despite holiday existing on ${dateString}`);
+        }
+      });
+    });
+    
+    logger.info('=== END ANALYSIS ===');
   };
 
   return (
@@ -300,6 +595,23 @@ const Calendar: React.FC = () => {
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={handleCloseModal}
+        />
+      )}
+      {showConflictModal && pendingEventSave && (
+        <HolidayConflictModal
+          isHoliday={isHolidayConflict}
+          conflicts={conflictingEvents}
+          onAdjust={handleConflictModalAdjust}
+          onContinue={handleConflictModalContinue}
+          onCancel={handleConflictModalCancel}
+        />
+      )}
+      {showDeleteModal && pendingEventDelete && (
+        <HolidayDeleteModal
+          holidayDate={pendingEventDelete.start}
+          affectedEvents={conflictingEvents}
+          onDelete={handleDeleteWithRegeneration}
+          onCancel={handleCancelDelete}
         />
       )}
     </CalendarContainer>

@@ -1,5 +1,6 @@
 import { CalendarEvent } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
+import { logger } from '../../../utils/logger';
 
 export class HolidayChecker {
   /**
@@ -14,7 +15,24 @@ export class HolidayChecker {
     // Reset time to ensure we only compare calendar dates
     dateToCheck.setHours(0, 0, 0, 0);
     
-    return events.some(event => {
+    logger.debug(`Checking if ${dateToCheck.toDateString()} is a holiday among ${events.length} events`);
+    
+    // Filter events to only include holidays for more efficient debugging
+    const holidayEvents = events.filter(event => event.type === 'holiday');
+    logger.debug(`Found ${holidayEvents.length} holiday events to check against`);
+    
+    // Output all holiday events for debugging
+    if (holidayEvents.length > 0) {
+      holidayEvents.forEach(holiday => {
+        const start = new Date(holiday.start);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(holiday.end);
+        end.setHours(0, 0, 0, 0);
+        logger.debug(`Holiday: ${holiday.id} from ${start.toDateString()} to ${end.toDateString()}`);
+      });
+    }
+    
+    const isHoliday = events.some(event => {
       if (event.type !== 'holiday') return false;
       
       const eventStart = new Date(event.start);
@@ -23,8 +41,20 @@ export class HolidayChecker {
       const eventEnd = new Date(event.end);
       eventEnd.setHours(0, 0, 0, 0);
       
-      return dateToCheck >= eventStart && dateToCheck <= eventEnd;
+      const isInRange = dateToCheck >= eventStart && dateToCheck <= eventEnd;
+      
+      if (isInRange) {
+        logger.debug(`${dateToCheck.toDateString()} IS a holiday - matched holiday event ${event.id}`);
+      }
+      
+      return isInRange;
     });
+    
+    if (!isHoliday) {
+      logger.debug(`${dateToCheck.toDateString()} is NOT a holiday`);
+    }
+    
+    return isHoliday;
   }
 
   /**

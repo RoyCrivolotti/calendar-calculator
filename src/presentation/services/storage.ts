@@ -261,7 +261,7 @@ class StorageService {
             };
             
             request.onsuccess = () => {
-              console.log('Successfully saved event:', event.id);
+              // console.log('Successfully saved event:', event.id);
             };
           });
         };
@@ -329,7 +329,7 @@ class StorageService {
             };
             
             request.onsuccess = () => {
-              console.log('Successfully saved sub-event:', subEvent.id);
+              // console.log('Successfully saved sub-event:', subEvent.id);
             };
           });
         };
