@@ -21,8 +21,23 @@ export const isOfficeHours = (date: Date): boolean => {
   const day = date.getDay();
   const timeInMinutes = hour * 60 + minutes;
   
-  // Check if it's a weekday (1-5) and between 9am (540 minutes) and 6pm (1080 minutes)
-  return day >= 1 && day <= 5 && timeInMinutes >= 540 && timeInMinutes < 1080;
+  // Check if it's a weekday (1-5) and between 9am (540 minutes) and 5pm (1020 minutes)
+  // Note: 5pm is 17:00 which is 17*60 = 1020 minutes
+  const isWeekday = day >= 1 && day <= 5;
+  const isDuringWorkingHours = timeInMinutes >= 540 && timeInMinutes < 1020;
+  const result = isWeekday && isDuringWorkingHours;
+  
+  // Add more detailed debugging
+  const timeString = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayName = dayNames[day];
+  
+  console.debug(
+    `isOfficeHours: ${date.toISOString()} (${dayName} ${timeString}) => ` +
+    `isWeekday: ${isWeekday}, isDuringWorkingHours: ${isDuringWorkingHours}, RESULT: ${result}`
+  );
+  
+  return result;
 };
 
 export const calculateCompensatedHours = (start: Date, end: Date, isOnCall: boolean): number => {

@@ -31,6 +31,8 @@ export class SubEventFactory {
       const isNightShiftHour = isNightShift(currentTime, subEventEnd);
       const isOfficeHoursTime = isOfficeHours(currentTime);
       
+      console.debug(`Creating sub-event for ${currentTime.toISOString()}: isWeekend=${isWeekendHour}, isHoliday=${isHolidayHour}, isNightShift=${isNightShiftHour}, isOfficeHours=${isOfficeHoursTime}`);
+      
       // Create the sub-event
       const subEvent = SubEvent.create({
         id: crypto.randomUUID(),

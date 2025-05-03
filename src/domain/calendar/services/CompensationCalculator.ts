@@ -57,6 +57,9 @@ export class CompensationCalculator {
       let currentDay = new Date(start);
       currentDay.setHours(0, 0, 0, 0);
       
+      // Add debug logs
+      console.debug(`Calculating on-call hours for ${start.toISOString()} to ${end.toISOString()}`);
+      
       while (currentDay < end) {
         const nextDay = new Date(currentDay);
         nextDay.setDate(nextDay.getDate() + 1);
@@ -68,38 +71,47 @@ export class CompensationCalculator {
         let dayStart = isFirstDay ? start : new Date(currentDay);
         let dayEnd = isLastDay ? end : nextDay;
         
+        console.debug(`Processing day: ${currentDay.toISOString()} (${isWeekendDay ? 'Weekend' : 'Weekday'}), first day: ${isFirstDay}, last day: ${isLastDay}`);
+        
         // Skip office hours (9:00-18:00) on weekdays
         if (!isWeekendDay) {
           const officeStart = new Date(dayStart);
-          officeStart.setHours(9, 0, 0, 0);
+          officeStart.setHours(OFFICE_HOURS.start, 0, 0, 0);
           const officeEnd = new Date(dayStart);
-          officeEnd.setHours(18, 0, 0, 0);
+          officeEnd.setHours(OFFICE_HOURS.end, 0, 0, 0);
           
           // For first day, if start is before office hours, count from start to office start
           if (isFirstDay && start < officeStart) {
             const preOfficeHours = (officeStart.getTime() - start.getTime()) / (1000 * 60 * 60);
             weekdayHours += preOfficeHours;
+            console.debug(`  Before office hours: ${preOfficeHours.toFixed(2)}h`);
           }
           
           // For last day, if end is after office hours, count from office end to end
           if (isLastDay && end > officeEnd) {
             const postOfficeHours = (end.getTime() - officeEnd.getTime()) / (1000 * 60 * 60);
             weekdayHours += postOfficeHours;
+            console.debug(`  After office hours: ${postOfficeHours.toFixed(2)}h`);
           }
           
-          // For full days, count from office end to next day's office start
+          // For full days, count from midnight to office start and from office end to midnight
           if (!isFirstDay && !isLastDay) {
-            const fullDayHours = 15; // 24 - 9 hours of office time
-            weekdayHours += fullDayHours;
+            const morningHours = OFFICE_HOURS.start; // Hours from midnight to office start
+            const eveningHours = 24 - OFFICE_HOURS.end; // Hours from office end to midnight
+            weekdayHours += morningHours + eveningHours;
+            console.debug(`  Full day non-office hours: ${morningHours + eveningHours}h (${morningHours}h morning + ${eveningHours}h evening)`);
           }
         } else {
           // For weekends, count all hours
           const hours = (dayEnd.getTime() - dayStart.getTime()) / (1000 * 60 * 60);
           weekendHours += hours;
+          console.debug(`  Weekend hours: ${hours.toFixed(2)}h`);
         }
         
         currentDay = nextDay;
       }
+      
+      console.debug(`Total calculated hours - Weekday: ${weekdayHours.toFixed(2)}h, Weekend: ${weekendHours.toFixed(2)}h`);
     } else {
       // For incidents, handle each day separately
       let currentDay = new Date(start);
@@ -152,19 +164,27 @@ export class CompensationCalculator {
       weekdayComp = hours.weekday * RATES.weekdayOnCallRate;
       weekendComp = hours.weekend * RATES.weekendOnCallRate;
     } else if (event.type === 'incident') {
-      const isWeekend = this.isWeekend(event.start) || this.isHoliday(event.start, allEvents);
-      const multiplier = isWeekend ? RATES.weekendIncidentMultiplier : RATES.weekdayIncidentMultiplier;
-      
       // Calculate base compensation for regular hours
-      weekdayComp = hours.weekday * RATES.baseHourlySalary * multiplier;
-      weekendComp = hours.weekend * RATES.baseHourlySalary * multiplier;
+      weekdayComp = hours.weekday * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
+      weekendComp = hours.weekend * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
 
-      // Add night shift bonus for both weekday and weekend night shifts
+      // For night shifts, apply the full multiplier chain (not just the bonus)
       if (hours.weekdayNightShift > 0) {
-        nightShiftComp += hours.weekdayNightShift * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1);
+        // Full calculation: base salary * weekday multiplier * night shift multiplier
+        nightShiftComp += hours.weekdayNightShift * RATES.baseHourlySalary * 
+                        RATES.weekdayIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+        
+        // We already counted the base weekday rate, so subtract it
+        nightShiftComp -= hours.weekdayNightShift * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
       }
+      
       if (hours.weekendNightShift > 0) {
-        nightShiftComp += hours.weekendNightShift * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1);
+        // Full calculation: base salary * weekend multiplier * night shift multiplier
+        nightShiftComp += hours.weekendNightShift * RATES.baseHourlySalary * 
+                        RATES.weekendIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+        
+        // We already counted the base weekend rate, so subtract it
+        nightShiftComp -= hours.weekendNightShift * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
       }
     }
 
@@ -223,12 +243,24 @@ export class CompensationCalculator {
     }
 
     if (totalWeekdayIncidentHours > 0 || totalWeekendIncidentHours > 0 || totalWeekdayNightShiftHours > 0 || totalWeekendNightShiftHours > 0) {
+      // Calculate each component separately for clarity
+      const weekdayRegularComp = totalWeekdayIncidentHours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier;
+      const weekendRegularComp = totalWeekendIncidentHours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier;
+      
+      // Calculate night shift compensation using full multipliers
+      const weekdayNightComp = totalWeekdayNightShiftHours * RATES.baseHourlySalary * 
+                             RATES.weekdayIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+      const weekendNightComp = totalWeekendNightShiftHours * RATES.baseHourlySalary * 
+                             RATES.weekendIncidentMultiplier * RATES.nightShiftBonusMultiplier;
+      
+      const totalIncidentComp = weekdayRegularComp + weekendRegularComp + weekdayNightComp + weekendNightComp;
+      
+      // Add debug logs
+      console.debug(`COMPENSATION BREAKDOWN: Weekend night shift: ${totalWeekendNightShiftHours}h * ${RATES.baseHourlySalary} * ${RATES.weekendIncidentMultiplier} * ${RATES.nightShiftBonusMultiplier} = ${weekendNightComp.toFixed(2)}`);
+      
       breakdown.push({
         type: 'incident',
-        amount: totalWeekdayIncidentHours * RATES.baseHourlySalary * RATES.weekdayIncidentMultiplier +
-                totalWeekendIncidentHours * RATES.baseHourlySalary * RATES.weekendIncidentMultiplier +
-                totalWeekdayNightShiftHours * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1) +
-                totalWeekendNightShiftHours * RATES.baseHourlySalary * (RATES.nightShiftBonusMultiplier - 1),
+        amount: totalIncidentComp,
         count: incidentEvents.length,
         description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night shift, ${totalWeekendNightShiftHours}h weekend night shift)`
       });
