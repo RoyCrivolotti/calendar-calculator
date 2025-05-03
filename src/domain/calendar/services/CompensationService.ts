@@ -2,7 +2,8 @@ import { CalendarEvent } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
 import { CompensationBreakdown } from '../types/CompensationBreakdown';
 import { COMPENSATION_RATES } from '../constants/CompensationRates';
-import { isWeekend } from '../../../utils/calendarUtils';
+import { isWeekend, getMonthKey, createMonthDate } from '../../../utils/calendarUtils';
+import { logger } from '../../../utils/logger';
 
 /**
  * Centralized service for all compensation calculations in the application
@@ -16,22 +17,22 @@ export class CompensationService {
     const end = new Date(subEvent.end);
     const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     
-    console.debug(`Calculating hours for sub-event ${subEvent.id}: ${start.toISOString()} to ${end.toISOString()}`);
-    console.debug(`Raw hours: ${hours}, type: ${subEvent.type}, isOfficeHours: ${subEvent.isOfficeHours}, isNightShift: ${subEvent.isNightShift}, isWeekend: ${subEvent.isWeekend}`);
+    logger.debug(`Calculating hours for sub-event ${subEvent.id}: ${start.toISOString()} to ${end.toISOString()}`);
+    logger.debug(`Raw hours: ${hours}, type: ${subEvent.type}, isOfficeHours: ${subEvent.isOfficeHours}, isNightShift: ${subEvent.isNightShift}, isWeekend: ${subEvent.isWeekend}`);
     
     // For incidents, round up to the nearest hour even if just a few minutes
     if (subEvent.type === 'incident') {
       // Weekend and night shift hours are always compensated for incidents
       if (subEvent.isWeekend || subEvent.isNightShift) {
-        console.debug(`Incident: Counting full ${Math.ceil(hours)}h (weekend or night shift)`);
+        logger.debug(`Incident: Counting full ${Math.ceil(hours)}h (weekend or night shift)`);
         return Math.ceil(hours);
       }
       // Weekday daytime incidents
       if (!subEvent.isOfficeHours) {
-        console.debug(`Incident: Counting full ${Math.ceil(hours)}h (outside office hours)`);
+        logger.debug(`Incident: Counting full ${Math.ceil(hours)}h (outside office hours)`);
         return Math.ceil(hours);
       }
-      console.debug(`Incident: Counting full ${Math.ceil(hours)}h (default)`);
+      logger.debug(`Incident: Counting full ${Math.ceil(hours)}h (default)`);
       return Math.ceil(hours);
     }
     
@@ -39,10 +40,10 @@ export class CompensationService {
     if (subEvent.type === 'oncall') {
       // Only count non-office hours for on-call
       if (!subEvent.isOfficeHours || subEvent.isNightShift) {
-        console.debug(`On-call: Counting exact ${hours}h (outside office hours or night shift)`);
+        logger.debug(`On-call: Counting exact ${hours}h (outside office hours or night shift)`);
         return hours;
       }
-      console.debug(`On-call: Not counting ${hours}h (office hours)`);
+      logger.debug(`On-call: Not counting ${hours}h (office hours)`);
       return 0;
     }
     
@@ -68,7 +69,7 @@ export class CompensationService {
         const rate = subEvent.isWeekend ? COMPENSATION_RATES.weekendOnCallRate : COMPENSATION_RATES.weekdayOnCallRate;
         const compensation = hours * rate;
         
-        console.debug(`On-call compensation: ${hours}h * €${rate} = €${compensation.toFixed(2)}`);
+        logger.debug(`On-call compensation: ${hours}h * €${rate} = €${compensation.toFixed(2)}`);
         totalCompensation += compensation;
       }
     });
@@ -85,12 +86,12 @@ export class CompensationService {
                                COMPENSATION_RATES.weekendIncidentMultiplier * 
                                COMPENSATION_RATES.nightShiftBonusMultiplier;
           
-          console.debug(`Weekend night shift: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekendIncidentMultiplier} * ${COMPENSATION_RATES.nightShiftBonusMultiplier} = €${compensation.toFixed(2)}`);
+          logger.debug(`Weekend night shift: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekendIncidentMultiplier} * ${COMPENSATION_RATES.nightShiftBonusMultiplier} = €${compensation.toFixed(2)}`);
           totalCompensation += compensation;
         } else {
           // Regular weekend incident
           const compensation = hours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekendIncidentMultiplier;
-          console.debug(`Weekend incident: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekendIncidentMultiplier} = €${compensation.toFixed(2)}`);
+          logger.debug(`Weekend incident: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekendIncidentMultiplier} = €${compensation.toFixed(2)}`);
           totalCompensation += compensation;
         }
       } else {
@@ -100,13 +101,13 @@ export class CompensationService {
                              COMPENSATION_RATES.weekdayIncidentMultiplier * 
                              COMPENSATION_RATES.nightShiftBonusMultiplier;
           
-          console.debug(`Weekday night shift: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekdayIncidentMultiplier} * ${COMPENSATION_RATES.nightShiftBonusMultiplier} = €${compensation.toFixed(2)}`);
+          logger.debug(`Weekday night shift: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekdayIncidentMultiplier} * ${COMPENSATION_RATES.nightShiftBonusMultiplier} = €${compensation.toFixed(2)}`);
           
           totalCompensation += compensation;
         } else {
           // Regular weekday incident
           const compensation = hours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekdayIncidentMultiplier;
-          console.debug(`Weekday incident: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekdayIncidentMultiplier} = €${compensation.toFixed(2)}`);
+          logger.debug(`Weekday incident: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekdayIncidentMultiplier} = €${compensation.toFixed(2)}`);
           
           totalCompensation += compensation;
         }
@@ -120,44 +121,48 @@ export class CompensationService {
    * Calculate monthly compensation breakdown from events and sub-events
    */
   calculateMonthlyCompensation(events: CalendarEvent[], subEvents: SubEvent[], date: Date): CompensationBreakdown[] {
-    const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+    const monthKey = getMonthKey(date);
     
-    console.log(`Calculating compensation for month: ${monthKey}`);
+    logger.info(`Calculating compensation for month: ${monthKey}`);
     
     // Filter events for the current month
     const monthEvents = events.filter(event => {
       const eventDate = new Date(event.start);
-      const eventMonthKey = `${eventDate.getFullYear()}-${eventDate.getMonth() + 1}`;
+      const eventMonthKey = getMonthKey(eventDate);
       const isInMonth = eventMonthKey === monthKey;
-      console.log(`Event ${event.id} (${event.type}): ${eventDate.toISOString()} is in month ${monthKey}: ${isInMonth}`);
+      logger.info(`Event ${event.id} (${event.type}): ${eventDate.toISOString()} is in month ${monthKey}: ${isInMonth}`);
       return isInMonth;
     });
     
-    console.log(`Found ${monthEvents.length} events for month ${monthKey}`);
+    logger.info(`Found ${monthEvents.length} events for month ${monthKey}`);
     
     // Get all parent event IDs for the month
     const monthEventIds = monthEvents.map(event => event.id);
-    console.log(`Month event IDs: ${monthEventIds.join(', ')}`);
+    logger.info(`Month event IDs: ${monthEventIds.join(', ')}`);
     
     // Filter sub-events for the current month's events
     const monthSubEvents = subEvents.filter(subEvent => 
       monthEventIds.includes(subEvent.parentEventId)
     );
     
-    console.log(`Found ${monthSubEvents.length} sub-events for month ${monthKey}`);
+    logger.info(`Found ${monthSubEvents.length} sub-events for month ${monthKey}`);
     
-    // Debug output for each sub-event
-    monthSubEvents.forEach((subEvent, index) => {
-      console.log(`SubEvent ${index + 1}/${monthSubEvents.length}: 
-        ID: ${subEvent.id}
-        Parent: ${subEvent.parentEventId}
-        Type: ${subEvent.type}
-        Start: ${new Date(subEvent.start).toISOString()}
-        End: ${new Date(subEvent.end).toISOString()}
-        Weekend: ${subEvent.isWeekend}
-        Night Shift: ${subEvent.isNightShift}
-        Office Hours: ${subEvent.isOfficeHours}`);
-    });
+    // Debug output for each sub-event if needed (but limit for brevity)
+    if (monthSubEvents.length <= 10) {
+      monthSubEvents.forEach((subEvent, index) => {
+        logger.debug(`SubEvent ${index + 1}/${monthSubEvents.length}: 
+          ID: ${subEvent.id}
+          Parent: ${subEvent.parentEventId}
+          Type: ${subEvent.type}
+          Start: ${new Date(subEvent.start).toISOString()}
+          End: ${new Date(subEvent.end).toISOString()}
+          Weekend: ${subEvent.isWeekend}
+          Night Shift: ${subEvent.isNightShift}
+          Office Hours: ${subEvent.isOfficeHours}`);
+      });
+    } else {
+      logger.debug(`Too many sub-events (${monthSubEvents.length}) to log individually`);
+    }
 
     // Separate oncall and incident events
     const oncallEvents = monthEvents.filter(event => event.type === 'oncall');
@@ -177,7 +182,7 @@ export class CompensationService {
           // Check if it's a weekday (not weekend)
           if (!isWeekend(start)) {
             has24HourWeekdayOncall = true;
-            console.log(`Found 24-hour weekday on-call shift: ${start.toISOString()} to ${end.toISOString()}`);
+            logger.info(`Found 24-hour weekday on-call shift: ${start.toISOString()} to ${end.toISOString()}`);
           }
         }
       }
@@ -187,13 +192,13 @@ export class CompensationService {
     const oncallSubEvents = monthSubEvents.filter(subEvent => subEvent.type === 'oncall');
     const incidentSubEvents = monthSubEvents.filter(subEvent => subEvent.type === 'incident');
     
-    console.log(`On-call events: ${oncallEvents.length}, incident events: ${incidentEvents.length}`);
-    console.log(`On-call sub-events: ${oncallSubEvents.length}, incident sub-events: ${incidentSubEvents.length}`);
+    logger.info(`On-call events: ${oncallEvents.length}, incident events: ${incidentEvents.length}`);
+    logger.info(`On-call sub-events: ${oncallSubEvents.length}, incident sub-events: ${incidentSubEvents.length}`);
     
     // Check sub-event coverage for debugging
     const nightShiftSubEvents = monthSubEvents.filter(se => se.isNightShift);
     const officeHoursSubEvents = monthSubEvents.filter(se => se.isOfficeHours);
-    console.log(`Night shift sub-events: ${nightShiftSubEvents.length}, Office hours sub-events: ${officeHoursSubEvents.length}`);
+    logger.info(`Night shift sub-events: ${nightShiftSubEvents.length}, Office hours sub-events: ${officeHoursSubEvents.length}`);
     
     // Calculate compensation statistics
     let totalWeekdayOnCallHours = 0;
@@ -210,10 +215,10 @@ export class CompensationService {
         
         if (subEvent.isWeekend) {
           totalWeekendOnCallHours += hours;
-          console.log(`Added ${hours}h to weekend on-call total (now ${totalWeekendOnCallHours}h)`);
+          logger.debug(`Added ${hours}h to weekend on-call total (now ${totalWeekendOnCallHours}h)`);
         } else {
           totalWeekdayOnCallHours += hours;
-          console.log(`Added ${hours}h to weekday on-call total (now ${totalWeekdayOnCallHours}h)`);
+          logger.debug(`Added ${hours}h to weekday on-call total (now ${totalWeekdayOnCallHours}h)`);
         }
       }
     });
@@ -221,7 +226,7 @@ export class CompensationService {
     // Special case: If we identified a 24-hour weekday on-call shift,
     // make sure we're counting 15 hours (9 before office hours + 6 after)
     if (has24HourWeekdayOncall && totalWeekdayOnCallHours < 15) {
-      console.log(`Correcting weekday on-call hours for 24-hour shift: ${totalWeekdayOnCallHours}h -> 15h`);
+      logger.info(`Correcting weekday on-call hours for 24-hour shift: ${totalWeekdayOnCallHours}h -> 15h`);
       totalWeekdayOnCallHours = 15; // 9 hours before office hours (midnight to 9am) + 6 hours after (6pm to midnight)
     }
 
@@ -244,8 +249,8 @@ export class CompensationService {
       }
     });
 
-    console.debug(`Total on-call hours - Weekday: ${totalWeekdayOnCallHours}h, Weekend: ${totalWeekendOnCallHours}h`);
-    console.debug(`Total incident hours - Weekday: ${totalWeekdayIncidentHours}h, Weekend: ${totalWeekendIncidentHours}h, Weekday Night: ${totalWeekdayNightShiftHours}h, Weekend Night: ${totalWeekendNightShiftHours}h`);
+    logger.debug(`Total on-call hours - Weekday: ${totalWeekdayOnCallHours}h, Weekend: ${totalWeekendOnCallHours}h`);
+    logger.debug(`Total incident hours - Weekday: ${totalWeekdayIncidentHours}h, Weekend: ${totalWeekendIncidentHours}h, Weekday Night: ${totalWeekdayNightShiftHours}h, Weekend Night: ${totalWeekendNightShiftHours}h`);
 
     // Calculate compensation for on-call
     const weekdayOnCallComp = totalWeekdayOnCallHours * COMPENSATION_RATES.weekdayOnCallRate;
@@ -275,7 +280,7 @@ export class CompensationService {
     // Total compensation
     const totalCompensation = totalOnCallComp + totalIncidentComp;
 
-    console.log(`Compensation breakdown: 
+    logger.info(`Compensation breakdown: 
       Weekday on-call: ${totalWeekdayOnCallHours}h * €${COMPENSATION_RATES.weekdayOnCallRate} = €${weekdayOnCallComp.toFixed(2)}
       Weekend on-call: ${totalWeekendOnCallHours}h * €${COMPENSATION_RATES.weekendOnCallRate} = €${weekendOnCallComp.toFixed(2)}
       Total on-call: €${totalOnCallComp.toFixed(2)}
@@ -290,9 +295,8 @@ export class CompensationService {
 
     const breakdown: CompensationBreakdown[] = [];
     
-    // Make sure we have a proper date object for the month
-    const monthDate = new Date(date.getFullYear(), date.getMonth(), 1); // First day of month
-    monthDate.setHours(0, 0, 0, 0); // Reset time to midnight
+    // Make sure we have a proper date object for the month using our utility
+    const monthDate = createMonthDate(date);
     
     // Add on-call compensation to breakdown
     if (totalWeekdayOnCallHours > 0 || totalWeekendOnCallHours > 0) {
@@ -339,7 +343,7 @@ export class CompensationService {
       });
     }
 
-    console.debug(`Compensation breakdown for ${monthKey}:`, breakdown.map(b => ({
+    logger.debug(`Compensation breakdown for ${monthKey}:`, breakdown.map(b => ({
       type: b.type,
       amount: b.amount,
       month: b.month ? b.month.toISOString() : 'undefined'

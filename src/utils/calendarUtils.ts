@@ -1,4 +1,5 @@
 import { OFFICE_HOURS } from '../domain/calendar/constants/CompensationRates';
+import { logger } from './logger';
 
 export const isWeekend = (date: Date): boolean => {
   const day = date.getDay();
@@ -15,7 +16,7 @@ export const isNightShift = (start: Date, end: Date): boolean => {
   // Night shift is from 22:00 to 6:00
   const isNight = startHour >= 22 || startHour < 6;
   
-  console.debug(`isNightShift check: ${start.toISOString()} (hour: ${startHour}) => ${isNight}`);
+  logger.debug(`isNightShift check: ${start.toISOString()} (hour: ${startHour}) => ${isNight}`);
   
   return isNight;
 };
@@ -34,7 +35,7 @@ export const isOfficeHours = (date: Date): boolean => {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayName = dayNames[day];
   
-  console.debug(
+  logger.debug(
     `isOfficeHours: ${date.toISOString()} (${dayName} ${timeString}) => ` +
     `isWorkingDay: ${isWorkingDay}, isDuringWorkingHours: ${isDuringWorkingHours}, RESULT: ${result}`
   );
@@ -92,4 +93,28 @@ export const calculateNightShiftHours = (start: Date, end: Date): number => {
 
 export const calculateTotalHours = (start: Date, end: Date): number => {
   return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+};
+
+/**
+ * Returns a standardized string key for a month in format 'YYYY-M'
+ */
+export const getMonthKey = (date: Date): string => {
+  return `${date.getFullYear()}-${date.getMonth() + 1}`;
+};
+
+/**
+ * Creates a date object representing the first day of the month at midnight
+ */
+export const createMonthDate = (date: Date): Date => {
+  const monthDate = new Date(date.getFullYear(), date.getMonth(), 1);
+  monthDate.setHours(0, 0, 0, 0);
+  return monthDate;
+};
+
+/**
+ * Returns true if two dates are in the same month
+ */
+export const isSameMonth = (date1: Date, date2: Date): boolean => {
+  return date1.getFullYear() === date2.getFullYear() && 
+         date1.getMonth() === date2.getMonth();
 };

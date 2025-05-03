@@ -22,6 +22,8 @@ import { container } from '../../../config/container';
 import { CalculateCompensationUseCase } from '../../../application/calendar/use-cases/CalculateCompensation';
 import { storageService } from '../../services/storage';
 import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
+import { logger } from '../../../utils/logger';
+import { getMonthKey } from '../../../utils/calendarUtils';
 
 const CalendarContainer = styled.div`
   display: flex;
@@ -59,95 +61,13 @@ const Calendar: React.FC = () => {
   const updateCompensationData = async () => {
     const calculateCompensationUseCase = container.get<CalculateCompensationUseCase>('calculateCompensationUseCase');
     
-    console.log('Events available for compensation calculation:', events.length);
+    logger.info('Events available for compensation calculation:', events.length);
     
-    // Create direct monthly data in case the use case approach doesn't work
-    const directMonthlyData: CompensationBreakdown[] = [];
-    
-    try {
-      // Get unique months from events
-      const monthsByEventId = new Map<string, Date>();
-      events.forEach(event => {
-        const date = new Date(event.start);
-        // Reset day to first of month to create month-only date
-        const monthDate = new Date(date.getFullYear(), date.getMonth(), 1);
-        monthsByEventId.set(event.id, monthDate);
-      });
-      
-      console.log(`Found ${monthsByEventId.size} events with dates`);
-      
-      // Group events by month
-      const eventsByMonth = new Map<string, CalendarEventProps[]>();
-      events.forEach(event => {
-        const date = new Date(event.start);
-        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-        
-        if (!eventsByMonth.has(monthKey)) {
-          eventsByMonth.set(monthKey, []);
-        }
-        
-        eventsByMonth.get(monthKey)!.push(event);
-      });
-      
-      console.log(`Grouped events into ${eventsByMonth.size} months`);
-      
-      // Create direct monthly data
-      for (const [monthKey, monthEvents] of eventsByMonth.entries()) {
-        const [year, month] = monthKey.split('-').map(Number);
-        const monthDate = new Date(year, month - 1, 1); // Set to first day of month
-        monthDate.setHours(0, 0, 0, 0); // Reset time to midnight
-        
-        // Count by event type
-        const oncallCount = monthEvents.filter(e => e.type === 'oncall').length;
-        const incidentCount = monthEvents.filter(e => e.type === 'incident').length;
-        
-        // Create direct compensation - at least we can show the months with event counts
-        if (oncallCount > 0) {
-          directMonthlyData.push({
-            type: 'oncall',
-            amount: oncallCount * 100, // Dummy value
-            count: oncallCount,
-            description: `On-call shifts (${oncallCount})`,
-            month: new Date(monthDate)
-          });
-        }
-        
-        if (incidentCount > 0) {
-          directMonthlyData.push({
-            type: 'incident',
-            amount: incidentCount * 200, // Dummy value
-            count: incidentCount,
-            description: `Incidents (${incidentCount})`,
-            month: new Date(monthDate)
-          });
-        }
-        
-        // Add total for this month
-        const totalAmount = (oncallCount * 100) + (incidentCount * 200);
-        directMonthlyData.push({
-          type: 'total',
-          amount: totalAmount,
-          count: monthEvents.length,
-          description: 'Total compensation',
-          month: new Date(monthDate)
-        });
-      }
-    } catch (error) {
-      console.error('Error creating direct monthly data:', error);
-    }
-    
-    // Try the normal approach as well
     try {
       // Only proceed if we have events
       if (events.length === 0) {
-        console.log('No events available for compensation calculation');
-        
-        if (directMonthlyData.length > 0) {
-          console.log('Using direct monthly data as fallback:', directMonthlyData);
-          setCompensationData(directMonthlyData);
-        } else {
-          setCompensationData([]);
-        }
+        logger.info('No events available for compensation calculation');
+        setCompensationData([]);
         return;
       }
 
@@ -155,12 +75,12 @@ const Calendar: React.FC = () => {
       const months = new Set<string>();
       events.forEach(event => {
         const date = new Date(event.start);
-        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+        const monthKey = getMonthKey(date);
         months.add(monthKey);
-        console.log(`Found event in month: ${monthKey}`);
+        logger.debug(`Found event in month: ${monthKey}`);
       });
       
-      console.log(`Found ${months.size} unique months with events`);
+      logger.info(`Found ${months.size} unique months with events`);
       
       const allData: CompensationBreakdown[] = [];
       
@@ -170,63 +90,30 @@ const Calendar: React.FC = () => {
         const monthDate = new Date(year, month - 1, 1); // Month is 0-indexed in Date constructor
         monthDate.setHours(0, 0, 0, 0); // Reset time to midnight
         
-        console.log(`Calculating compensation for month: ${year}-${month}`);
+        logger.info(`Calculating compensation for month: ${year}-${month}`);
         
         // Calculate compensation for this month
         try {
           const monthData = await calculateCompensationUseCase.execute(monthDate);
-          console.log(`Month ${year}-${month} compensation data:`, monthData);
+          logger.debug(`Month ${year}-${month} compensation data:`, monthData);
           
           if (monthData.length > 0) {
-            // We need to make sure each record has the month property set
-            const monthDataWithMonth = monthData.map(d => {
-              // Only create a new object if month isn't already set
-              if (!d.month) {
-                return {
-                  ...d,
-                  month: new Date(monthDate)
-                };
-              }
-              return d;
-            });
-            
-            allData.push(...monthDataWithMonth);
+            allData.push(...monthData);
           } else {
-            console.log(`No compensation data returned for month ${year}-${month}`);
+            logger.info(`No compensation data returned for month ${year}-${month}`);
           }
         } catch (error) {
-          console.error(`Error calculating compensation for month ${year}-${month}:`, error);
+          logger.error(`Error calculating compensation for month ${year}-${month}:`, error);
         }
       }
       
-      console.log('All compensation data:', allData);
+      logger.debug('All compensation data:', allData);
+      setCompensationData(allData);
       
-      // Use the calculated data if available, otherwise use our direct data
-      if (allData.filter(d => d.type === 'total').length > 0) {
-        setCompensationData(allData);
-      } else if (directMonthlyData.length > 0) {
-        console.log('Using direct monthly data as fallback because no calculated data was available:', directMonthlyData);
-        setCompensationData(directMonthlyData);
-      } else {
-        setCompensationData([]);
-      }
     } catch (error) {
-      console.error('Error in compensation calculation:', error);
-      
-      // Use direct data as fallback if available
-      if (directMonthlyData.length > 0) {
-        console.log('Using direct monthly data as fallback due to error:', directMonthlyData);
-        setCompensationData(directMonthlyData);
-      } else {
-        setCompensationData([]);
-      }
+      logger.error('Error in compensation calculation:', error);
+      setCompensationData([]);
     }
-    
-    // Debug log to check the final compensation data
-    console.log('Final monthly compensation data:', compensationData.filter(d => d.type === 'total').map(d => ({
-      month: d.month ? d.month.toISOString() : 'undefined',
-      amount: d.amount
-    })));
   };
 
   const handleEventClick = (clickInfo: EventClickArg) => {

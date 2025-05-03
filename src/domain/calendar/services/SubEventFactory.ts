@@ -2,6 +2,7 @@ import { CalendarEvent } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
 import { isWeekend, isNightShift, isOfficeHours } from '../../../utils/calendarUtils';
 import { HolidayChecker } from './HolidayChecker';
+import { logger } from '../../../utils/logger';
 
 export class SubEventFactory {
   generateSubEvents(event: CalendarEvent, allEvents: CalendarEvent[]): SubEvent[] {
@@ -9,7 +10,7 @@ export class SubEventFactory {
     const start = new Date(event.start);
     const end = new Date(event.end);
     
-    console.log(`Generating sub-events for ${event.type} event: ${start.toISOString()} - ${end.toISOString()}`);
+    logger.info(`Generating sub-events for ${event.type} event: ${start.toISOString()} - ${end.toISOString()}`);
     
     // Create hourly sub-events
     const currentTime = new Date(start);
@@ -34,7 +35,7 @@ export class SubEventFactory {
       const isOfficeHoursTime = isOfficeHours(currentTime);
       
       const hourString = `${currentTime.getHours().toString().padStart(2, '0')}:00`;
-      console.log(`Sub-event at ${hourString}: Weekend: ${isWeekendHour}, Holiday: ${isHolidayHour}, Night Shift: ${isNightShiftHour}, Office Hours: ${isOfficeHoursTime}`);
+      logger.debug(`Sub-event at ${hourString}: Weekend: ${isWeekendHour}, Holiday: ${isHolidayHour}, Night Shift: ${isNightShiftHour}, Office Hours: ${isOfficeHoursTime}`);
       
       // Create the sub-event
       const subEvent = SubEvent.create({
@@ -56,13 +57,13 @@ export class SubEventFactory {
       currentTime.setTime(nextHour.getTime());
     }
     
-    console.log(`Generated ${subEvents.length} sub-events for ${event.type} event`);
+    logger.info(`Generated ${subEvents.length} sub-events for ${event.type} event`);
     
     // Verify night shift and office hour coverage
     const nightShiftSubEvents = subEvents.filter(se => se.isNightShift);
     const officeHoursSubEvents = subEvents.filter(se => se.isOfficeHours);
     
-    console.log(`Night shift sub-events: ${nightShiftSubEvents.length}, Office hours sub-events: ${officeHoursSubEvents.length}`);
+    logger.debug(`Night shift sub-events: ${nightShiftSubEvents.length}, Office hours sub-events: ${officeHoursSubEvents.length}`);
     
     return subEvents;
   }

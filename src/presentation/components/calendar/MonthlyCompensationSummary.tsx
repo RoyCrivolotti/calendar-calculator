@@ -3,6 +3,8 @@ import styled from '@emotion/styled';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import { storageService } from '../../services/storage';
+import { logger } from '../../../utils/logger';
+import { createMonthDate } from '../../../utils/calendarUtils';
 
 const Container = styled.div`
   width: 93%;
@@ -266,7 +268,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
     
-    console.log('Monthly Summary Data:', data);
+    logger.debug('Monthly Summary Data:', data);
     
     // Get unique months from data
     const months = new Set<string>();
@@ -277,14 +279,14 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
           const monthKey = monthDate.toISOString();
           months.add(monthKey);
-          console.log(`Found month: ${monthDate.toLocaleString()} from ${d.type} with amount ${d.amount}`);
+          logger.debug(`Found month: ${monthDate.toLocaleString()} from ${d.type} with amount ${d.amount}`);
         } catch (error) {
-          console.error('Error processing month:', d.month, error);
+          logger.error('Error processing month:', d.month, error);
         }
       }
     });
 
-    console.log(`Found ${months.size} unique months`);
+    logger.info(`Found ${months.size} unique months`);
 
     // Add months with data
     Array.from(months).forEach(monthKey => {
@@ -302,7 +304,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       
       if (monthData.length > 0) {
         const monthDate = new Date(monthKey);
-        console.log(`Adding month ${monthDate.toLocaleDateString()} with ${monthData.length} records`);
+        logger.debug(`Adding month ${monthDate.toLocaleDateString()} with ${monthData.length} records`);
         result.push({
           date: monthDate,
           data: monthData
@@ -386,18 +388,28 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           <ModalContent onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
             <CloseButton onClick={handleCloseModal}>×</CloseButton>
             <h2>{format(selectedMonth, 'MMMM yyyy')}</h2>
-            {data.map((comp, index) => (
-              <div key={index} style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
-                <h3>{comp.description}</h3>
-                <p>Count: {comp.count}</p>
-                <div style={{ marginTop: '1rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
-                  <h4>Compensation Breakdown</h4>
-                  <p style={{ fontWeight: '600', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
-                    Total Compensation: €{comp.amount.toFixed(2)}
-                  </p>
+            {data
+              .filter(comp => {
+                // Only show data for the selected month
+                if (!comp.month) return false;
+                const compMonth = comp.month instanceof Date ? comp.month : new Date(comp.month);
+                return (
+                  compMonth.getFullYear() === selectedMonth.getFullYear() && 
+                  compMonth.getMonth() === selectedMonth.getMonth()
+                );
+              })
+              .map((comp, index) => (
+                <div key={index} style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
+                  <h3>{comp.description}</h3>
+                  <p>Count: {comp.count}</p>
+                  <div style={{ marginTop: '1rem', padding: '1rem', background: '#f1f5f9', borderRadius: '8px' }}>
+                    <h4>Compensation Breakdown</h4>
+                    <p style={{ fontWeight: '600', marginTop: '0.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
+                      Total Compensation: €{comp.amount.toFixed(2)}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </ModalContent>
         </Modal>
       )}
