@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
@@ -24,6 +24,7 @@ import { storageService } from '../../services/storage';
 import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
 import { logger } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
+import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 
 const CalendarContainer = styled.div`
   display: flex;
@@ -42,6 +43,8 @@ const Calendar: React.FC = () => {
     showEventModal,
   } = useAppSelector(state => state.calendar);
   const [compensationData, setCompensationData] = useState<CompensationBreakdown[]>([]);
+  const [loading, setLoading] = useState(false);
+  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
 
   const calendarRef = useRef<FullCalendar>(null);
 
@@ -59,18 +62,17 @@ const Calendar: React.FC = () => {
   }, [events, currentDate]);
 
   const updateCompensationData = async () => {
-    const calculateCompensationUseCase = container.get<CalculateCompensationUseCase>('calculateCompensationUseCase');
-    
     logger.info('Events available for compensation calculation:', events.length);
     
+    if (events.length === 0) {
+      logger.info('No events available for compensation calculation');
+      setCompensationData([]);
+      return;
+    }
+    
+    setLoading(true);
+    
     try {
-      // Only proceed if we have events
-      if (events.length === 0) {
-        logger.info('No events available for compensation calculation');
-        setCompensationData([]);
-        return;
-      }
-
       // Get unique months from events
       const months = new Set<string>();
       events.forEach(event => {
@@ -84,7 +86,10 @@ const Calendar: React.FC = () => {
       
       const allData: CompensationBreakdown[] = [];
       
-      // For each month with events, calculate compensation
+      // Convert events to CalendarEvent objects for the facade
+      const calendarEvents = events.map(event => new CalendarEvent(event));
+      
+      // For each month with events, calculate compensation using the facade
       for (const monthKey of Array.from(months)) {
         const [year, month] = monthKey.split('-').map(Number);
         const monthDate = new Date(year, month - 1, 1); // Month is 0-indexed in Date constructor
@@ -92,15 +97,11 @@ const Calendar: React.FC = () => {
         
         logger.info(`Calculating compensation for month: ${year}-${month}`);
         
-        // Calculate compensation for this month
+        // Use the facade for consistent calculation
         try {
-          const monthData = await calculateCompensationUseCase.execute(monthDate);
-          logger.debug(`Month ${year}-${month} compensation data:`, monthData);
-          
+          const monthData = await calculatorFacade.calculateMonthlyCompensation(calendarEvents, monthDate);
           if (monthData.length > 0) {
             allData.push(...monthData);
-          } else {
-            logger.info(`No compensation data returned for month ${year}-${month}`);
           }
         } catch (error) {
           logger.error(`Error calculating compensation for month ${year}-${month}:`, error);
@@ -113,6 +114,8 @@ const Calendar: React.FC = () => {
     } catch (error) {
       logger.error('Error in compensation calculation:', error);
       setCompensationData([]);
+    } finally {
+      setLoading(false);
     }
   };
 

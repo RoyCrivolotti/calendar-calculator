@@ -3,9 +3,8 @@ import styled from '@emotion/styled';
 import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
-import { CompensationService } from '../../../domain/calendar/services/CompensationService';
-import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
-import { storageService } from '../../services/storage';
+import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
+import { logger } from '../../../utils/logger';
 
 const Section = styled.div`
   background: white;
@@ -84,6 +83,13 @@ const MonthButton = styled.button`
   }
 `;
 
+const LoadingIndicator = styled.div`
+  text-align: center;
+  padding: 1rem;
+  color: #64748b;
+  font-style: italic;
+`;
+
 interface CompensationSectionProps {
   events: CalendarEvent[];
   currentDate: Date;
@@ -96,29 +102,31 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   onDateChange
 }) => {
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
-  const [subEvents, setSubEvents] = useState<SubEvent[]>([]);
-  const compensationService = useMemo(() => new CompensationService(), []);
+  const [loading, setLoading] = useState(false);
+  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
 
   useEffect(() => {
-    // Load sub-events from storage
-    const fetchSubEvents = async () => {
+    const calculateCompensation = async () => {
+      if (events.length === 0) {
+        setBreakdown([]);
+        return;
+      }
+      
+      setLoading(true);
       try {
-        const loadedSubEvents = await storageService.loadSubEvents();
-        setSubEvents(loadedSubEvents);
+        // Use the facade to get compensation data with guaranteed sub-events
+        const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate);
+        setBreakdown(result);
       } catch (error) {
-        console.error('Error loading sub-events:', error);
+        logger.error('Error calculating compensation:', error);
+        setBreakdown([]);
+      } finally {
+        setLoading(false);
       }
     };
     
-    fetchSubEvents();
-  }, []);
-
-  useEffect(() => {
-    if (subEvents.length > 0) {
-      const newBreakdown = compensationService.calculateMonthlyCompensation(events, subEvents, currentDate);
-      setBreakdown(newBreakdown);
-    }
-  }, [events, subEvents, currentDate, compensationService]);
+    calculateCompensation();
+  }, [events, currentDate, calculatorFacade]);
 
   const months = useMemo(() => {
     const result = [];
@@ -158,15 +166,20 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           Next Month
         </MonthButton>
       </MonthSelector>
-      <Breakdown>
-        {breakdown.map((item, index) => (
-          <BreakdownItem key={index}>
-            <h3>{item.description}</h3>
-            <p>Count: {item.count}</p>
-            <div className="amount">€{item.amount.toFixed(2)}</div>
-          </BreakdownItem>
-        ))}
-      </Breakdown>
+      
+      {loading ? (
+        <LoadingIndicator>Loading compensation data...</LoadingIndicator>
+      ) : (
+        <Breakdown>
+          {breakdown.map((item, index) => (
+            <BreakdownItem key={index}>
+              <h3>{item.description}</h3>
+              <p>Count: {item.count}</p>
+              <div className="amount">€{item.amount.toFixed(2)}</div>
+            </BreakdownItem>
+          ))}
+        </Breakdown>
+      )}
     </Section>
   );
 };
