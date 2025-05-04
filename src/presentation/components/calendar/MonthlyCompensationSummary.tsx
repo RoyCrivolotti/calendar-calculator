@@ -937,6 +937,60 @@ const DeleteMonthSection = styled.div`
   text-align: center;
 `;
 
+const EventCount = styled.span`
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #64748b;
+  margin-left: 0.5rem;
+`;
+
+const PaginationControls = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f1f5f9;
+  
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+`;
+
+const PageInfo = styled.div`
+  font-size: 0.8rem;
+  color: #64748b;
+`;
+
+const PageButtons = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const PageButton = styled.button<{ disabled?: boolean }>`
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: ${props => props.disabled ? '#f8fafc' : 'white'};
+  color: ${props => props.disabled ? '#cbd5e1' : '#0f172a'};
+  font-size: 0.8rem;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
+  transition: all 0.2s;
+  
+  &:hover {
+    background: ${props => props.disabled ? '#f8fafc' : '#f1f5f9'};
+    border-color: ${props => props.disabled ? '#e2e8f0' : '#cbd5e1'};
+  }
+`;
+
+const PageNumber = styled.div`
+  font-size: 0.8rem;
+  color: #64748b;
+  padding: 0 0.25rem;
+`;
+
 interface MonthData {
   date: Date;
   data: CompensationBreakdown[];
@@ -971,6 +1025,17 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     amount: string;
     percentage: string;
   } | null>(null);
+  
+  // Pagination settings for event lists
+  const EVENTS_PER_PAGE = 10;
+  const [oncallPage, setOncallPage] = useState(1);
+  const [incidentPage, setIncidentPage] = useState(1);
+
+  // Reset pagination when month changes
+  useEffect(() => {
+    setOncallPage(1);
+    setIncidentPage(1);
+  }, [selectedMonth]);
   
   // Handler functions for tooltip moved to component level
   const handlePieSliceHover = (e: React.MouseEvent<SVGPathElement>) => {
@@ -1486,7 +1551,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return `${hours} hour${hours !== 1 ? 's' : ''}`;
   };
 
-  // Function to render the events list
+  // Function to render the events list with pagination
   const renderEventsList = () => {
     if (!selectedMonth || !oncallData.length && !incidentData.length) return null;
 
@@ -1522,6 +1587,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       incident: events.filter(e => e.type === 'incident')
     };
 
+    // Calculate pagination for on-call events
+    const totalOncallPages = Math.ceil(groupedEvents.oncall.length / EVENTS_PER_PAGE);
+    const oncallStartIndex = (oncallPage - 1) * EVENTS_PER_PAGE;
+    const oncallEndIndex = Math.min(oncallStartIndex + EVENTS_PER_PAGE, groupedEvents.oncall.length);
+    const paginatedOncallEvents = groupedEvents.oncall.slice(oncallStartIndex, oncallEndIndex);
+    
+    // Calculate pagination for incident events
+    const totalIncidentPages = Math.ceil(groupedEvents.incident.length / EVENTS_PER_PAGE);
+    const incidentStartIndex = (incidentPage - 1) * EVENTS_PER_PAGE;
+    const incidentEndIndex = Math.min(incidentStartIndex + EVENTS_PER_PAGE, groupedEvents.incident.length);
+    const paginatedIncidentEvents = groupedEvents.incident.slice(incidentStartIndex, incidentEndIndex);
+
     return (
       <EventListSection>
         <EventListTitle>Events This Month</EventListTitle>
@@ -1529,8 +1606,12 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         {/* On-Call Shifts */}
         {groupedEvents.oncall.length > 0 && (
           <EventTypeSection>
-            <EventTypeName>On-Call Shifts</EventTypeName>
-            {groupedEvents.oncall.map(event => (
+            <EventTypeName>
+              On-Call Shifts
+              <EventCount>{groupedEvents.oncall.length} events</EventCount>
+            </EventTypeName>
+            
+            {paginatedOncallEvents.map(event => (
               <EventItem key={event.id}>
                 <EventTime>
                   {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
@@ -1543,14 +1624,42 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 </EventMetadata>
               </EventItem>
             ))}
+            
+            {/* Pagination controls for on-call events */}
+            {totalOncallPages > 1 && (
+              <PaginationControls>
+                <PageInfo>
+                  Showing {oncallStartIndex + 1}-{oncallEndIndex} of {groupedEvents.oncall.length}
+                </PageInfo>
+                <PageButtons>
+                  <PageButton 
+                    disabled={oncallPage === 1}
+                    onClick={() => setOncallPage(prev => Math.max(prev - 1, 1))}
+                  >
+                    Previous
+                  </PageButton>
+                  <PageNumber>{oncallPage} / {totalOncallPages}</PageNumber>
+                  <PageButton 
+                    disabled={oncallPage === totalOncallPages}
+                    onClick={() => setOncallPage(prev => Math.min(prev + 1, totalOncallPages))}
+                  >
+                    Next
+                  </PageButton>
+                </PageButtons>
+              </PaginationControls>
+            )}
           </EventTypeSection>
         )}
         
         {/* Incidents */}
         {groupedEvents.incident.length > 0 && (
           <EventTypeSection>
-            <EventTypeName>Incidents</EventTypeName>
-            {groupedEvents.incident.map(event => (
+            <EventTypeName>
+              Incidents
+              <EventCount>{groupedEvents.incident.length} events</EventCount>
+            </EventTypeName>
+            
+            {paginatedIncidentEvents.map(event => (
               <EventItem key={event.id}>
                 <EventTime>
                   {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
@@ -1563,6 +1672,30 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 </EventMetadata>
               </EventItem>
             ))}
+            
+            {/* Pagination controls for incident events */}
+            {totalIncidentPages > 1 && (
+              <PaginationControls>
+                <PageInfo>
+                  Showing {incidentStartIndex + 1}-{incidentEndIndex} of {groupedEvents.incident.length}
+                </PageInfo>
+                <PageButtons>
+                  <PageButton 
+                    disabled={incidentPage === 1}
+                    onClick={() => setIncidentPage(prev => Math.max(prev - 1, 1))}
+                  >
+                    Previous
+                  </PageButton>
+                  <PageNumber>{incidentPage} / {totalIncidentPages}</PageNumber>
+                  <PageButton 
+                    disabled={incidentPage === totalIncidentPages}
+                    onClick={() => setIncidentPage(prev => Math.min(prev + 1, totalIncidentPages))}
+                  >
+                    Next
+                  </PageButton>
+                </PageButtons>
+              </PaginationControls>
+            )}
           </EventTypeSection>
         )}
         
