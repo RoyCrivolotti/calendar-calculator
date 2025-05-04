@@ -167,7 +167,8 @@ const CloseButton = styled.button`
   cursor: pointer;
   transition: all 0.2s;
   color: #64748b;
-  z-index: 10;
+  z-index: 1001;
+  padding: 0;
   
   &:hover {
     background: #f8fafc;
@@ -183,7 +184,11 @@ const CloseButton = styled.button`
   svg {
     width: 20px;
     height: 20px;
+    stroke: currentColor;
     stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
   }
 `;
 
@@ -1275,8 +1280,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         <Modal onClick={handleCloseModal}>
           <ModalContent onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
             <CloseButton onClick={handleCloseModal} aria-label="Close modal">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </CloseButton>
             
@@ -1516,8 +1522,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         <Modal onClick={handleCancelClear}>
           <ConfirmModalContent onClick={e => e.stopPropagation()}>
             <CloseButton onClick={handleCancelClear} aria-label="Close modal">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </CloseButton>
             <ConfirmTitle>Clear All Data</ConfirmTitle>
