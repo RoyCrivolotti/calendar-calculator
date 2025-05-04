@@ -276,7 +276,7 @@ const BreakdownCard = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  width: 100%;
 `;
 
 const StatCard = styled.div`
@@ -597,13 +597,22 @@ const LegendColor = styled.div<{ color: string }>`
 
 const ComparisonSection = styled(DetailSection)`
   position: relative;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+`;
+
+const ComparisonContainer = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0;
+  margin: 0.5rem 0;
 `;
 
 const ComparisonScrollButton = styled.button`
-  position: absolute;
-  top: 40px;
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: white;
   border: 1px solid #e2e8f0;
@@ -614,11 +623,48 @@ const ComparisonScrollButton = styled.button`
   z-index: 1;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: all 0.2s;
+  margin: 0 -6px;
+  padding: 0;
+  line-height: 1;
+  font-size: 1rem;
+  color: #64748b;
+  position: relative;
+  overflow: hidden;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    transition: transform 0.2s;
+  }
 
   &:hover {
     background: #f8fafc;
     border-color: #3b82f6;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    color: #3b82f6;
+    
+    svg {
+      transform: scale(1.2);
+    }
+    
+    &::after {
+      transform: scaleX(1);
+    }
+  }
+  
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 6px;
+    right: 6px;
+    height: 2px;
+    background-color: #3b82f6;
+    border-radius: 1px;
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 0.2s ease-out;
   }
 
   &:disabled {
@@ -628,15 +674,31 @@ const ComparisonScrollButton = styled.button`
       background: white;
       border-color: #e2e8f0;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      color: #64748b;
+      
+      svg {
+        transform: none;
+      }
+      
+      &::after {
+        transform: scaleX(0);
+      }
     }
   }
+`;
 
-  &.prev {
-    left: -16px;
-  }
-
-  &.next {
-    right: -16px;
+const CardsContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  margin: 0;
+  padding: 0;
+  
+  &::-webkit-scrollbar {
+    display: none;
   }
 `;
 
@@ -1315,50 +1377,55 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <ComparisonSection>
                 <DetailTitle>Comparison with Previous Months</DetailTitle>
                 
-                <ComparisonScrollButton 
-                  className="prev" 
-                  onClick={handlePreviousMonth}
-                  disabled={selectedMonthIndex <= 0}
-                  title="Previous month"
-                >
-                  ←
-                </ComparisonScrollButton>
-                
-                <BreakdownCard>
-                  {monthsWithData.slice(-3).map(({ date, data }) => {
-                    const total = data.find(d => d.type === 'total')?.amount || 0;
-                    const oncall = data.find(d => d.type === 'oncall')?.amount || 0;
-                    const incident = data.find(d => d.type === 'incident')?.amount || 0;
-                    const isActive = selectedMonth && date.getTime() === selectedMonth.getTime();
-                    
-                    return (
-                      <StatCard 
-                        key={date.toISOString()}
-                        className={isActive ? 'active' : ''}
-                        onClick={() => setSelectedMonth(date)}
-                        title="Click to view this month's details"
-                      >
-                        <StatLabel>{format(date, 'MMM yyyy')}</StatLabel>
-                        <StatValue>€{total.toFixed(2)}</StatValue>
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
-                          On-Call: €{oncall.toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                          Incidents: €{incident.toFixed(2)}
-                        </div>
-                      </StatCard>
-                    );
-                  })}
-                </BreakdownCard>
-                
-                <ComparisonScrollButton 
-                  className="next" 
-                  onClick={handleNextMonth}
-                  disabled={selectedMonthIndex >= monthsWithData.length - 1}
-                  title="Next month"
-                >
-                  →
-                </ComparisonScrollButton>
+                <ComparisonContainer>
+                  <ComparisonScrollButton 
+                    onClick={handlePreviousMonth}
+                    disabled={selectedMonthIndex <= 0}
+                    title="Previous month"
+                  >
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                    </svg>
+                  </ComparisonScrollButton>
+                  
+                  <CardsContainer>
+                    {monthsWithData.slice(-3).map(({ date, data }) => {
+                      const total = data.find(d => d.type === 'total')?.amount || 0;
+                      const oncall = data.find(d => d.type === 'oncall')?.amount || 0;
+                      const incident = data.find(d => d.type === 'incident')?.amount || 0;
+                      const isActive = selectedMonth && date.getTime() === selectedMonth.getTime();
+                      
+                      return (
+                        <StatCard 
+                          key={date.toISOString()}
+                          className={isActive ? 'active' : ''}
+                          onClick={() => setSelectedMonth(date)}
+                          title="Click to view this month's details"
+                          style={{ margin: '0 0.5rem' }}
+                        >
+                          <StatLabel>{format(date, 'MMM yyyy')}</StatLabel>
+                          <StatValue>€{total.toFixed(2)}</StatValue>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
+                            On-Call: €{oncall.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                            Incidents: €{incident.toFixed(2)}
+                          </div>
+                        </StatCard>
+                      );
+                    })}
+                  </CardsContainer>
+                  
+                  <ComparisonScrollButton 
+                    onClick={handleNextMonth}
+                    disabled={selectedMonthIndex >= monthsWithData.length - 1}
+                    title="Next month"
+                  >
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                    </svg>
+                  </ComparisonScrollButton>
+                </ComparisonContainer>
               </ComparisonSection>
             )}
           </ModalContent>
