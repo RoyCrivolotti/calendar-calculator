@@ -483,7 +483,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           <ActionButton 
             variant="primary" 
             onClick={handleSave}
-            disabled={!!validationError || (event.type === 'holiday' && event.id.includes('-'))}
+            disabled={!!validationError || (event.type === 'holiday' && !event.id.startsWith('temp-') && event.id.length > 0)}
           >
             Save Changes
           </ActionButton>

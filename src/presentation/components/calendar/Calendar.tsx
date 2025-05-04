@@ -173,7 +173,7 @@ const Calendar: React.FC = () => {
     }
 
     const newEvent = createCalendarEvent({
-      id: crypto.randomUUID(),
+      id: `temp-${crypto.randomUUID()}`, // Use temp- prefix for new events
       start,
       end,
       type,
@@ -335,7 +335,15 @@ const Calendar: React.FC = () => {
   };
   
   const saveEventWithoutConflictCheck = (event: CalendarEvent) => {
-    const eventProps = event.toJSON();
+    let eventProps = event.toJSON();
+    
+    // If it's a temporary event, generate a new UUID
+    if (eventProps.id.startsWith('temp-')) {
+      eventProps = {
+        ...eventProps,
+        id: crypto.randomUUID()
+      };
+    }
     
     if (events.find(e => e.id === event.id)) {
       // If event exists, update it
