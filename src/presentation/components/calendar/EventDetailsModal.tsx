@@ -5,6 +5,7 @@ import { CompensationCalculatorFacade } from '../../../domain/calendar/services/
 import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
 import CompensationSummarySection from './CompensationSummarySection';
 import { logger } from '../../../utils/logger';
+import { trackOperation } from '../../../utils/errorHandler';
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -304,25 +305,42 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
   
-  // Load compensation summary on mount
+  // Add the formatDuration function
+  const formatDuration = (start: Date, end: Date): string => {
+    const durationMs = end.getTime() - start.getTime();
+    const hours = Math.floor(durationMs / (1000 * 60 * 60));
+    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`;
+  };
+
+  // Fix the useEffect that loads compensation summary
   useEffect(() => {
-    const loadCompensationSummary = async () => {
-      if (event.type === 'holiday') return; // Don't calculate for holidays
-      
-      logger.info(`Loading compensation summary for event: ${event.id}`);
-      setIsLoading(true);
-      try {
-        const summary = await calculatorFacade.calculateEventCompensation(event);
-        logger.info(`Loaded compensation summary for event ${event.id}: €${summary.total.toFixed(2)}`);
-        setCompensationSummary(summary);
-      } catch (error) {
-        logger.error('Error loading compensation summary:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (!event || !event.id || !event.start || !event.end) return;
     
-    loadCompensationSummary();
+    // Track the operation of loading compensation summary
+    trackOperation(
+      `LoadCompensationSummary(${event.id})`,
+      async () => {
+        setIsLoading(true);
+        try {
+          const summary = await calculatorFacade.calculateEventCompensation(event);
+          
+          logger.debug(`Loaded compensation summary for event ${event.id}: €${summary.total.toFixed(2)}`);
+          
+          setCompensationSummary(summary);
+          return summary;
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      { 
+        eventType: event.type, 
+        eventDuration: formatDuration(new Date(event.start), new Date(event.end)) 
+      }
+    ).catch(error => {
+      // Error already logged by trackOperation
+      setCompensationSummary(null);
+    });
   }, [event, calculatorFacade]);
 
   const formatDateForInput = (date: Date) => {

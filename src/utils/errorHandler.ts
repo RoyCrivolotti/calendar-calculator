@@ -208,4 +208,57 @@ export function formatErrorResponse(error: Error | BaseError): Record<string, an
       statusCode: 500
     }
   };
+}
+
+/**
+ * Tracks performance and handles errors for async operations in components
+ * This method combines performance tracking and error handling in a single convenient method
+ */
+export async function trackOperation<T>(
+  operationName: string,
+  fn: () => Promise<T>,
+  context?: Record<string, any>,
+  logger = errorLogger
+): Promise<T> {
+  const startTime = performance.now();
+  try {
+    const result = await fn();
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    
+    // Log success with performance data
+    if (duration > 1000) {
+      // Only log slow operations at INFO level
+      logger.info(
+        `Operation '${operationName}' completed successfully in ${duration.toFixed(2)}ms`,
+        { ...context, duration, performanceAlert: duration > 1000 ? 'slow' : 'normal' }
+      );
+    } else {
+      // Log normal operations at DEBUG level
+      logger.debug(
+        `Operation '${operationName}' completed in ${duration.toFixed(2)}ms`,
+        { ...context, duration }
+      );
+    }
+    
+    return result;
+  } catch (error) {
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    
+    // Convert unknown error to an Error object if needed
+    const errorObj = error instanceof Error 
+      ? error 
+      : new Error(typeof error === 'string' ? error : 'Unknown error');
+    
+    // Handle the error
+    handleError(errorObj, { 
+      operation: operationName, 
+      duration: `${duration.toFixed(2)}ms`,
+      ...context
+    });
+    
+    // Re-throw the error after logging
+    throw error;
+  }
 } 

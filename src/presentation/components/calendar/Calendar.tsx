@@ -25,7 +25,7 @@ import { container } from '../../../config/container';
 import { CalculateCompensationUseCase } from '../../../application/calendar/use-cases/CalculateCompensation';
 import { storageService } from '../../services/storage';
 import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
-import { logger } from '../../../utils/logger';
+import { logger, LogLevel } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 
@@ -404,13 +404,14 @@ const Calendar: React.FC = () => {
   };
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
-    if (!pendingEventDelete) return;
+    if (!pendingEventDelete || !pendingEventDelete.id) return;
     
-    logger.info(`Deleting holiday with regeneration=${shouldRegenerateEvents}`);
-    
-    // Store the holiday info before deleting
     const holidayId = pendingEventDelete.id;
-    logger.info(`Deleting holiday ${holidayId}`);
+    
+    // Group logging for this operation - fallback to console.group
+    console.group(`Deleting holiday: ${holidayId}`);
+    logger.info(`Deleting holiday: ${holidayId}`);
+    logger.debug(`Regeneration enabled: ${shouldRegenerateEvents}`);
     
     // Delete the holiday first
     deleteEventWithoutConfirmation(pendingEventDelete);
@@ -418,7 +419,7 @@ const Calendar: React.FC = () => {
     // If user chose to regenerate events, do so
     if (shouldRegenerateEvents && conflictingEvents.length > 0) {
       try {
-        logger.info(`Regenerating ${conflictingEvents.length} events affected by holiday deletion`);
+        logger.debug(`Regenerating ${conflictingEvents.length} events affected by holiday deletion`);
         
         // Wait a moment for the deletion to propagate
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -428,7 +429,7 @@ const Calendar: React.FC = () => {
           // Skip if it's a holiday itself - we don't need to adjust holidays
           if (eventProps.type === 'holiday') continue;
           
-          logger.info(`Regenerating sub-events for ${eventProps.type} event ${eventProps.id}`);
+          logger.debug(`Regenerating sub-events for ${eventProps.type} event ${eventProps.id}`);
           
           // Update with the same event properties
           // The sub-events will be regenerated without considering the deleted holiday
@@ -440,7 +441,7 @@ const Calendar: React.FC = () => {
         
         // Ensure compensation data is updated after regeneration
         setTimeout(() => {
-          logger.info('Updating compensation data after holiday deletion');
+          logger.debug('Updating compensation data after holiday deletion');
           updateCompensationData();
         }, 500);
         
@@ -454,6 +455,8 @@ const Calendar: React.FC = () => {
     setShowDeleteModal(false);
     setPendingEventDelete(null);
     setConflictingEvents([]);
+    
+    console.groupEnd();
     
     // Run diagnostic after a delay
     setTimeout(() => analyzeHolidayDetection(), 1000);
@@ -479,7 +482,9 @@ const Calendar: React.FC = () => {
     const dateToAnalyze = targetDate || new Date();
     const dateString = dateToAnalyze.toLocaleDateString();
     
-    logger.info(`=== HOLIDAY DETECTION ANALYSIS for ${dateString} ===`);
+    // Start a log group for the analysis - fallback to console.group
+    console.group(`Holiday Detection Analysis: ${dateString}`);
+    logger.debug(`Starting holiday detection analysis for ${dateString}`);
     
     // 1. Check if any holiday events exist for this date
     const holidayEvents = events.filter(event => {
@@ -498,11 +503,11 @@ const Calendar: React.FC = () => {
     });
     
     if (holidayEvents.length === 0) {
-      logger.info(`No holiday events found for ${dateString}`);
+      logger.debug(`No holiday events found for ${dateString}`);
     } else {
-      logger.info(`Found ${holidayEvents.length} holiday events for ${dateString}:`);
+      logger.debug(`Found ${holidayEvents.length} holiday events for ${dateString}:`);
       holidayEvents.forEach(holiday => {
-        logger.info(`- Holiday ID: ${holiday.id}, Start: ${new Date(holiday.start).toLocaleDateString()}, End: ${new Date(holiday.end).toLocaleDateString()}`);
+        logger.debug(`- Holiday ID: ${holiday.id}, Start: ${new Date(holiday.start).toLocaleDateString()}, End: ${new Date(holiday.end).toLocaleDateString()}`);
       });
     }
     
@@ -522,11 +527,12 @@ const Calendar: React.FC = () => {
       });
       
       if (relevantSubEvents.length === 0) {
-        logger.info(`No sub-events found for ${dateString}`);
+        logger.debug(`No sub-events found for ${dateString}`);
+        console.groupEnd();
         return;
       }
       
-      logger.info(`Found ${relevantSubEvents.length} sub-events for ${dateString}`);
+      logger.debug(`Found ${relevantSubEvents.length} sub-events for ${dateString}`);
       
       // Group by parent event
       const subEventsByParent: Record<string, SubEvent[]> = {};
@@ -541,27 +547,28 @@ const Calendar: React.FC = () => {
       Object.entries(subEventsByParent).forEach(([parentId, subEvents]) => {
         const parentEvent = events.find(e => e.id === parentId);
         if (!parentEvent) {
-          logger.info(`Sub-events found for unknown parent: ${parentId}`);
+          logger.debug(`Sub-events found for unknown parent: ${parentId}`);
           return;
         }
         
-        logger.info(`Event: ${parentEvent.id} (${parentEvent.type})`);
+        logger.debug(`Event: ${parentEvent.id} (${parentEvent.type})`);
         
         // Count how many sub-events have holiday flag set
         const holidaySubEvents = subEvents.filter(se => se.isHoliday);
         const weekendSubEvents = subEvents.filter(se => se.isWeekend);
         
-        logger.info(`- ${subEvents.length} total sub-events`);
-        logger.info(`- ${holidaySubEvents.length} marked as holiday`);
-        logger.info(`- ${weekendSubEvents.length} marked as weekend`);
+        logger.debug(`- ${subEvents.length} total sub-events`);
+        logger.debug(`- ${holidaySubEvents.length} marked as holiday`);
+        logger.debug(`- ${weekendSubEvents.length} marked as weekend`);
         
         if (holidayEvents.length > 0 && holidaySubEvents.length === 0) {
           logger.warn(`⚠️ ISSUE DETECTED: Event has no holiday sub-events despite holiday existing on ${dateString}`);
         }
       });
+      
+      // End the log group
+      console.groupEnd();
     });
-    
-    logger.info('=== END ANALYSIS ===');
   };
 
   return (
