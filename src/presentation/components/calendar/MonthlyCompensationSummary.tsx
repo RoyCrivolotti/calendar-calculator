@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback, memo } from 'react';
 import styled from '@emotion/styled';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
@@ -151,15 +151,15 @@ const ModalHeader = styled.div`
 `;
 
 const ModalTitle = styled.h2`
-  color: #0f172a;
+    color: #0f172a;
   font-size: 1.75rem;
   font-weight: 700;
   margin: 0;
 `;
 
 const MonthAmount = styled.div`
-  font-size: 1.5rem;
-  font-weight: 600;
+    font-size: 1.5rem;
+    font-weight: 600;
   color: #0f172a;
   background: #f0f9ff;
   padding: 0.5rem 1rem;
@@ -229,8 +229,8 @@ const SummaryCard = styled.div`
 `;
 
 const SummaryTitle = styled.h3`
-  color: #334155;
-  font-size: 1.1rem;
+    color: #334155;
+    font-size: 1.1rem;
   font-weight: 600;
   margin: 0;
   padding-bottom: 0.75rem;
@@ -251,7 +251,7 @@ const SummaryLabel = styled.span`
 const SummaryValue = styled.span`
   color: #0f172a;
   font-weight: 500;
-  font-size: 1rem;
+    font-size: 1rem;
 `;
 
 const TotalRow = styled(SummaryRow)`
@@ -322,7 +322,7 @@ const StatCard = styled.div`
   text-align: center;
   transition: all 0.2s;
   cursor: pointer;
-  
+
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -1038,7 +1038,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   }, [selectedMonth]);
   
   // Handler functions for tooltip moved to component level
-  const handlePieSliceHover = (e: React.MouseEvent<SVGPathElement>) => {
+  const handlePieSliceHover = useCallback((e: React.MouseEvent<SVGPathElement>) => {
     if (e.currentTarget) {
       const target = e.currentTarget;
       const type = target.getAttribute('data-type') || '';
@@ -1054,9 +1054,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         percentage
       });
     }
-  };
+  }, []);
   
-  const handleTooltipMove = (e: React.MouseEvent) => {
+  const handleTooltipMove = useCallback((e: React.MouseEvent) => {
     if (tooltip) {
       setTooltip({
         ...tooltip,
@@ -1064,7 +1064,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         y: e.clientY
       });
     }
-  };
+  }, [tooltip]);
 
   // Generate list of months (last 12 months)
   const monthsWithData = useMemo(() => {
@@ -1080,7 +1080,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           // Ensure month is treated as a Date object
           const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
           const monthKey = monthDate.toISOString();
-          months.add(monthKey);
+        months.add(monthKey);
           logger.debug(`Found month: ${monthDate.toLocaleString()} from ${d.type} with amount ${d.amount}`);
         } catch (error) {
           logger.error('Error processing month:', d.month, error);
@@ -1118,7 +1118,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return result.sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [data]);
 
-  const handleMonthClick = (month: Date) => {
+  const handleMonthClick = useCallback((month: Date) => {
     setIsVisible(false);
     setSelectedMonth(month);
     setActiveTab('all');
@@ -1129,42 +1129,42 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         setIsVisible(true);
       });
     });
-  };
+  }, []);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setSelectedMonth(null);
-  };
+  }, []);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       handleCloseModal();
     }
-  };
+  }, [handleCloseModal]);
 
-  const scrollLeft = () => {
+  const scrollLeft = useCallback(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollBy({ left: -200, behavior: 'smooth' });
     }
-  };
+  }, []);
 
-  const scrollRight = () => {
+  const scrollRight = useCallback(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollBy({ left: 200, behavior: 'smooth' });
     }
-  };
+  }, []);
 
-  const handleClearAllData = async () => {
+  const handleClearAllData = useCallback(async () => {
     logger.info('User initiated clearing of all calendar data');
     setShowConfirmModal(true);
-  };
+  }, []);
 
-  const handleConfirmClear = async () => {
+  const handleConfirmClear = useCallback(async () => {
     try {
       await trackOperation(
         'ClearAllData',
         async () => {
           logger.info('Starting to clear all data');
-          await storageService.clearAllData();
+      await storageService.clearAllData();
           logger.info('Successfully cleared all calendar data');
           return { success: true };
         },
@@ -1182,11 +1182,11 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     } finally {
       setShowConfirmModal(false);
     }
-  };
+  }, []);
 
-  const handleCancelClear = () => {
+  const handleCancelClear = useCallback(() => {
     setShowConfirmModal(false);
-  };
+  }, []);
 
   // Filter data for the selected month
   const selectedMonthData = useMemo(() => {
@@ -1708,7 +1708,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     );
   };
 
-  const handlePreviousMonth = () => {
+  const handlePreviousMonth = useCallback(() => {
     if (!selectedMonth) return;
     
     const currentIndex = monthsWithData.findIndex(
@@ -1718,9 +1718,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     if (currentIndex > 0) {
       setSelectedMonth(monthsWithData[currentIndex - 1].date);
     }
-  };
+  }, [selectedMonth, monthsWithData]);
 
-  const handleNextMonth = () => {
+  const handleNextMonth = useCallback(() => {
     if (!selectedMonth) return;
     
     const currentIndex = monthsWithData.findIndex(
@@ -1730,7 +1730,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     if (currentIndex < monthsWithData.length - 1) {
       setSelectedMonth(monthsWithData[currentIndex + 1].date);
     }
-  };
+  }, [selectedMonth, monthsWithData]);
 
   // Get the selected month index for navigation disabling
   const selectedMonthIndex = useMemo(() => {
@@ -1743,7 +1743,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const handleEscapeKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showConfirmModal) {
-          setShowConfirmModal(false);
+    setShowConfirmModal(false);
         } else if (selectedMonth) {
           setSelectedMonth(null);
         }
@@ -1757,7 +1757,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   }, [selectedMonth, showConfirmModal]);
 
   // Add function to handle month deletion
-  const handleDeleteMonth = async () => {
+  const handleDeleteMonth = useCallback(async () => {
     if (!selectedMonth) return;
     
     const monthName = format(selectedMonth, 'MMMM yyyy');
@@ -1824,19 +1824,19 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       alert(`Failed to delete events for ${monthName}. See console for details.`);
       setShowDeleteMonthModal(false);
     }
-  };
+  }, [selectedMonth]);
 
   // Add handlers for delete month modal
-  const handleOpenDeleteMonthModal = () => {
+  const handleOpenDeleteMonthModal = useCallback(() => {
     if (!selectedMonth) return;
     logger.info(`Opening delete confirmation modal for month: ${format(selectedMonth, 'MMMM yyyy')}`);
     setShowDeleteMonthModal(true);
-  };
+  }, [selectedMonth]);
 
-  const handleCloseDeleteMonthModal = () => {
+  const handleCloseDeleteMonthModal = useCallback(() => {
     logger.info('User cancelled month deletion');
     setShowDeleteMonthModal(false);
-  };
+  }, []);
 
   return (
     <Container>
@@ -2096,10 +2096,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                           <StatValue>€{total.toFixed(2)}</StatValue>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
                             On-Call: €{oncall.toFixed(2)}
-                          </div>
+                </div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                             Incidents: €{incident.toFixed(2)}
-                          </div>
+              </div>
                         </StatCard>
                       );
                     })}
@@ -2175,4 +2175,30 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   );
 };
 
-export default MonthlyCompensationSummary; 
+// Wrap the component with memo to prevent unnecessary re-renders
+export default memo(MonthlyCompensationSummary, (prevProps, nextProps) => {
+  // Only re-render if data length has changed
+  if (prevProps.data.length !== nextProps.data.length) {
+    return false;
+  }
+  
+  // Check if any important data fields have changed
+  for (let i = 0; i < prevProps.data.length; i++) {
+    const prevItem = prevProps.data[i];
+    const nextItem = nextProps.data[i];
+    
+    if (
+      prevItem.type !== nextItem.type ||
+      prevItem.amount !== nextItem.amount ||
+      prevItem.count !== nextItem.count ||
+      // Compare month dates if they exist
+      (prevItem.month && nextItem.month && 
+       new Date(prevItem.month).getTime() !== new Date(nextItem.month).getTime())
+    ) {
+      return false;
+    }
+  }
+  
+  // If we get here, no important props changed, so don't re-render
+  return true;
+}); 
