@@ -73,11 +73,11 @@ const ScrollButton = styled.button`
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: white;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,18 +85,32 @@ const ScrollButton = styled.button`
   z-index: 1;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: all 0.2s;
+  padding: 0;
+  color: #64748b;
+
+  svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    transition: transform 0.2s;
+  }
 
   &:hover {
     background: #f8fafc;
     border-color: #3b82f6;
+    color: #3b82f6;
+    
+    svg {
+      transform: scale(1.1);
+    }
   }
 
   &.left {
-    left: -20px;
+    left: -16px;
   }
 
   &.right {
-    right: -20px;
+    right: -16px;
   }
 `;
 
@@ -712,6 +726,16 @@ const CardsContainer = styled.div`
   }
 `;
 
+// Add new styled component for the title
+const SectionTitle = styled.h2`
+  color: #0f172a;
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f1f5f9;
+`;
+
 interface MonthData {
   date: Date;
   data: CompensationBreakdown[];
@@ -1259,7 +1283,12 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   return (
     <Container>
-      <ScrollButton className="left" onClick={scrollLeft}>←</ScrollButton>
+      <SectionTitle>Monthly Compensation Summary</SectionTitle>
+      <ScrollButton className="left" onClick={scrollLeft}>
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+        </svg>
+      </ScrollButton>
       <ScrollContainer ref={scrollContainerRef}>
         {monthsWithData.map(({ date, data }) => (
           <MonthBox
@@ -1274,7 +1303,11 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           </MonthBox>
         ))}
       </ScrollContainer>
-      <ScrollButton className="right" onClick={scrollRight}>→</ScrollButton>
+      <ScrollButton className="right" onClick={scrollRight}>
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+        </svg>
+      </ScrollButton>
 
       {selectedMonth && (
         <Modal onClick={handleCloseModal}>
