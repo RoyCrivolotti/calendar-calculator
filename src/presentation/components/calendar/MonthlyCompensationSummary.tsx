@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect, memo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
@@ -6,8 +6,6 @@ import { storageService } from '../../services/storage';
 import { logger } from '../../../utils/logger';
 import { createMonthDate } from '../../../utils/calendarUtils';
 import { trackOperation } from '../../../utils/errorHandler';
-import MonthScroller from './MonthScroller';
-import MonthlyCompensationDetail from './MonthlyCompensationDetail';
 
 const Container = styled.div`
   width: 93%;
@@ -995,7 +993,6 @@ const PageNumber = styled.div`
 
 interface MonthData {
   date: Date;
-  totalAmount: number;
   data: CompensationBreakdown[];
 }
 
@@ -1011,7 +1008,7 @@ interface Event {
   isHoliday?: boolean;
 }
 
-const MonthlyCompensationSummaryComponent: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
+const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showDeleteMonthModal, setShowDeleteMonthModal] = useState(false);
@@ -1069,55 +1066,61 @@ const MonthlyCompensationSummaryComponent: React.FC<MonthlyCompensationSummaryPr
     }
   };
 
-  // Process data to get a list of months with their total amounts
+  // Generate list of months (last 12 months)
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
-    const monthsMap = new Map<string, { date: Date, totalAmount: number, data: CompensationBreakdown[] }>();
     
-    logger.debug('Processing monthly summary data', data.length);
+    logger.debug('Monthly Summary Data:', data);
     
-    // Group data by month
-    data.forEach(item => {
-      if (item.month) {
+    // Get unique months from data
+    const months = new Set<string>();
+    data.forEach(d => {
+      if (d.type === 'total' && d.month) {
         try {
-          const monthDate = item.month instanceof Date ? item.month : new Date(item.month);
-          const monthKey = monthDate.toISOString().substring(0, 7); // YYYY-MM format
-          
-          // Initialize month entry if needed
-          if (!monthsMap.has(monthKey)) {
-            monthsMap.set(monthKey, {
-              date: new Date(monthDate),
-              totalAmount: 0,
-              data: []
-            });
-          }
-          
-          // Add the item to the month's data
-          const monthData = monthsMap.get(monthKey)!;
-          monthData.data.push(item);
-          
-          // Update total amount for the month if this is a total entry
-          if (item.type === 'total') {
-            monthData.totalAmount += item.amount;
-          }
+          // Ensure month is treated as a Date object
+          const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
+          const monthKey = monthDate.toISOString();
+          months.add(monthKey);
+          logger.debug(`Found month: ${monthDate.toLocaleString()} from ${d.type} with amount ${d.amount}`);
         } catch (error) {
-          logger.error('Error processing month data:', error);
+          logger.error('Error processing month:', d.month, error);
         }
       }
     });
-    
-    // Convert the map to an array
-    monthsMap.forEach(value => {
-      result.push(value);
+
+    logger.info(`Found ${months.size} unique months`);
+
+    // Add months with data
+    Array.from(months).forEach(monthKey => {
+      const monthData = data.filter(d => {
+        if (d.month) {
+          try {
+            const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
+            return monthDate.toISOString() === monthKey;
+          } catch (error) {
+            return false;
+          }
+        }
+        return false;
+      });
+      
+      if (monthData.length > 0) {
+        const monthDate = new Date(monthKey);
+        logger.debug(`Adding month ${monthDate.toLocaleDateString()} with ${monthData.length} records`);
+        result.push({
+          date: monthDate,
+          data: monthData
+        });
+      }
     });
-    
+
     // Sort by date, most recent first
     return result.sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [data]);
 
-  const handleMonthClick = (date: Date) => {
+  const handleMonthClick = (month: Date) => {
     setIsVisible(false);
-    setSelectedMonth(date);
+    setSelectedMonth(month);
     setActiveTab('all');
     
     // Single timeout to show the new charts
@@ -1185,17 +1188,17 @@ const MonthlyCompensationSummaryComponent: React.FC<MonthlyCompensationSummaryPr
     setShowConfirmModal(false);
   };
 
-  // Get data for the selected month
+  // Filter data for the selected month
   const selectedMonthData = useMemo(() => {
     if (!selectedMonth) return [];
     
-    const targetMonth = selectedMonth.toISOString().substring(0, 7);
-    return data.filter(item => {
-      if (!item.month) return false;
-      const itemMonth = item.month instanceof Date
-        ? item.month.toISOString().substring(0, 7)
-        : new Date(item.month).toISOString().substring(0, 7);
-      return itemMonth === targetMonth;
+    return data.filter(comp => {
+      if (!comp.month) return false;
+      const compMonth = comp.month instanceof Date ? comp.month : new Date(comp.month);
+      return (
+        compMonth.getFullYear() === selectedMonth.getFullYear() && 
+        compMonth.getMonth() === selectedMonth.getMonth()
+      );
     });
   }, [selectedMonth, data]);
 
@@ -1865,11 +1868,256 @@ const MonthlyCompensationSummaryComponent: React.FC<MonthlyCompensationSummaryPr
 
       {selectedMonth && (
         <Modal onClick={handleCloseModal}>
-          <MonthlyCompensationDetail
-            selectedMonth={selectedMonth}
-            monthData={selectedMonthData}
-            onClose={handleCloseModal}
-          />
+          <ModalContent onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
+            <CloseButton onClick={handleCloseModal} aria-label="Close modal">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </CloseButton>
+            
+            <ModalHeader>
+              <ModalTitle>{format(selectedMonth, 'MMMM yyyy')}</ModalTitle>
+              <MonthAmount>€{monthTotal.toFixed(2)}</MonthAmount>
+            </ModalHeader>
+            
+            <SummarySection>
+              {oncallData.length > 0 && (
+                <SummaryCard>
+                  <SummaryTitle>On-Call Summary</SummaryTitle>
+                  <SummaryRow>
+                    <SummaryLabel>Number of Shifts</SummaryLabel>
+                    <SummaryValue>{oncallData[0].count}</SummaryValue>
+                  </SummaryRow>
+                  <SummaryRow>
+                    <SummaryLabel>Weekday Hours</SummaryLabel>
+                    <SummaryValue>{extractHoursData(oncallData[0].description).weekday}h</SummaryValue>
+                  </SummaryRow>
+                  <SummaryRow>
+                    <SummaryLabel>Weekend Hours</SummaryLabel>
+                    <SummaryValue>{extractHoursData(oncallData[0].description).weekend}h</SummaryValue>
+                  </SummaryRow>
+                  <TotalRow>
+                    <SummaryLabel>Total Compensation</SummaryLabel>
+                    <SummaryValue>€{oncallData[0].amount.toFixed(2)}</SummaryValue>
+                  </TotalRow>
+                  <SummaryRow>
+                    <SummaryLabel>Percentage of Total</SummaryLabel>
+                    <SummaryValue>{getPercentage(oncallData[0].amount)}</SummaryValue>
+                  </SummaryRow>
+                </SummaryCard>
+              )}
+              
+              {incidentData.length > 0 && (
+                <SummaryCard>
+                  <SummaryTitle>Incident Summary</SummaryTitle>
+                  <SummaryRow>
+                    <SummaryLabel>Number of Incidents</SummaryLabel>
+                    <SummaryValue>{incidentData[0].count}</SummaryValue>
+                  </SummaryRow>
+                  <SummaryRow>
+                    <SummaryLabel>Weekday Hours</SummaryLabel>
+                    <SummaryValue>{extractHoursData(incidentData[0].description).weekday}h</SummaryValue>
+                  </SummaryRow>
+                  <SummaryRow>
+                    <SummaryLabel>Weekend Hours</SummaryLabel>
+                    <SummaryValue>{extractHoursData(incidentData[0].description).weekend}h</SummaryValue>
+                  </SummaryRow>
+                  {extractHoursData(incidentData[0].description).nightShift && (
+                    <SummaryRow>
+                      <SummaryLabel>Night Shift Hours</SummaryLabel>
+                      <SummaryValue>{extractHoursData(incidentData[0].description).nightShift}h</SummaryValue>
+                    </SummaryRow>
+                  )}
+                  <TotalRow>
+                    <SummaryLabel>Total Compensation</SummaryLabel>
+                    <SummaryValue>€{incidentData[0].amount.toFixed(2)}</SummaryValue>
+                  </TotalRow>
+                  <SummaryRow>
+                    <SummaryLabel>Percentage of Total</SummaryLabel>
+                    <SummaryValue>{getPercentage(incidentData[0].amount)}</SummaryValue>
+                  </SummaryRow>
+                </SummaryCard>
+              )}
+            </SummarySection>
+            
+            {/* Hours Visualization */}
+            <ChartContainer>
+              <ChartGrid>
+                {renderHoursChart()}
+                {renderCompensationPieChart()}
+              </ChartGrid>
+              
+              {/* Only show legend when we actually have chart data */}
+              {(!!renderHoursChart() || !!renderCompensationPieChart()) && (
+                <Legend>
+                  {/* Only include legend items for data that actually exists */}
+                  {oncallData.length > 0 && extractHoursData(oncallData[0].description).weekday > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#3b82f6" />
+                      <span>Weekday On-Call</span>
+                    </LegendItem>
+                  )}
+                  
+                  {oncallData.length > 0 && extractHoursData(oncallData[0].description).weekend > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#93c5fd" />
+                      <span>Weekend On-Call</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && extractHoursData(incidentData[0].description).weekday > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#dc2626" />
+                      <span>Weekday Incident</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && extractHoursData(incidentData[0].description).weekend > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#fca5a5" />
+                      <span>Weekend Incident</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && 
+                    extractHoursData(incidentData[0].description).nightShift !== undefined && 
+                    extractHoursData(incidentData[0].description).nightShift! > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#9f1239" />
+                      <span>Night Shift Incident</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && 
+                    extractHoursData(incidentData[0].description).weekendNight !== undefined && 
+                    extractHoursData(incidentData[0].description).weekendNight! > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#f43f5e" />
+                      <span>Weekend Night</span>
+                    </LegendItem>
+                  )}
+                </Legend>
+              )}
+            </ChartContainer>
+            
+            {/* Add the events list before the delete section */}
+            {renderEventsList()}
+            
+            {/* New Delete Month Section */}
+            <DeleteMonthSection>
+              <DeleteSectionText>
+                Remove all events for this month, including events that overlap with other months.
+              </DeleteSectionText>
+              <DeleteMonthButton onClick={handleOpenDeleteMonthModal}>
+                Remove All Events for {format(selectedMonth, 'MMMM yyyy')}
+              </DeleteMonthButton>
+            </DeleteMonthSection>
+            
+            {/* Compensation Rate Information */}
+            <DetailSection>
+              <DetailTitle>Compensation Rates</DetailTitle>
+              <CompensationTable>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Rate</th>
+                    <th>Multiplier</th>
+                    <th>Effective Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Weekday On-Call (non-office hours)</td>
+                    <td>€3.90/hour</td>
+                    <td>-</td>
+                    <td>€3.90/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekend On-Call</td>
+                    <td>€7.34/hour</td>
+                    <td>-</td>
+                    <td>€7.34/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekday Incident</td>
+                    <td>€33.50/hour</td>
+                    <td>1.8×</td>
+                    <td>€60.30/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekend Incident</td>
+                    <td>€33.50/hour</td>
+                    <td>2.0×</td>
+                    <td>€67.00/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Night Shift (additional)</td>
+                    <td>-</td>
+                    <td>1.4×</td>
+                    <td>+40% bonus</td>
+                  </tr>
+                </tbody>
+              </CompensationTable>
+            </DetailSection>
+            
+            {/* Month to Month Comparison - if we have previous month data */}
+            {monthsWithData.length > 1 && (
+              <ComparisonSection>
+                <DetailTitle>Comparison with Previous Months</DetailTitle>
+                
+                <ComparisonContainer>
+                  <ComparisonScrollButton 
+                    onClick={handlePreviousMonth}
+                    disabled={selectedMonthIndex <= 0}
+                    title="Previous month"
+                  >
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                    </svg>
+                  </ComparisonScrollButton>
+                  
+                  <CardsContainer>
+                    {monthsWithData.slice(-3).map(({ date, data }) => {
+                      const total = data.find(d => d.type === 'total')?.amount || 0;
+                      const oncall = data.find(d => d.type === 'oncall')?.amount || 0;
+                      const incident = data.find(d => d.type === 'incident')?.amount || 0;
+                      const isActive = selectedMonth && date.getTime() === selectedMonth.getTime();
+                      
+                      return (
+                        <StatCard 
+                          key={date.toISOString()}
+                          className={isActive ? 'active' : ''}
+                          onClick={() => setSelectedMonth(date)}
+                          title="Click to view this month's details"
+                          style={{ margin: '0 0.5rem' }}
+                        >
+                          <StatLabel>{format(date, 'MMM yyyy')}</StatLabel>
+                          <StatValue>€{total.toFixed(2)}</StatValue>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
+                            On-Call: €{oncall.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                            Incidents: €{incident.toFixed(2)}
+                          </div>
+                        </StatCard>
+                      );
+                    })}
+                  </CardsContainer>
+                  
+                  <ComparisonScrollButton 
+                    onClick={handleNextMonth}
+                    disabled={selectedMonthIndex >= monthsWithData.length - 1}
+                    title="Next month"
+                  >
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                    </svg>
+                  </ComparisonScrollButton>
+                </ComparisonContainer>
+              </ComparisonSection>
+            )}
+          </ModalContent>
         </Modal>
       )}
 
@@ -1926,36 +2174,5 @@ const MonthlyCompensationSummaryComponent: React.FC<MonthlyCompensationSummaryPr
     </Container>
   );
 };
-
-// Use React.memo with custom comparison to prevent unnecessary re-renders
-export const MonthlyCompensationSummary = memo(MonthlyCompensationSummaryComponent, 
-  (prevProps, nextProps) => {
-    // Only re-render if data length has changed
-    if (prevProps.data.length !== nextProps.data.length) {
-      return false;
-    }
-    
-    // Check if any of the data has changed
-    // We only check certain fields to avoid deep comparison of entire objects
-    for (let i = 0; i < prevProps.data.length; i++) {
-      const prevItem = prevProps.data[i];
-      const nextItem = nextProps.data[i];
-      
-      if (
-        prevItem.type !== nextItem.type ||
-        prevItem.amount !== nextItem.amount ||
-        prevItem.count !== nextItem.count ||
-        // Compare month dates if they exist
-        (prevItem.month && nextItem.month && 
-         new Date(prevItem.month).getTime() !== new Date(nextItem.month).getTime())
-      ) {
-        return false;
-      }
-    }
-    
-    // If we got here, no important props changed
-    return true;
-  }
-);
 
 export default MonthlyCompensationSummary; 
