@@ -1865,11 +1865,13 @@ const MonthlyCompensationSummaryComponent: React.FC<MonthlyCompensationSummaryPr
 
       {selectedMonth && (
         <Modal onClick={handleCloseModal}>
-          <MonthlyCompensationDetail
-            selectedMonth={selectedMonth}
-            monthData={selectedMonthData}
-            onClose={handleCloseModal}
-          />
+          <div onClick={e => e.stopPropagation()}>
+            <MonthlyCompensationDetail
+              selectedMonth={selectedMonth}
+              monthData={selectedMonthData}
+              onClose={handleCloseModal}
+            />
+          </div>
         </Modal>
       )}
 
