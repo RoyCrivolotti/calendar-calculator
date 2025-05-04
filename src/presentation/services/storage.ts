@@ -395,6 +395,7 @@ class StorageService {
       localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
       throw error;
     }
+
   }
 
   async saveSubEvents(subEvents: SubEvent[]): Promise<void> {

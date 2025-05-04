@@ -259,13 +259,8 @@ const Calendar: React.FC = () => {
         // Update the Redux store
         dispatch(setEvents(updatedEvents));
         
-        // Also save it to storage directly
-        try {
-          dispatch(createEventAsync(holidayProps));
-          logger.info(`Holiday ${holidayEvent.id} saved to storage`);
-        } catch (error) {
-          logger.error(`Error saving holiday ${holidayEvent.id}:`, error);
-        }
+        // NOTE: We no longer save to storage here - we'll let the caller handle that
+        // This prevents duplicate creation of the same holiday
       } else {
         logger.info(`Holiday ${holidayEvent.id} already exists or skipHolidaySave is true, skipping save`);
       }
@@ -363,20 +358,57 @@ const Calendar: React.FC = () => {
       await trackOperation(
         `RegenerateConflictingSubEvents(${pendingEventSave.id})`,
         async () => {
-          await regenerateConflictingSubEvents(pendingEventSave, conflictingEvents);
+          // First determine if this is a new event (with temp ID) that needs proper saving
+          const isNewEvent = pendingEventSave.id.startsWith('temp-');
           
-          // Save the pending event
-          saveEventWithoutConflictCheck(pendingEventSave);
+          // If it's a new holiday, we'll need to create it with a permanent ID first
+          let eventToSave = pendingEventSave;
+          
+          if (isNewEvent) {
+            // Create a new event with a permanent ID
+            eventToSave = createCalendarEvent({
+              ...pendingEventSave.toJSON(),
+              id: crypto.randomUUID()
+            });
+            
+            logger.info(`Generated permanent ID for new holiday: ${eventToSave.id}`);
+          }
+          
+          // First, save the holiday event to storage
+          // This MUST happen before regenerating sub-events 
+          // to ensure the holiday exists in the database
+          logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} holiday: ${eventToSave.id}`);
+          
+          if (isNewEvent) {
+            // For new events, we need to use createEventAsync to properly create it in storage
+            await dispatch(createEventAsync(eventToSave.toJSON())).unwrap();
+            logger.info(`Holiday ${eventToSave.id} saved to storage via createEventAsync`);
+          } else {
+            // For existing events, use updateEventAsync
+            await dispatch(updateEventAsync(eventToSave.toJSON())).unwrap();
+            logger.info(`Holiday ${eventToSave.id} updated in storage via updateEventAsync`);
+          }
+          
+          // Now regenerate the sub-events with skipHolidaySave=true since we already saved it
+          logger.info(`Now regenerating sub-events for events that conflict with holiday ${eventToSave.id}`);
+          await regenerateConflictingSubEvents(eventToSave, conflictingEvents, true);
+          
+          // Clear modals
+          dispatch(setShowEventModal(false));
+          dispatch(setSelectedEvent(null));
           
           // Close the modal
           setShowConflictModal(false);
           setPendingEventSave(null);
           setConflictingEvents([]);
           
+          // Clear caches to ensure fresh calculations
+          calculatorFacade.clearCaches();
+          
           return { 
             success: true, 
             conflictingEventsCount: conflictingEvents.length,
-            eventType: pendingEventSave.type
+            eventType: eventToSave.type
           };
         },
         {
