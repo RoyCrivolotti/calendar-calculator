@@ -3,8 +3,20 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
+// Import the logger initialization
+import { initializeLogger, setupGlobalErrorHandlers } from './utils/initializeLogger';
+import { logger } from './utils/logger';
+
+// Initialize the logging system
+initializeLogger();
+setupGlobalErrorHandlers();
+
+logger.info('Mounting React application');
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+
+logger.debug('React application rendered');
