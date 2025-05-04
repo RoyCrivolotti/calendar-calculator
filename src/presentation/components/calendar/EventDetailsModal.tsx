@@ -79,8 +79,8 @@ const CloseButton = styled.button`
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 36px;
-  height: 36px;
+  width: 25px;
+  height: 25px;
   border-radius: 50%;
   border: 1px solid #e2e8f0;
   background: white;
@@ -105,8 +105,8 @@ const CloseButton = styled.button`
   }
   
   svg {
-    width: 20px;
-    height: 20px;
+    width: 14px;
+    height: 14px;
     stroke: currentColor;
     stroke-width: 2;
     stroke-linecap: round;
