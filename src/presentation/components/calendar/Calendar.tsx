@@ -308,21 +308,50 @@ const Calendar: React.FC = () => {
   const handleSaveEvent = async (event: CalendarEvent) => {
     // Check for conflicts with other events when updating or creating
     const isNewEvent = event.id.startsWith('temp-');
+    logger.info(`Checking conflicts for ${isNewEvent ? 'new' : 'existing'} ${event.type} event: ${event.id}`);
   
-    // If we're creating a new holiday, check for conflicts with existing events
-    // We do this to make sure the sub-events will be regenerated properly
-    const conflictingEvents = findConflictingEvents(event, events);
-    const conflictingEventsExist = conflictingEvents.length > 0;
-
-    if (conflictingEventsExist) {
-      // Show the confirmation dialog before proceeding
-      setPendingEventSave(event);
-      setConflictingEvents(conflictingEvents);
-      setIsHolidayConflict(event.type === 'holiday');
-      setShowConflictModal(true);
-      return;
+    // Find all conflicting events
+    const allConflictingEvents = findConflictingEvents(event, events);
+    logger.info(`Found ${allConflictingEvents.length} total conflicting events`);
+    
+    if (allConflictingEvents.length > 0) {
+      // Log conflicting event types for debugging
+      const conflictTypes = allConflictingEvents.map(e => e.type);
+      logger.info(`Conflict types: ${conflictTypes.join(', ')}`);
+    }
+    
+    // If we're adding a holiday, any conflict is important
+    if (event.type === 'holiday') {
+      const conflictingEventsExist = allConflictingEvents.length > 0;
+      
+      if (conflictingEventsExist) {
+        logger.info(`Holiday conflicts with ${allConflictingEvents.length} events - showing conflict modal`);
+        // Show the confirmation dialog for holiday conflicts
+        setPendingEventSave(event);
+        setConflictingEvents(allConflictingEvents);
+        setIsHolidayConflict(true);
+        setShowConflictModal(true);
+        return;
+      }
+    } else {
+      // For non-holiday events, we only care about conflicts with holidays
+      const conflictingHolidays = allConflictingEvents.filter(e => e.type === 'holiday');
+      const hasHolidayConflicts = conflictingHolidays.length > 0;
+      
+      if (hasHolidayConflicts) {
+        logger.info(`Event conflicts with ${conflictingHolidays.length} holidays - showing conflict modal`);
+        // Show the confirmation dialog for non-holiday events conflicting with holidays
+        setPendingEventSave(event);
+        setConflictingEvents(conflictingHolidays);
+        setIsHolidayConflict(false);
+        setShowConflictModal(true);
+        return;
+      } else if (allConflictingEvents.length > 0) {
+        logger.info(`Event has ${allConflictingEvents.length} non-holiday conflicts - proceeding without showing modal`);
+      }
     }
 
+    // No relevant conflicts, proceed with save
     saveEventWithoutConflictCheck(event);
   };
 
@@ -457,7 +486,11 @@ const Calendar: React.FC = () => {
     
     // Check if it's a holiday that might affect other events
     if (event.type === 'holiday') {
-      const affectedEvents = findConflictingEvents(event, events);
+      // Find all events that conflict with this holiday
+      const allConflictingEvents = findConflictingEvents(event, events);
+      
+      // For holidays, filter out other holidays as they don't need regeneration
+      const affectedEvents = allConflictingEvents.filter(e => e.type !== 'holiday');
       
       if (affectedEvents.length > 0) {
         logger.info(`Found ${affectedEvents.length} events affected by holiday deletion`);
