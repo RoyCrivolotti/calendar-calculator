@@ -4,6 +4,7 @@ import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/ent
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
 import CompensationSummarySection from './CompensationSummarySection';
+import { logger } from '../../../utils/logger';
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -308,12 +309,14 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     const loadCompensationSummary = async () => {
       if (event.type === 'holiday') return; // Don't calculate for holidays
       
+      logger.info(`Loading compensation summary for event: ${event.id}`);
       setIsLoading(true);
       try {
         const summary = await calculatorFacade.calculateEventCompensation(event);
+        logger.info(`Loaded compensation summary for event ${event.id}: €${summary.total.toFixed(2)}`);
         setCompensationSummary(summary);
       } catch (error) {
-        console.error('Error loading compensation summary:', error);
+        logger.error('Error loading compensation summary:', error);
       } finally {
         setIsLoading(false);
       }
@@ -350,6 +353,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
 
   const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartTime = e.target.value;
+    logger.debug(`Start time changed for event ${event.id}: ${newStartTime}`);
     setStartTime(newStartTime);
     
     // If new start time is after end time, adjust end time
@@ -360,7 +364,9 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
       // Set end time to start time + 1 hour
       const adjustedEnd = new Date(newStart);
       adjustedEnd.setHours(adjustedEnd.getHours() + 1);
-      setEndTime(formatDateForInput(adjustedEnd));
+      const newEndTime = formatDateForInput(adjustedEnd);
+      logger.debug(`Auto-adjusting end time to: ${newEndTime}`);
+      setEndTime(newEndTime);
     } else {
       validateTimes(newStartTime, endTime);
     }
@@ -368,6 +374,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
 
   const handleEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newEndTime = e.target.value;
+    logger.debug(`End time changed for event ${event.id}: ${newEndTime}`);
     setEndTime(newEndTime);
     validateTimes(startTime, newEndTime);
   };
@@ -377,10 +384,12 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     const newEnd = new Date(endTime);
 
     if (newStart >= newEnd) {
+      logger.warn(`Invalid time range for event ${event.id}: ${startTime} - ${endTime}`);
       setValidationError('End time must be after start time');
       return;
     }
 
+    logger.info(`Saving event ${event.id} with time range: ${startTime} - ${endTime}`);
     const updatedEvent = createCalendarEvent({
       ...event,
       start: newStart,
@@ -393,6 +402,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   };
 
   const handleDelete = () => {
+    logger.info(`User initiated deletion of event: ${event.id} (${event.type})`);
     onClose();
     onDelete(event);
   };

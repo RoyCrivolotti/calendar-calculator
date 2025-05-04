@@ -131,12 +131,14 @@ const Calendar: React.FC = () => {
   const handleEventClick = (clickInfo: EventClickArg) => {
     const event = events.find(e => e.id === clickInfo.event.id);
     if (event) {
+      logger.info(`User clicked event: ${event.id} (${event.type})`);
       dispatch(setSelectedEvent(event));
       dispatch(setShowEventModal(true));
     }
   };
 
   const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
+    logger.info(`User selected date range: ${selectInfo.start.toISOString()} to ${selectInfo.end.toISOString()} for ${type} event`);
     const start = new Date(selectInfo.start);
     let end = new Date(selectInfo.end);
     end.setDate(end.getDate() - 1); // Subtract one day since end is exclusive
@@ -185,6 +187,7 @@ const Calendar: React.FC = () => {
   };
 
   const handleViewChange = (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
+    logger.info(`Calendar view changed to: ${info.start.toISOString()} - ${info.end.toISOString()}`);
     dispatch(setCurrentDate(info.start.toISOString()));
   };
 
@@ -293,45 +296,22 @@ const Calendar: React.FC = () => {
   };
 
   const handleSaveEvent = async (event: CalendarEvent) => {
-    const eventProps = event.toJSON();
+    logger.info(`Attempting to save event: ${event.id} (${event.type})`);
     
-    // Check for holiday conflicts if this is a holiday event
-    if (event.type === 'holiday') {
-      const conflicts = findConflictingEvents(event, events);
-      
-      if (conflicts.length > 0) {
-        // Store the event and conflicts for the modal
-        setPendingEventSave(event);
-        setConflictingEvents(conflicts);
-        setIsHolidayConflict(true);
-        setShowConflictModal(true);
-        return;
-      }
+    // Check for conflicts
+    const conflicts = findConflictingEvents(event, events);
+    const isNewEvent = event.id.startsWith('temp-');
+    
+    if (conflicts.length > 0) {
+      logger.info(`Found ${conflicts.length} conflicting events`);
+      setConflictingEvents(conflicts);
+      setPendingEventSave(event);
+      setIsHolidayConflict(event.type === 'holiday');
+      setShowConflictModal(true);
+      return;
     }
     
-    // Check if any existing events conflict with this event if it's not a holiday
-    if (event.type !== 'holiday') {
-      const holidays = events.filter(e => 
-        e.type === 'holiday' && 
-        e.id !== event.id // Don't check against itself if updating
-      );
-      
-      const conflictingHolidays = holidays.filter(holiday => 
-        eventsOverlap(event, new CalendarEvent(holiday))
-      );
-      
-      if (conflictingHolidays.length > 0) {
-        // Store the event and conflicts for the modal
-        setPendingEventSave(event);
-        setConflictingEvents(conflictingHolidays);
-        setIsHolidayConflict(false);
-        setShowConflictModal(true);
-        return;
-      }
-    }
-    
-    // No conflicts, proceed with save
-    saveEventWithoutConflictCheck(event);
+    await saveEventWithoutConflictCheck(event);
   };
   
   const saveEventWithoutConflictCheck = (event: CalendarEvent) => {
@@ -399,12 +379,14 @@ const Calendar: React.FC = () => {
   };
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
+    logger.info(`Attempting to delete event: ${event.id} (${event.type})`);
+    
     // Check if it's a holiday that might affect other events
     if (event.type === 'holiday') {
       const affectedEvents = findConflictingEvents(event, events);
       
       if (affectedEvents.length > 0) {
-        // Store the holiday and affected events for the modal
+        logger.info(`Found ${affectedEvents.length} events affected by holiday deletion`);
         setPendingEventDelete(event);
         setConflictingEvents(affectedEvents);
         setShowDeleteModal(true);
@@ -412,7 +394,6 @@ const Calendar: React.FC = () => {
       }
     }
     
-    // No need for special handling, proceed with delete
     deleteEventWithoutConfirmation(event);
   };
   
@@ -424,6 +405,8 @@ const Calendar: React.FC = () => {
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
     if (!pendingEventDelete) return;
+    
+    logger.info(`Deleting holiday with regeneration=${shouldRegenerateEvents}`);
     
     // Store the holiday info before deleting
     const holidayId = pendingEventDelete.id;

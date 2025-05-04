@@ -1,5 +1,6 @@
 import { CalendarEvent } from '../../domain/calendar/entities/CalendarEvent';
 import { SubEvent } from '../../domain/calendar/entities/SubEvent';
+import { logger } from '../../utils/logger';
 
 const EVENTS_STORAGE_KEY = 'calendarEvents';
 const SUBEVENTS_STORAGE_KEY = 'calendarSubEvents';
@@ -15,7 +16,7 @@ class StorageService {
 
   constructor() {
     this.initDB().then(() => {
-      // Start periodic sync after DB is initialized
+      logger.info('Storage service initialized, starting periodic sync');
       this.startPeriodicSync();
     });
   }
@@ -25,35 +26,31 @@ class StorageService {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onerror = () => {
-        console.error('Error opening IndexedDB:', request.error);
+        logger.error('Failed to open IndexedDB:', request.error);
         reject(request.error);
       };
 
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('IndexedDB initialized successfully');
+        logger.info('IndexedDB initialized successfully');
         resolve();
       };
 
       request.onupgradeneeded = (event) => {
-        console.log('Upgrading IndexedDB schema...');
+        logger.info(`Upgrading IndexedDB schema to version ${DB_VERSION}`);
         const db = (event.target as IDBOpenDBRequest).result;
         
-        // Create or update events store
         if (!db.objectStoreNames.contains(EVENTS_STORE_NAME)) {
-          console.log('Creating events store...');
+          logger.info('Creating events store with indexes');
           const eventStore = db.createObjectStore(EVENTS_STORE_NAME, { keyPath: 'id', autoIncrement: false });
-          // Create indexes for better querying
           eventStore.createIndex('start', 'start', { unique: false });
           eventStore.createIndex('end', 'end', { unique: false });
           eventStore.createIndex('type', 'type', { unique: false });
         }
         
-        // Create or update subevents store
         if (!db.objectStoreNames.contains(SUBEVENTS_STORE_NAME)) {
-          console.log('Creating subevents store...');
+          logger.info('Creating subevents store with indexes');
           const subEventStore = db.createObjectStore(SUBEVENTS_STORE_NAME, { keyPath: 'id', autoIncrement: false });
-          // Create indexes for better querying
           subEventStore.createIndex('parentEventId', 'parentEventId', { unique: false });
           subEventStore.createIndex('start', 'start', { unique: false });
           subEventStore.createIndex('end', 'end', { unique: false });
@@ -82,7 +79,7 @@ class StorageService {
       localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
       localStorage.setItem(SUBEVENTS_STORAGE_KEY, JSON.stringify(subEvents.map(subEvent => subEvent.toJSON())));
     } catch (error) {
-      console.error('Error syncing to storage:', error);
+      logger.error('Error syncing to storage:', error);
     }
   }
 
@@ -93,19 +90,19 @@ class StorageService {
 
     return new Promise((resolve, reject) => {
       if (!this.db) {
-        console.error('Database not initialized');
+        logger.error('Database not initialized');
         reject(new Error('Database not initialized'));
         return;
       }
 
-      console.log('Loading events from IndexedDB...');
+      logger.info('Loading events from IndexedDB...');
       try {
         const transaction = this.db.transaction(EVENTS_STORE_NAME, 'readonly');
         const store = transaction.objectStore(EVENTS_STORE_NAME);
         const request = store.getAll();
 
         request.onsuccess = () => {
-          console.log(`Loaded ${request.result.length} events from IndexedDB`);
+          logger.info(`Loaded ${request.result.length} events from IndexedDB`);
           const events = request.result.map((eventData: any) => {
             try {
               return new CalendarEvent({
@@ -116,7 +113,7 @@ class StorageService {
                 title: eventData.title
               });
             } catch (err) {
-              console.error('Error parsing event:', eventData, err);
+              logger.error('Error parsing event:', eventData, err);
               return null;
             }
           }).filter((event): event is CalendarEvent => event !== null);
@@ -124,11 +121,11 @@ class StorageService {
         };
 
         request.onerror = () => {
-          console.error('Error loading events from IndexedDB:', request.error);
+          logger.error('Error loading events from IndexedDB:', request.error);
           reject(request.error);
         };
       } catch (err) {
-        console.error('Error creating transaction:', err);
+        logger.error('Error creating transaction:', err);
         reject(err);
       }
     });
@@ -141,19 +138,19 @@ class StorageService {
 
     return new Promise((resolve, reject) => {
       if (!this.db) {
-        console.error('Database not initialized');
+        logger.error('Database not initialized');
         reject(new Error('Database not initialized'));
         return;
       }
 
-      console.log('Loading sub-events from IndexedDB...');
+      logger.info('Loading sub-events from IndexedDB...');
       try {
         const transaction = this.db.transaction(SUBEVENTS_STORE_NAME, 'readonly');
         const store = transaction.objectStore(SUBEVENTS_STORE_NAME);
         const request = store.getAll();
 
         request.onsuccess = () => {
-          console.log(`Loaded ${request.result.length} sub-events from IndexedDB`);
+          logger.info(`Loaded ${request.result.length} sub-events from IndexedDB`);
           const subEvents = request.result.map((subEventData: any) => {
             try {
               return new SubEvent({
@@ -169,7 +166,7 @@ class StorageService {
                 type: subEventData.type
               });
             } catch (err) {
-              console.error('Error parsing sub-event:', subEventData, err);
+              logger.error('Error parsing sub-event:', subEventData, err);
               return null;
             }
           }).filter((subEvent): subEvent is SubEvent => subEvent !== null);
@@ -177,11 +174,11 @@ class StorageService {
         };
 
         request.onerror = () => {
-          console.error('Error loading sub-events from IndexedDB:', request.error);
+          logger.error('Error loading sub-events from IndexedDB:', request.error);
           reject(request.error);
         };
       } catch (err) {
-        console.error('Error creating transaction:', err);
+        logger.error('Error creating transaction:', err);
         reject(err);
       }
     });
@@ -194,7 +191,7 @@ class StorageService {
         return JSON.parse(data).map((event: any) => new CalendarEvent(event));
       }
     } catch (error) {
-      console.error('Error loading events from localStorage:', error);
+      logger.error('Error loading events from localStorage:', error);
     }
     return [];
   }
@@ -206,7 +203,7 @@ class StorageService {
         return JSON.parse(data).map((subEvent: any) => new SubEvent(subEvent));
       }
     } catch (error) {
-      console.error('Error loading sub-events from localStorage:', error);
+      logger.error('Error loading sub-events from localStorage:', error);
     }
     return [];
   }
@@ -222,7 +219,7 @@ class StorageService {
         throw new Error('Database not initialized');
       }
 
-      console.log(`Saving ${events.length} events to IndexedDB...`);
+      logger.info(`Saving ${events.length} events to IndexedDB...`);
       
       return new Promise((resolve, reject) => {
         const transaction = this.db!.transaction(EVENTS_STORE_NAME, 'readwrite');
@@ -230,12 +227,12 @@ class StorageService {
         
         // Set up transaction event handlers
         transaction.onerror = (event) => {
-          console.error('Transaction error:', transaction.error);
+          logger.error('Transaction error:', transaction.error);
           reject(transaction.error);
         };
         
         transaction.oncomplete = () => {
-          console.log(`Successfully saved ${events.length} events to IndexedDB`);
+          logger.info(`Successfully saved ${events.length} events to IndexedDB`);
           // Also update localStorage as a backup
           localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
           resolve();
@@ -244,12 +241,12 @@ class StorageService {
         // Clear existing events
         const clearRequest = store.clear();
         clearRequest.onsuccess = () => {
-          console.log('Cleared existing events');
+          logger.info('Cleared existing events');
           
           // Add new events
           events.forEach(event => {
             if (!event.id) {
-              console.warn('Skipping event without ID:', event);
+              logger.warn('Skipping event without ID:', event);
               return;
             }
             
@@ -257,7 +254,7 @@ class StorageService {
             const request = store.put(eventData);
             
             request.onerror = () => {
-              console.error('Error saving event:', event.id, request.error);
+              logger.error('Error saving event:', event.id, request.error);
             };
             
             request.onsuccess = () => {
@@ -267,12 +264,12 @@ class StorageService {
         };
         
         clearRequest.onerror = () => {
-          console.error('Error clearing events:', clearRequest.error);
+          logger.error('Error clearing events:', clearRequest.error);
           reject(clearRequest.error);
         };
       });
     } catch (error) {
-      console.error('Error in saveEvents:', error);
+      logger.error('Error in saveEvents:', error);
       // Fallback to localStorage only if IndexedDB fails
       localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
       throw error;
@@ -290,7 +287,7 @@ class StorageService {
         throw new Error('Database not initialized');
       }
 
-      console.log(`Saving ${subEvents.length} sub-events to IndexedDB...`);
+      logger.info(`Saving ${subEvents.length} sub-events to IndexedDB...`);
       
       return new Promise((resolve, reject) => {
         const transaction = this.db!.transaction(SUBEVENTS_STORE_NAME, 'readwrite');
@@ -298,12 +295,12 @@ class StorageService {
         
         // Set up transaction event handlers
         transaction.onerror = (event) => {
-          console.error('Transaction error:', transaction.error);
+          logger.error('Transaction error:', transaction.error);
           reject(transaction.error);
         };
         
         transaction.oncomplete = () => {
-          console.log(`Successfully saved ${subEvents.length} sub-events to IndexedDB`);
+          logger.info(`Successfully saved ${subEvents.length} sub-events to IndexedDB`);
           // Also update localStorage as a backup
           localStorage.setItem(SUBEVENTS_STORAGE_KEY, JSON.stringify(subEvents.map(subEvent => subEvent.toJSON())));
           resolve();
@@ -312,12 +309,12 @@ class StorageService {
         // Clear existing sub-events
         const clearRequest = store.clear();
         clearRequest.onsuccess = () => {
-          console.log('Cleared existing sub-events');
+          logger.info('Cleared existing sub-events');
           
           // Add new sub-events
           subEvents.forEach(subEvent => {
             if (!subEvent.id) {
-              console.warn('Skipping sub-event without ID:', subEvent);
+              logger.warn('Skipping sub-event without ID:', subEvent);
               return;
             }
             
@@ -325,7 +322,7 @@ class StorageService {
             const request = store.put(subEventData);
             
             request.onerror = () => {
-              console.error('Error saving sub-event:', subEvent.id, request.error);
+              logger.error('Error saving sub-event:', subEvent.id, request.error);
             };
             
             request.onsuccess = () => {
@@ -335,12 +332,12 @@ class StorageService {
         };
         
         clearRequest.onerror = () => {
-          console.error('Error clearing sub-events:', clearRequest.error);
+          logger.error('Error clearing sub-events:', clearRequest.error);
           reject(clearRequest.error);
         };
       });
     } catch (error) {
-      console.error('Error in saveSubEvents:', error);
+      logger.error('Error in saveSubEvents:', error);
       // Fallback to localStorage only if IndexedDB fails
       localStorage.setItem(SUBEVENTS_STORAGE_KEY, JSON.stringify(subEvents.map(subEvent => subEvent.toJSON())));
       throw error;
@@ -355,7 +352,7 @@ class StorageService {
         return events;
       }
     } catch (error) {
-      console.error('Error loading from IndexedDB:', error);
+      logger.error('Error loading from IndexedDB:', error);
     }
 
     // Fallback to localStorage if IndexedDB fails or is empty
@@ -370,7 +367,7 @@ class StorageService {
         return subEvents;
       }
     } catch (error) {
-      console.error('Error loading from IndexedDB:', error);
+      logger.error('Error loading from IndexedDB:', error);
     }
 
     // Fallback to localStorage if IndexedDB fails or is empty
@@ -389,17 +386,17 @@ class StorageService {
         const subEventsStore = subEventsTransaction.objectStore(SUBEVENTS_STORE_NAME);
         subEventsStore.clear();
         
-        console.log('Cleared all data from IndexedDB');
+        logger.info('Cleared all data from IndexedDB');
       }
       
       // Clear localStorage
       localStorage.removeItem(EVENTS_STORAGE_KEY);
       localStorage.removeItem(SUBEVENTS_STORAGE_KEY);
-      console.log('Cleared all data from localStorage');
+      logger.info('Cleared all data from localStorage');
       
       return Promise.resolve();
     } catch (error) {
-      console.error('Error clearing data:', error);
+      logger.error('Error clearing data:', error);
       return Promise.reject(error);
     }
   }

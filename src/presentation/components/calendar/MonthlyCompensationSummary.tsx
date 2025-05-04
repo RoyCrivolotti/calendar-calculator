@@ -1087,8 +1087,16 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     }
   };
 
-  const handleClearAllData = () => {
-    setShowConfirmModal(true);
+  const handleClearAllData = async () => {
+    logger.info('User initiated clearing of all calendar data');
+    try {
+      await storageService.clearAllData();
+      logger.info('Successfully cleared all calendar data');
+      window.location.reload();
+    } catch (error) {
+      logger.error('Failed to clear calendar data:', error);
+      alert('Failed to clear data. Please try again.');
+    }
   };
 
   const handleConfirmClear = async () => {
@@ -1613,6 +1621,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     if (!selectedMonth) return;
     
     try {
+      logger.info(`Attempting to delete all events for month: ${format(selectedMonth, 'MMMM yyyy')}`);
+      
       // Load all events
       const events = await storageService.loadEvents();
       const subEvents = await storageService.loadSubEvents();
@@ -1632,30 +1642,40 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         .filter(event => !remainingEvents.find(e => e.id === event.id))
         .map(event => event.id);
       
+      logger.info(`Found ${deletedEventIds.length} events to delete for month ${format(selectedMonth, 'MMMM yyyy')}`);
+      
       // Filter out sub-events of deleted events
       const remainingSubEvents = subEvents.filter(
         subEvent => !deletedEventIds.includes(subEvent.parentEventId)
       );
       
+      const deletedSubEventsCount = subEvents.length - remainingSubEvents.length;
+      logger.info(`Found ${deletedSubEventsCount} sub-events to delete`);
+      
       // Save the filtered events and sub-events
       await storageService.saveEvents(remainingEvents);
       await storageService.saveSubEvents(remainingSubEvents);
+      
+      logger.info(`Successfully deleted all events for month: ${format(selectedMonth, 'MMMM yyyy')}`);
       
       // Close modals and refresh page
       setShowDeleteMonthModal(false);
       window.location.reload();
     } catch (error) {
-      console.error('Failed to delete month events:', error);
+      logger.error('Failed to delete month events:', error);
       alert('Failed to delete events. Please try again.');
     }
   };
 
   // Add handlers for delete month modal
   const handleOpenDeleteMonthModal = () => {
+    if (!selectedMonth) return;
+    logger.info(`Opening delete confirmation modal for month: ${format(selectedMonth, 'MMMM yyyy')}`);
     setShowDeleteMonthModal(true);
   };
 
   const handleCloseDeleteMonthModal = () => {
+    logger.info('User cancelled month deletion');
     setShowDeleteMonthModal(false);
   };
 
