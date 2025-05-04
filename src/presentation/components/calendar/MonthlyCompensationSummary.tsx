@@ -288,6 +288,20 @@ const StatCard = styled.div`
   flex-direction: column;
   align-items: center;
   text-align: center;
+  transition: all 0.2s;
+  cursor: pointer;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-color: #bae6fd;
+  }
+  
+  &.active {
+    border-color: #3b82f6;
+    background-color: #f0f9ff;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
 `;
 
 const StatLabel = styled.div`
@@ -341,6 +355,64 @@ const ChartContainer = styled.div`
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+`;
+
+const ChartGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const PieChartContainer = styled.div`
+  position: relative;
+  margin: 0 auto;
+  width: 220px;
+  height: 220px;
+`;
+
+const PieChartLabel = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: center;
+  
+  .amount {
+    font-size: 1rem;
+    color: #475569;
+    display: block;
+    margin-top: 0.25rem;
+  }
+`;
+
+const PieChartTooltip = styled.div`
+  position: absolute;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  font-size: 0.875rem;
+  color: #334155;
+  z-index: 10;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  
+  .type {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+  
+  .amount, .percentage {
+    display: block;
+  }
 `;
 
 const BarChartContainer = styled.div`
@@ -508,6 +580,45 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Add tooltip state at component level, not in the render function
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    type: string;
+    amount: string;
+    percentage: string;
+  } | null>(null);
+  
+  // Handler functions for tooltip moved to component level
+  const handlePieSliceHover = (e: React.MouseEvent<SVGPathElement>) => {
+    if (e.currentTarget) {
+      const target = e.currentTarget;
+      const type = target.getAttribute('data-type') || '';
+      const amount = target.getAttribute('data-amount') || '';
+      const percentage = target.getAttribute('data-percentage') || '';
+      
+      setTooltip({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        type,
+        amount,
+        percentage
+      });
+    }
+  };
+  
+  const handleTooltipMove = (e: React.MouseEvent) => {
+    if (tooltip) {
+      setTooltip({
+        ...tooltip,
+        x: e.clientX,
+        y: e.clientY
+      });
+    }
+  };
 
   // Generate list of months (last 12 months)
   const monthsWithData = useMemo(() => {
@@ -698,14 +809,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     
     const calculateHeight = (hours: number) => `${Math.max((hours / maxHours) * 180, 10)}px`;
     
+    // Updated colors for better contrast
     return (
-      <ChartContainer>
+      <div>
         <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>Hours Breakdown</h3>
         <BarChartContainer>
           {oncallHours.weekday > 0 && (
             <Bar 
               height={calculateHeight(oncallHours.weekday)} 
-              color="#60a5fa" 
+              color="#3b82f6" // Darker blue for weekday on-call
               data-value={`${oncallHours.weekday}h`} 
               data-label="Weekday On-Call"
             />
@@ -713,7 +825,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           {oncallHours.weekend > 0 && (
             <Bar 
               height={calculateHeight(oncallHours.weekend)} 
-              color="#93c5fd" 
+              color="#93c5fd" // Lighter blue for weekend on-call
               data-value={`${oncallHours.weekend}h`} 
               data-label="Weekend On-Call"
             />
@@ -721,7 +833,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           {incidentHours.weekday > 0 && (
             <Bar 
               height={calculateHeight(incidentHours.weekday)} 
-              color="#f87171" 
+              color="#dc2626" // Darker red for weekday incident
               data-value={`${incidentHours.weekday}h`} 
               data-label="Weekday Incident"
             />
@@ -729,7 +841,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           {incidentHours.weekend > 0 && (
             <Bar 
               height={calculateHeight(incidentHours.weekend)} 
-              color="#fca5a5" 
+              color="#fca5a5" // Lighter red for weekend incident
               data-value={`${incidentHours.weekend}h`} 
               data-label="Weekend Incident"
             />
@@ -737,7 +849,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           {incidentHours.nightShift && incidentHours.nightShift > 0 && (
             <Bar 
               height={calculateHeight(incidentHours.nightShift)} 
-              color="#fb7185" 
+              color="#9f1239" // Dark pink for night shift incident
               data-value={`${incidentHours.nightShift}h`} 
               data-label="Night Shift Incident"
             />
@@ -745,31 +857,178 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           {incidentHours.weekendNight && incidentHours.weekendNight > 0 && (
             <Bar 
               height={calculateHeight(incidentHours.weekendNight)} 
-              color="#f43f5e" 
+              color="#f43f5e" // Lighter pink for weekend night incident
               data-value={`${incidentHours.weekendNight}h`} 
-              data-label="Weekend Night Incident"
+              data-label="Weekend Night"
             />
           )}
         </BarChartContainer>
-        <Legend>
-          <LegendItem>
-            <LegendColor color="#60a5fa" />
-            <span>Weekday On-Call</span>
-          </LegendItem>
-          <LegendItem>
-            <LegendColor color="#93c5fd" />
-            <span>Weekend On-Call</span>
-          </LegendItem>
-          <LegendItem>
-            <LegendColor color="#f87171" />
-            <span>Weekday Incident</span>
-          </LegendItem>
-          <LegendItem>
-            <LegendColor color="#fca5a5" />
-            <span>Weekend Incident</span>
-          </LegendItem>
-        </Legend>
-      </ChartContainer>
+      </div>
+    );
+  };
+
+  // Extract compensation data for visualization
+  const getCompensationData = () => {
+    const result = [];
+    
+    // Weekday on-call
+    if (oncallData.length > 0) {
+      const weekdayHours = extractHoursData(oncallData[0].description).weekday;
+      if (weekdayHours > 0) {
+        const amount = weekdayHours * 3.90; // Weekday on-call rate
+        result.push({
+          type: 'Weekday On-Call',
+          amount,
+          color: '#3b82f6' // Updated color
+        });
+      }
+      
+      // Weekend on-call
+      const weekendHours = extractHoursData(oncallData[0].description).weekend;
+      if (weekendHours > 0) {
+        const amount = weekendHours * 7.34; // Weekend on-call rate
+        result.push({
+          type: 'Weekend On-Call',
+          amount,
+          color: '#93c5fd'
+        });
+      }
+    }
+    
+    // Incidents
+    if (incidentData.length > 0) {
+      const hours = extractHoursData(incidentData[0].description);
+      
+      // Weekday incidents
+      if (hours.weekday > 0) {
+        const amount = hours.weekday * 33.50 * 1.8; // Base * weekday multiplier
+        result.push({
+          type: 'Weekday Incident',
+          amount,
+          color: '#dc2626' // Updated color
+        });
+      }
+      
+      // Weekend incidents
+      if (hours.weekend > 0) {
+        const amount = hours.weekend * 33.50 * 2.0; // Base * weekend multiplier
+        result.push({
+          type: 'Weekend Incident',
+          amount,
+          color: '#fca5a5'
+        });
+      }
+      
+      // Night shift incidents
+      if (hours.nightShift && hours.nightShift > 0) {
+        const amount = hours.nightShift * 33.50 * 1.8 * 1.4; // Base * weekday * night
+        result.push({
+          type: 'Night Shift Incident',
+          amount,
+          color: '#9f1239' // Updated color
+        });
+      }
+      
+      // Weekend night incidents
+      if (hours.weekendNight && hours.weekendNight > 0) {
+        const amount = hours.weekendNight * 33.50 * 2.0 * 1.4; // Base * weekend * night
+        result.push({
+          type: 'Weekend Night',
+          amount,
+          color: '#f43f5e'
+        });
+      }
+    }
+    
+    return result;
+  };
+
+  // Render pie chart for compensation breakdown
+  const renderCompensationPieChart = () => {
+    const compensationData = getCompensationData();
+    
+    if (compensationData.length === 0) return null;
+    
+    const totalAmount = compensationData.reduce((sum, item) => sum + item.amount, 0);
+    
+    // Calculate SVG pie slices
+    let currentAngle = 0;
+    const svgSlices = compensationData.map((item, index) => {
+      const percentage = (item.amount / totalAmount) * 100;
+      const degrees = (percentage / 100) * 360;
+      
+      // Calculate SVG arc parameters
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + degrees;
+      currentAngle = endAngle;
+      
+      // Convert angles to radians
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
+      
+      // SVG arc coordinates
+      const x1 = 100 + 80 * Math.cos(startRad);
+      const y1 = 100 + 80 * Math.sin(startRad);
+      const x2 = 100 + 80 * Math.cos(endRad);
+      const y2 = 100 + 80 * Math.sin(endRad);
+      
+      // Determine if the arc should take the large-arc-flag (1 if > 180 degrees)
+      const largeArcFlag = degrees > 180 ? 1 : 0;
+      
+      // SVG path commands
+      const path = [
+        `M 100 100`, // Move to center
+        `L ${x1} ${y1}`, // Line to start point
+        `A 80 80 0 ${largeArcFlag} 1 ${x2} ${y2}`, // Arc to end point
+        `Z` // Close path
+      ].join(' ');
+      
+      return (
+        <path 
+          key={index}
+          d={path}
+          fill={item.color}
+          stroke="white"
+          strokeWidth="1"
+          data-type={item.type}
+          data-amount={item.amount.toFixed(2)}
+          data-percentage={percentage.toFixed(0)}
+          onMouseEnter={(e) => handlePieSliceHover(e)}
+          onMouseLeave={() => setTooltip(null)}
+          onMouseMove={(e) => handleTooltipMove(e)}
+          style={{ transition: 'transform 0.2s', transformOrigin: 'center', cursor: 'pointer' }}
+        />
+      );
+    });
+    
+    return (
+      <div>
+        <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>Compensation Breakdown</h3>
+        <PieChartContainer>
+          <svg width="200" height="200" viewBox="0 0 200 200">
+            <g transform="translate(0, 0)">
+              {svgSlices}
+            </g>
+          </svg>
+          <PieChartLabel>
+            Total
+            <span className="amount">€{totalAmount.toFixed(2)}</span>
+          </PieChartLabel>
+          {tooltip && tooltip.visible && (
+            <PieChartTooltip
+              style={{
+                left: `${tooltip.x + 10}px`,
+                top: `${tooltip.y + 10}px`,
+                position: 'fixed'
+              }}
+            >
+              <div className="type">{tooltip.type}</div>
+              <div className="amount">€{tooltip.amount}</div>
+              <div className="percentage">{tooltip.percentage}% of total</div>
+            </PieChartTooltip>
+          )}
+        </PieChartContainer>
+      </div>
     );
   };
 
@@ -863,7 +1122,42 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             </SummarySection>
             
             {/* Hours Visualization */}
-            {renderHoursChart()}
+            <ChartContainer>
+              <ChartGrid>
+                {renderHoursChart()}
+                {renderCompensationPieChart()}
+              </ChartGrid>
+              <Legend>
+                <LegendItem>
+                  <LegendColor color="#3b82f6" />
+                  <span>Weekday On-Call</span>
+                </LegendItem>
+                <LegendItem>
+                  <LegendColor color="#93c5fd" />
+                  <span>Weekend On-Call</span>
+                </LegendItem>
+                <LegendItem>
+                  <LegendColor color="#dc2626" />
+                  <span>Weekday Incident</span>
+                </LegendItem>
+                <LegendItem>
+                  <LegendColor color="#fca5a5" />
+                  <span>Weekend Incident</span>
+                </LegendItem>
+                {(incidentData.length > 0 && extractHoursData(incidentData[0].description).nightShift) && (
+                  <LegendItem>
+                    <LegendColor color="#9f1239" />
+                    <span>Night Shift Incident</span>
+                  </LegendItem>
+                )}
+                {(incidentData.length > 0 && extractHoursData(incidentData[0].description).weekendNight) && (
+                  <LegendItem>
+                    <LegendColor color="#f43f5e" />
+                    <span>Weekend Night</span>
+                  </LegendItem>
+                )}
+              </Legend>
+            </ChartContainer>
             
             {/* Compensation Rate Information */}
             <DetailSection>
@@ -921,9 +1215,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                     const total = data.find(d => d.type === 'total')?.amount || 0;
                     const oncall = data.find(d => d.type === 'oncall')?.amount || 0;
                     const incident = data.find(d => d.type === 'incident')?.amount || 0;
+                    const isActive = selectedMonth && date.getTime() === selectedMonth.getTime();
                     
                     return (
-                      <StatCard key={date.toISOString()}>
+                      <StatCard 
+                        key={date.toISOString()}
+                        className={isActive ? 'active' : ''}
+                        onClick={() => setSelectedMonth(date)}
+                        title="Click to view this month's details"
+                      >
                         <StatLabel>{format(date, 'MMM yyyy')}</StatLabel>
                         <StatValue>€{total.toFixed(2)}</StatValue>
                         <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
