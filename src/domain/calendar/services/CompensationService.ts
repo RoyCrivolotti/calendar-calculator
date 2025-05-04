@@ -306,11 +306,17 @@ export class CompensationService {
         count: oncallEvents.length,
         description: `On-call shifts (${totalWeekdayOnCallHours.toFixed(1)}h weekday, ${totalWeekendOnCallHours.toFixed(1)}h weekend)`,
         month: monthDate,
-        events: oncallEvents.map(event => ({
-          id: event.id,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        }))
+        events: oncallEvents.map(event => {
+          // Find if any sub-events for this event are holidays
+          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
+          return {
+            id: event.id,
+            start: new Date(event.start),
+            end: new Date(event.end),
+            isHoliday: hasHolidaySubEvent
+          };
+        })
       });
     }
 
@@ -324,11 +330,17 @@ export class CompensationService {
         count: incidentEvents.length,
         description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night, ${totalWeekendNightShiftHours}h weekend night)`,
         month: monthDate,
-        events: incidentEvents.map(event => ({
-          id: event.id,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        }))
+        events: incidentEvents.map(event => {
+          // Find if any sub-events for this event are holidays
+          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
+          return {
+            id: event.id,
+            start: new Date(event.start),
+            end: new Date(event.end),
+            isHoliday: hasHolidaySubEvent
+          };
+        })
       });
     }
 
@@ -340,11 +352,17 @@ export class CompensationService {
         count: monthEvents.length,
         description: 'Total compensation',
         month: monthDate,
-        events: monthEvents.map(event => ({
-          id: event.id,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        }))
+        events: monthEvents.map(event => {
+          // Find if any sub-events for this event are holidays
+          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
+          return {
+            id: event.id,
+            start: new Date(event.start),
+            end: new Date(event.end),
+            isHoliday: hasHolidaySubEvent
+          };
+        })
       });
     } else if (monthEvents.length > 0) {
       // Even if total compensation is 0, still add a total item if there are events
@@ -355,11 +373,17 @@ export class CompensationService {
         count: monthEvents.length,
         description: 'No compensation calculated',
         month: monthDate,
-        events: monthEvents.map(event => ({
-          id: event.id,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        }))
+        events: monthEvents.map(event => {
+          // Find if any sub-events for this event are holidays
+          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
+          return {
+            id: event.id,
+            start: new Date(event.start),
+            end: new Date(event.end),
+            isHoliday: hasHolidaySubEvent
+          };
+        })
       });
     }
 

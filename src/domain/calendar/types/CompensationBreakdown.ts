@@ -10,5 +10,6 @@ export interface CompensationBreakdown {
     id: string;
     start: Date;
     end: Date;
+    isHoliday?: boolean;
   }>;
 } 

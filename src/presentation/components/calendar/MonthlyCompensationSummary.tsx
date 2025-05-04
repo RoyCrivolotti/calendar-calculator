@@ -780,15 +780,23 @@ const EventItem = styled.div`
   }
 `;
 
-const EventTime = styled.div`
-  color: #0f172a;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
+const EventTime = styled.span`
+  color: #334155;
+  font-size: 0.875rem;
 `;
 
-const EventDuration = styled.div`
+const EventDuration = styled.span`
   color: #64748b;
   font-size: 0.875rem;
+`;
+
+const HolidayIndicator = styled.span`
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
 `;
 
 interface MonthData {
@@ -805,6 +813,7 @@ interface Event {
   type: 'oncall' | 'incident';
   start: Date;
   end: Date;
+  isHoliday?: boolean;
 }
 
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
@@ -1307,14 +1316,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
     const events: Event[] = [];
 
-    // Extract events from oncallData
+    // Extract events
     if (oncallData.length > 0 && oncallData[0].events) {
       const oncallEvents = oncallData[0].events;
       events.push(...oncallEvents.map(event => ({
         id: event.id,
         type: 'oncall' as const,
         start: event.start,
-        end: event.end
+        end: event.end,
+        isHoliday: event.isHoliday
       })));
     }
 
@@ -1325,7 +1335,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         id: event.id,
         type: 'incident' as const,
         start: event.start,
-        end: event.end
+        end: event.end,
+        isHoliday: event.isHoliday
       })));
     }
 
@@ -1347,6 +1358,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <EventItem key={event.id}>
                 <EventTime>
                   {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTime>
                 <EventDuration>
                   Duration: {formatDuration(new Date(event.start), new Date(event.end))}
@@ -1364,6 +1376,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <EventItem key={event.id}>
                 <EventTime>
                   {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTime>
                 <EventDuration>
                   Duration: {formatDuration(new Date(event.start), new Date(event.end))}
