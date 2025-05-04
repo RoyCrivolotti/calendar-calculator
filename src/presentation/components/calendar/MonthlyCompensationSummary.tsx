@@ -814,6 +814,111 @@ const HolidayIndicator = styled.span`
   margin-left: 0.5rem;
 `;
 
+const DeleteMonthButton = styled.button`
+  background-color: #ef4444;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+
+  &:hover {
+    background-color: #dc2626;
+  }
+
+  &:focus {
+    outline: none;
+    ring: 2px;
+    ring-color: #ef4444;
+    ring-offset: 2px;
+  }
+`;
+
+const DeleteMonthModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+`;
+
+const DeleteMonthContent = styled.div`
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+`;
+
+const DeleteMonthTitle = styled.h3`
+  color: #ef4444;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+`;
+
+const DeleteSectionText = styled.p`
+  color: #64748b;
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+`;
+
+const DeleteMonthButtons = styled.div`
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+`;
+
+const DeleteConfirmButton = styled.button`
+  background-color: #ef4444;
+  color: white;
+  padding: 0.5rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #dc2626;
+  }
+`;
+
+const DeleteCancelButton = styled.button`
+  background-color: #e5e7eb;
+  color: #374151;
+  padding: 0.5rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #d1d5db;
+  }
+`;
+
+const DeleteMonthSection = styled.div`
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: center;
+`;
+
 interface MonthData {
   date: Date;
   data: CompensationBreakdown[];
@@ -834,8 +939,9 @@ interface Event {
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>('all');
+  const [showDeleteMonthModal, setShowDeleteMonthModal] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
   
   // Add tooltip state at component level, not in the render function
   const [tooltip, setTooltip] = useState<{
@@ -1462,6 +1568,57 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     };
   }, [selectedMonth, showConfirmModal]);
 
+  // Add function to handle month deletion
+  const handleDeleteMonth = async () => {
+    if (!selectedMonth) return;
+    
+    try {
+      // Load all events
+      const events = await storageService.loadEvents();
+      const subEvents = await storageService.loadSubEvents();
+      
+      // Filter out events that overlap with the selected month
+      const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+      const endOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59);
+      
+      const remainingEvents = events.filter(event => {
+        const eventStart = new Date(event.start);
+        const eventEnd = new Date(event.end);
+        return eventEnd < startOfMonth || eventStart > endOfMonth;
+      });
+      
+      // Get IDs of events to be deleted
+      const deletedEventIds = events
+        .filter(event => !remainingEvents.find(e => e.id === event.id))
+        .map(event => event.id);
+      
+      // Filter out sub-events of deleted events
+      const remainingSubEvents = subEvents.filter(
+        subEvent => !deletedEventIds.includes(subEvent.parentEventId)
+      );
+      
+      // Save the filtered events and sub-events
+      await storageService.saveEvents(remainingEvents);
+      await storageService.saveSubEvents(remainingSubEvents);
+      
+      // Close modals and refresh page
+      setShowDeleteMonthModal(false);
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to delete month events:', error);
+      alert('Failed to delete events. Please try again.');
+    }
+  };
+
+  // Add handlers for delete month modal
+  const handleOpenDeleteMonthModal = () => {
+    setShowDeleteMonthModal(true);
+  };
+
+  const handleCloseDeleteMonthModal = () => {
+    setShowDeleteMonthModal(false);
+  };
+
   return (
     <Container>
       <SectionTitle>Monthly Compensation Summary</SectionTitle>
@@ -1625,8 +1782,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               )}
             </ChartContainer>
             
-            {/* Add the events list before the compensation rates section */}
+            {/* Add the events list before the delete section */}
             {renderEventsList()}
+            
+            {/* New Delete Month Section */}
+            <DeleteMonthSection>
+              <DeleteSectionText>
+                Remove all events for this month, including events that overlap with other months.
+              </DeleteSectionText>
+              <DeleteMonthButton onClick={handleOpenDeleteMonthModal}>
+                Remove All Events for {format(selectedMonth, 'MMMM yyyy')}
+              </DeleteMonthButton>
+            </DeleteMonthSection>
             
             {/* Compensation Rate Information */}
             <DetailSection>
@@ -1755,6 +1922,28 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             </ConfirmButtonContainer>
           </ConfirmModalContent>
         </Modal>
+      )}
+
+      {/* Add Delete Month Confirmation Modal */}
+      {showDeleteMonthModal && selectedMonth && (
+        <DeleteMonthModal onClick={handleCloseDeleteMonthModal}>
+          <DeleteMonthContent onClick={e => e.stopPropagation()}>
+            <DeleteMonthTitle>Remove All Events for {format(selectedMonth, 'MMMM yyyy')}?</DeleteMonthTitle>
+            <DeleteSectionText>
+              This will permanently remove all events that overlap with {format(selectedMonth, 'MMMM yyyy')}. 
+              This includes events that start in previous months or end in future months.
+              This action cannot be undone.
+            </DeleteSectionText>
+            <DeleteMonthButtons>
+              <DeleteCancelButton onClick={handleCloseDeleteMonthModal}>
+                Cancel
+              </DeleteCancelButton>
+              <DeleteConfirmButton onClick={handleDeleteMonth}>
+                Remove Events
+              </DeleteConfirmButton>
+            </DeleteMonthButtons>
+          </DeleteMonthContent>
+        </DeleteMonthModal>
       )}
 
       <ClearDataSection>
