@@ -1,6 +1,6 @@
 import { CalendarEvent, CalendarEventProps } from '../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../domain/calendar/repositories/CalendarEventRepository';
-import { getLogger } from '../../utils/logger';
+import { createRepositoryLogger } from '../../utils/initializeLogger';
 import { 
   trackWithRetry, 
   StorageReadError, 
@@ -10,20 +10,21 @@ import {
 } from '../../utils/errorHandler';
 
 const STORAGE_KEY = 'calendar_events';
-const logger = getLogger('localStorage-repository');
+// Use standardized repository logger with consistent naming
+const logger = createRepositoryLogger('calendarEvent', 'localStorage');
 
 export class LocalStorageCalendarEventRepository implements CalendarEventRepository {
   async save(events: CalendarEvent[]): Promise<void> {
     return trackWithRetry(
       'SaveEvents',
       async () => {
-        logger.debug(`Saving ${events.length} events to localStorage`);
+        logger.info(`Saving ${events.length} events to localStorage`);
         
         try {
           const serializedEvents = events.map(event => event.toJSON());
           localStorage.setItem(STORAGE_KEY, JSON.stringify(serializedEvents));
           
-          logger.debug(`Saved ${events.length} events to localStorage`);
+          logger.info(`Successfully saved ${events.length} events to localStorage`);
         } catch (error) {
           // Convert to a more specific error type
           logger.error('Failed to save events to localStorage:', error);
@@ -48,25 +49,28 @@ export class LocalStorageCalendarEventRepository implements CalendarEventReposit
     return trackWithRetry(
       'GetAllEvents',
       async () => {
+        logger.info('Loading all events from localStorage');
+        
         try {
-          const serializedEvents = localStorage.getItem(STORAGE_KEY);
-          if (!serializedEvents) {
-            logger.debug('No events found in localStorage');
+          const eventsJson = localStorage.getItem(STORAGE_KEY);
+          
+          if (!eventsJson) {
+            logger.info('No events found in localStorage, returning empty array');
             return [];
           }
-
-          const eventsData = JSON.parse(serializedEvents) as CalendarEventProps[];
-          const events = eventsData.map(eventData => 
-            CalendarEvent.create({
+          
+          const eventsData = JSON.parse(eventsJson);
+          const events = eventsData.map((eventData: CalendarEventProps) => {
+            return new CalendarEvent({
               id: eventData.id,
               start: new Date(eventData.start),
               end: new Date(eventData.end),
               type: eventData.type,
               title: eventData.title
-            })
-          );
+            });
+          });
           
-          logger.debug(`Loaded ${events.length} events from localStorage`);
+          logger.info(`Successfully loaded ${events.length} events from localStorage`);
           return events;
         } catch (error) {
           logger.error('Failed to load events from localStorage:', error);
@@ -79,8 +83,49 @@ export class LocalStorageCalendarEventRepository implements CalendarEventReposit
       },
       {
         context: { 
-          operation: 'getAll',
-          storageType: 'localStorage'
+          operation: 'getAll', 
+          storageType: 'localStorage' 
+        },
+        retries: 3
+      }
+    );
+  }
+
+  async getById(id: string): Promise<CalendarEvent> {
+    return trackWithRetry(
+      'GetEventById',
+      async () => {
+        logger.info(`Loading event with ID ${id} from localStorage`);
+        
+        try {
+          const events = await this.getAll();
+          const event = events.find(e => e.id === id);
+          
+          if (!event) {
+            logger.warn(`Event with ID ${id} not found in localStorage`);
+            throw new NotFoundError(`Event with ID ${id} not found`);
+          }
+          
+          logger.info(`Successfully loaded event with ID ${id} from localStorage`);
+          return event;
+        } catch (error) {
+          if (error instanceof NotFoundError) {
+            throw error; // Don't wrap already typed errors
+          }
+          
+          logger.error(`Failed to load event with ID ${id} from localStorage:`, error);
+          throw new StorageReadError(
+            `Failed to load event with ID ${id} from local storage`,
+            error instanceof Error ? error : new Error(String(error)),
+            { operation: 'getById', eventId: id }
+          );
+        }
+      },
+      {
+        context: { 
+          operation: 'getById', 
+          eventId: id,
+          storageType: 'localStorage' 
         },
         retries: 3
       }
@@ -89,41 +134,39 @@ export class LocalStorageCalendarEventRepository implements CalendarEventReposit
 
   async delete(id: string): Promise<void> {
     return trackWithRetry(
-      `DeleteEvent(${id})`,
+      'DeleteEvent',
       async () => {
+        logger.info(`Deleting event with ID ${id} from localStorage`);
+        
         try {
           const events = await this.getAll();
-          const eventToDelete = events.find(event => event.id === id);
+          const filteredEvents = events.filter(e => e.id !== id);
           
-          if (!eventToDelete) {
-            logger.warn(`Attempted to delete non-existent event with ID: ${id}`);
-            // Just return without error since the event doesn't exist anyway
-            return;
+          if (events.length === filteredEvents.length) {
+            logger.warn(`Event with ID ${id} not found for deletion`);
+            throw new NotFoundError(`Event with ID ${id} not found`);
           }
           
-          const updatedEvents = events.filter(event => event.id !== id);
-          await this.save(updatedEvents);
-          
-          logger.debug(`Deleted event ${id} from localStorage`);
+          await this.save(filteredEvents);
+          logger.info(`Successfully deleted event with ID ${id} from localStorage`);
         } catch (error) {
-          // Check if it's already a StorageReadError from getAll()
-          if (error instanceof StorageReadError) {
-            throw error;
+          if (error instanceof NotFoundError) {
+            throw error; // Don't wrap already typed errors
           }
           
-          logger.error(`Failed to delete event ${id} from localStorage:`, error);
+          logger.error(`Failed to delete event with ID ${id} from localStorage:`, error);
           throw new StorageDeleteError(
-            `Failed to delete event ${id} from local storage`,
+            `Failed to delete event with ID ${id} from local storage`,
             error instanceof Error ? error : new Error(String(error)),
-            { eventId: id }
+            { operation: 'delete', eventId: id }
           );
         }
       },
       {
         context: { 
+          operation: 'delete', 
           eventId: id,
-          storageType: 'localStorage',
-          operation: 'delete'
+          storageType: 'localStorage'
         },
         retries: 2
       }

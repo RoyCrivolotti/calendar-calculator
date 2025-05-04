@@ -4,10 +4,17 @@ import { CalendarEventRepository } from '../../../domain/calendar/repositories/C
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { EventSubDivider } from '../../../domain/calendar/services/EventSubDivider';
 import { HolidayCheckerService } from '../../../domain/calendar/services/HolidayCheckerService';
-import { getLogger } from '../../../utils/logger';
-import { trackOperation } from '../../../utils/errorHandler';
+import { createUseCaseLogger } from '../../../utils/initializeLogger';
+import { 
+  trackOperation, 
+  ApplicationError, 
+  BaseError, 
+  DatabaseError,
+  withErrorHandling
+} from '../../../utils/errorHandler';
 
-const logger = getLogger('create-event-use-case');
+// Use standardized use case logger
+const logger = createUseCaseLogger('createEvent');
 
 export class CreateEventUseCase {
   private eventRepository: CalendarEventRepository;
@@ -27,79 +34,109 @@ export class CreateEventUseCase {
     this.holidayChecker = holidayChecker;
   }
 
-  async execute(eventProps: CalendarEventProps): Promise<void> {
+  /**
+   * Execute the create event use case
+   * @param eventData Data for the event to create
+   * @returns The created calendar event
+   */
+  async execute(eventData: CalendarEventProps): Promise<CalendarEvent> {
     return trackOperation(
-      `CreateEvent(${eventProps.id})`,
+      'CreateEvent',
       async () => {
-        logger.info(`Creating new event with ID: ${eventProps.id}, Type: ${eventProps.type}`);
-        
-        const event = new CalendarEvent(eventProps);
-        
-        // First save the event
-        await this.eventRepository.save([event]);
-        
-        // Then generate sub-events based on the event type and time slots
-        const subEvents = await this.generateSubEvents(event);
-        
-        // Save the sub-events
-        if (subEvents.length > 0) {
-          logger.debug(`Saving ${subEvents.length} sub-events for event ${event.id}`);
+        logger.info('Creating new calendar event', { 
+          eventTitle: eventData.title,
+          eventType: eventData.type
+        });
+
+        try {
+          // 1. Create the main calendar event
+          const event = new CalendarEvent(eventData);
+          logger.info(`Created event with ID ${event.id}`);
+
+          // 2. Generate sub-events
+          const subEvents = await withErrorHandling(
+            async () => this.eventSubDivider.divideEvent(event),
+            'Failed to divide event into sub-events',
+            { eventId: event.id }
+          );
+          
+          logger.info(`Generated ${subEvents.length} sub-events for event ${event.id}`);
+
+          // 3. Check for holidays and mark sub-events
+          if (this.holidayChecker) {
+            await withErrorHandling(
+              async () => this.markHolidays(subEvents),
+              'Failed to check holidays for sub-events',
+              { eventId: event.id, subEventCount: subEvents.length }
+            );
+          }
+
+          // 4. Save the main event
+          await this.eventRepository.save([event]);
+
+          // 5. Save the sub-events
           await this.subEventRepository.save(subEvents);
+
+          logger.info('Successfully created event and sub-events', { 
+            eventId: event.id, 
+            subEventCount: subEvents.length 
+          });
+
+          return event;
+        } catch (error) {
+          logger.error('Failed to create event', error);
+          
+          // Convert to application error with appropriate context if not already typed
+          if (!(error instanceof BaseError)) {
+            throw new ApplicationError(
+              'Failed to create event',
+              'CREATE_EVENT_ERROR',
+              500,
+              error instanceof Error ? error : new Error(String(error)),
+              { 
+                eventTitle: eventData.title,
+                eventType: eventData.type,
+                eventStart: eventData.start instanceof Date ? eventData.start.toISOString() : String(eventData.start),
+                eventEnd: eventData.end instanceof Date ? eventData.end.toISOString() : String(eventData.end)
+              }
+            );
+          }
+          
+          // Re-throw original error
+          throw error;
         }
-        
-        return { eventId: event.id, subEventsCount: subEvents.length };
       },
       {
-        eventType: eventProps.type,
-        eventStartDate: new Date(eventProps.start).toISOString(),
-        eventEndDate: new Date(eventProps.end).toISOString()
+        eventType: eventData.type,
+        eventTitle: eventData.title
       }
     );
   }
 
   /**
-   * Generate sub-events for a given event
-   * This handles the logic of creating hourly/daily chunks
-   * and marking them as holidays if applicable
+   * Mark sub-events that fall on holidays
+   * @param subEvents List of sub-events to check
    */
-  private async generateSubEvents(event: CalendarEvent): Promise<SubEvent[]> {
-    logger.debug(`Generating sub-events for event: ${event.id}`);
+  private async markHolidays(subEvents: SubEvent[]): Promise<void> {
+    logger.info(`Checking ${subEvents.length} sub-events for holidays`);
     
-    // Step 1: Generate basic time slices
-    const timeSlices = this.eventSubDivider.divideEvent(event);
-    logger.debug(`Generated ${timeSlices.length} time slices`);
-    
-    // Step 2: Load all holiday events
-    const allEvents = await this.eventRepository.getAll();
-    const holidayEvents = allEvents.filter(e => e.type === 'holiday');
-    logger.debug(`Found ${holidayEvents.length} holiday events`);
-    
-    // Step 3: Initialize the holiday checker with current holidays
-    this.holidayChecker.setHolidays(holidayEvents);
-    
-    // Step 4: Process each time slice
-    const subEvents: SubEvent[] = [];
-    
-    for (const slice of timeSlices) {
-      const isWeekend = this.holidayChecker.isWeekend(slice.start);
-      const isHoliday = this.holidayChecker.isHoliday(slice.start);
-      
-      subEvents.push(new SubEvent({
-        id: crypto.randomUUID(),
-        parentEventId: event.id,
-        start: slice.start,
-        end: slice.end,
-        isWeekday: !isWeekend,
-        isWeekend,
-        isHoliday,
-        isNightShift: false, // This will be set by the EventSubDivider
-        isOfficeHours: false, // This will be calculated based on the time
-        type: event.type
-      }));
+    try {
+      for (const subEvent of subEvents) {
+        const isHoliday = await this.holidayChecker.isHoliday(subEvent.start);
+        if (isHoliday) {
+          subEvent.markAsHoliday();
+          logger.info(`Marked sub-event ${subEvent.id} as holiday`);
+        }
+      }
+      logger.info('Holiday check completed for all sub-events');
+    } catch (error) {
+      logger.error('Error while checking for holidays', error);
+      throw new ApplicationError(
+        'Failed to check holidays for sub-events',
+        'HOLIDAY_CHECK_ERROR',
+        500,
+        error instanceof Error ? error : new Error(String(error))
+      );
     }
-    
-    logger.debug(`Created ${subEvents.length} sub-events, including ${subEvents.filter(se => se.isHoliday).length} on holidays`);
-    
-    return subEvents;
   }
 } 

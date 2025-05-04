@@ -45,6 +45,17 @@ export class SubEvent {
     this.type = props.type;
   }
 
+  /**
+   * Mark this sub-event as occurring on a holiday
+   */
+  markAsHoliday(): void {
+    this.isHoliday = true;
+    // Update isWeekday if this is now marked as a holiday
+    if (this.isHoliday && this.isWeekday) {
+      this.isWeekday = false;
+    }
+  }
+
   static create(props: SubEventProps): SubEvent {
     return new SubEvent(props);
   }

@@ -8,9 +8,10 @@
  */
 
 import { logger, getLogger } from './logger';
+import { createServiceLogger } from './initializeLogger';
 
-// Create a dedicated logger for errors
-const errorLogger = getLogger('errors');
+// Use standardized error logger
+const errorLogger = createServiceLogger('errorHandler');
 
 /**
  * Base error class for application errors
