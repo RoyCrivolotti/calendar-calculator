@@ -11,13 +11,13 @@ const EventTypeSelector = styled.div`
   left: 50%;
   transform: translate(-50%, -50%);
   background: white;
-  padding: 2rem;
+  padding: 2.5rem;
   border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   width: fit-content;
   min-width: 600px;
   max-width: 90vw;
@@ -79,10 +79,12 @@ const EventTypeButton = styled.button`
 `;
 
 const ModalTitle = styled.h3`
-  margin: 0 0 1rem 0;
+  margin: 0 0 0.5rem 0;
   color: #0f172a;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 600;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 0.75rem;
 `;
 
 const ModalOverlay = styled.div`
@@ -99,15 +101,22 @@ const ModalOverlay = styled.div`
 `;
 
 const EventDetails = styled.div`
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
   color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 `;
 
 const TimeInputGroup = styled.div`
   display: flex;
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   width: 100%;
+  padding: 1rem;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
 `;
 
 const TimeInput = styled.div`
@@ -176,25 +185,32 @@ const TimeInput = styled.div`
 const ButtonGroup = styled.div`
   display: flex;
   gap: 1rem;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
+  border-top: 2px solid #f1f5f9;
+  padding-top: 1.5rem;
 `;
 
 const LoadingIndicator = styled.div`
   text-align: center;
-  padding: 1rem;
+  padding: 1.5rem;
   color: #64748b;
   font-style: italic;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
 `;
 
 const BasicInfo = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
   
   p {
     margin: 0;
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    align-items: center;
   }
   
   .label {
@@ -204,6 +220,7 @@ const BasicInfo = styled.div`
   
   .value {
     color: #0f172a;
+    font-weight: 500;
   }
 `;
 
@@ -365,14 +382,14 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
               />
             </TimeInput>
           </TimeInputGroup>
-          {validationError && <p style={{ color: '#e53e3e', marginTop: '-0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem' }}>{validationError}</p>}
+          {validationError && <p style={{ color: '#e53e3e', marginTop: '-0.25rem', marginBottom: '0.5rem', fontSize: '0.875rem' }}>{validationError}</p>}
           
           <BasicInfo>
             <p>
               <span className="label">Duration:</span>
               <span className="value">{durationHours} hours</span>
             </p>
-            {event.type === 'holiday' && <p><em>Holiday events span the entire day and cannot be modified</em></p>}
+            {event.type === 'holiday' && <p style={{ fontStyle: 'italic', color: '#64748b', marginTop: '0.5rem' }}>Holiday events span the entire day and cannot be modified</p>}
           </BasicInfo>
           
           {isLoading ? (

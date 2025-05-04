@@ -3,7 +3,7 @@ import styled from '@emotion/styled';
 import { CompensationSummary, CompensationDetail, HoursSummary, MonthlyCompensation } from '../../../domain/calendar/types/CompensationSummary';
 
 const SummaryContainer = styled.div`
-  margin-top: 1rem;
+  margin-top: 1.5rem;
   border-top: 1px solid #e2e8f0;
   padding-top: 1rem;
 `;
@@ -16,14 +16,23 @@ const SummaryTitle = styled.h4`
 `;
 
 const SummarySection = styled.div`
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+  background-color: #f8fafc;
 `;
 
 const SummaryRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.25rem;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: center;
+  margin-bottom: 0.5rem;
   font-size: 0.875rem;
+  
+  &:last-of-type {
+    margin-bottom: 0;
+  }
 `;
 
 const Label = styled.span`
@@ -33,30 +42,37 @@ const Label = styled.span`
 const Value = styled.span`
   color: #0f172a;
   font-weight: 500;
+  text-align: right;
 `;
 
 const TotalRow = styled(SummaryRow)`
   font-weight: 600;
   font-size: 1rem;
-  padding-top: 0.5rem;
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
   border-top: 1px dashed #e2e8f0;
-  margin-top: 0.5rem;
   color: #0f172a;
 `;
 
 const DetailSection = styled.div`
-  background: #f8fafc;
+  background: white;
   border-radius: 6px;
   padding: 0.75rem;
   margin-bottom: 0.75rem;
   border: 1px solid #e2e8f0;
+  
+  &:last-of-type {
+    margin-bottom: 0;
+  }
 `;
 
 const DetailTitle = styled.div`
-  font-weight: 500;
-  margin-bottom: 0.5rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
   color: #0f172a;
   font-size: 0.875rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
 `;
 
 const MonthlySection = styled.div`
@@ -66,9 +82,9 @@ const MonthlySection = styled.div`
 `;
 
 const MonthTitle = styled.div`
-  font-weight: 500;
+  font-weight: 600;
   color: #0f172a;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   font-size: 0.875rem;
 `;
 
@@ -158,7 +174,7 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
       
       {/* Monthly breakdown for cross-month events */}
       {monthlyBreakdown && monthlyBreakdown.length > 1 && (
-        <MonthlySection>
+        <SummarySection>
           <DetailTitle>Monthly Breakdown</DetailTitle>
           {monthlyBreakdown.map((month, index) => (
             <DetailSection key={index}>
@@ -175,7 +191,7 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
               </TotalRow>
             </DetailSection>
           ))}
-        </MonthlySection>
+        </SummarySection>
       )}
       
       {/* Total compensation */}
