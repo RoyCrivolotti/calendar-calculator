@@ -421,6 +421,16 @@ const BarChartContainer = styled.div`
   align-items: flex-end;
   gap: 1rem;
   padding: 1rem 0;
+  margin-bottom: 40px;
+  
+  @media (max-width: 768px) {
+    margin-bottom: 60px;
+    gap: 0.5rem;
+  }
+  
+  @media (max-width: 480px) {
+    gap: 0.25rem;
+  }
 `;
 
 const Bar = styled.div<{ height: string, color: string }>`
@@ -456,6 +466,25 @@ const Bar = styled.div<{ height: string, color: string }>`
     color: #64748b;
     font-size: 0.8rem;
     white-space: nowrap;
+    text-align: center;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    
+    @media (max-width: 768px) {
+      transform: translateX(-50%) rotate(-45deg);
+      transform-origin: top left;
+      width: auto;
+      max-width: none;
+      bottom: -36px;
+      font-size: 0.75rem;
+    }
+    
+    @media (max-width: 480px) {
+      transform: translateX(-50%) rotate(-60deg);
+      bottom: -28px;
+      font-size: 0.7rem;
+    }
   }
 `;
 
@@ -572,8 +601,7 @@ const ComparisonSection = styled(DetailSection)`
 
 const ComparisonScrollButton = styled.button`
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 40px;
   width: 32px;
   height: 32px;
   border-radius: 50%;
