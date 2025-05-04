@@ -305,7 +305,12 @@ export class CompensationService {
         amount: totalOnCallComp,
         count: oncallEvents.length,
         description: `On-call shifts (${totalWeekdayOnCallHours.toFixed(1)}h weekday, ${totalWeekendOnCallHours.toFixed(1)}h weekend)`,
-        month: monthDate
+        month: monthDate,
+        events: oncallEvents.map(event => ({
+          id: event.id,
+          start: new Date(event.start),
+          end: new Date(event.end)
+        }))
       });
     }
 
@@ -318,7 +323,12 @@ export class CompensationService {
         amount: totalIncidentComp,
         count: incidentEvents.length,
         description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night, ${totalWeekendNightShiftHours}h weekend night)`,
-        month: monthDate
+        month: monthDate,
+        events: incidentEvents.map(event => ({
+          id: event.id,
+          start: new Date(event.start),
+          end: new Date(event.end)
+        }))
       });
     }
 
@@ -329,7 +339,12 @@ export class CompensationService {
         amount: totalCompensation,
         count: monthEvents.length,
         description: 'Total compensation',
-        month: monthDate
+        month: monthDate,
+        events: monthEvents.map(event => ({
+          id: event.id,
+          start: new Date(event.start),
+          end: new Date(event.end)
+        }))
       });
     } else if (monthEvents.length > 0) {
       // Even if total compensation is 0, still add a total item if there are events
@@ -339,7 +354,12 @@ export class CompensationService {
         amount: 0,
         count: monthEvents.length,
         description: 'No compensation calculated',
-        month: monthDate
+        month: monthDate,
+        events: monthEvents.map(event => ({
+          id: event.id,
+          start: new Date(event.start),
+          end: new Date(event.end)
+        }))
       });
     }
 

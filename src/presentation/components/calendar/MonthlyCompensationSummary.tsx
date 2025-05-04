@@ -736,6 +736,61 @@ const SectionTitle = styled.h2`
   border-bottom: 2px solid #f1f5f9;
 `;
 
+const EventListSection = styled.div`
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+`;
+
+const EventListTitle = styled.h3`
+  color: #334155;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+`;
+
+const EventTypeSection = styled.div`
+  margin-bottom: 1.5rem;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const EventTypeName = styled.h4`
+  color: #475569;
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0 0 0.75rem 0;
+`;
+
+const EventItem = styled.div`
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const EventTime = styled.div`
+  color: #0f172a;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+`;
+
+const EventDuration = styled.div`
+  color: #64748b;
+  font-size: 0.875rem;
+`;
+
 interface MonthData {
   date: Date;
   data: CompensationBreakdown[];
@@ -743,6 +798,13 @@ interface MonthData {
 
 interface MonthlyCompensationSummaryProps {
   data: CompensationBreakdown[];
+}
+
+interface Event {
+  id: string;
+  type: 'oncall' | 'incident';
+  start: Date;
+  end: Date;
 }
 
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
@@ -1233,6 +1295,93 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     );
   };
 
+  // Function to format duration
+  const formatDuration = (start: Date, end: Date) => {
+    const hours = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60));
+    return `${hours} hour${hours !== 1 ? 's' : ''}`;
+  };
+
+  // Function to render the events list
+  const renderEventsList = () => {
+    if (!selectedMonth || !oncallData.length && !incidentData.length) return null;
+
+    const events: Event[] = [];
+
+    // Extract events from oncallData
+    if (oncallData.length > 0 && oncallData[0].events) {
+      const oncallEvents = oncallData[0].events;
+      events.push(...oncallEvents.map(event => ({
+        id: event.id,
+        type: 'oncall' as const,
+        start: event.start,
+        end: event.end
+      })));
+    }
+
+    // Extract events from incidentData
+    if (incidentData.length > 0 && incidentData[0].events) {
+      const incidentEvents = incidentData[0].events;
+      events.push(...incidentEvents.map(event => ({
+        id: event.id,
+        type: 'incident' as const,
+        start: event.start,
+        end: event.end
+      })));
+    }
+
+    // Group events by type
+    const groupedEvents = {
+      oncall: events.filter(e => e.type === 'oncall'),
+      incident: events.filter(e => e.type === 'incident')
+    };
+
+    return (
+      <EventListSection>
+        <EventListTitle>Events This Month</EventListTitle>
+        
+        {/* On-Call Shifts */}
+        {groupedEvents.oncall.length > 0 && (
+          <EventTypeSection>
+            <EventTypeName>On-Call Shifts</EventTypeName>
+            {groupedEvents.oncall.map(event => (
+              <EventItem key={event.id}>
+                <EventTime>
+                  {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
+                </EventTime>
+                <EventDuration>
+                  Duration: {formatDuration(new Date(event.start), new Date(event.end))}
+                </EventDuration>
+              </EventItem>
+            ))}
+          </EventTypeSection>
+        )}
+        
+        {/* Incidents */}
+        {groupedEvents.incident.length > 0 && (
+          <EventTypeSection>
+            <EventTypeName>Incidents</EventTypeName>
+            {groupedEvents.incident.map(event => (
+              <EventItem key={event.id}>
+                <EventTime>
+                  {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
+                </EventTime>
+                <EventDuration>
+                  Duration: {formatDuration(new Date(event.start), new Date(event.end))}
+                </EventDuration>
+              </EventItem>
+            ))}
+          </EventTypeSection>
+        )}
+        
+        {groupedEvents.oncall.length === 0 && groupedEvents.incident.length === 0 && (
+          <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>
+            No events found for this month
+          </div>
+        )}
+      </EventListSection>
+    );
+  };
+
   const handlePreviousMonth = () => {
     if (!selectedMonth) return;
     
@@ -1443,6 +1592,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 </Legend>
               )}
             </ChartContainer>
+            
+            {/* Add the events list before the compensation rates section */}
+            {renderEventsList()}
             
             {/* Compensation Rate Information */}
             <DetailSection>
