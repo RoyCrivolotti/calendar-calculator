@@ -386,6 +386,8 @@ const ChartContainer = styled.div`
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+  opacity: 1;
+  transition: opacity 0.3s ease;
   
   h3 {
     margin: 0 0 1rem;
@@ -399,6 +401,7 @@ const ChartGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+  min-height: 300px;
   
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
@@ -408,6 +411,14 @@ const ChartGrid = styled.div`
     min-height: 250px;
     display: flex;
     flex-direction: column;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    
+    &.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 `;
 
@@ -480,12 +491,16 @@ const BarChartContainer = styled.div`
 
 const Bar = styled.div<{ height: string, color: string }>`
   flex: 1;
-  height: ${props => props.height};
+  height: 0;
   background: ${props => props.color};
   border-radius: 6px 6px 0 0;
   position: relative;
   min-width: 30px;
-  transition: height 0.3s ease;
+  transition: height 0.5s ease;
+  
+  &.mounted {
+    height: ${props => props.height};
+  }
   
   &:hover {
     opacity: 0.9;
@@ -500,10 +515,12 @@ const Bar = styled.div<{ height: string, color: string }>`
     color: #334155;
     font-weight: 600;
     font-size: 0.8rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
   }
   
-  &:after {
-    content: none;
+  &.mounted:before {
+    opacity: 1;
   }
 `;
 
@@ -942,8 +959,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const [showDeleteMonthModal, setShowDeleteMonthModal] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
+  const [isVisible, setIsVisible] = useState(false);
   
-  // Add tooltip state at component level, not in the render function
+  // Keep tooltip state for pie chart
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     x: number;
@@ -1035,8 +1053,16 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   }, [data]);
 
   const handleMonthClick = (month: Date) => {
+    setIsVisible(false);
     setSelectedMonth(month);
     setActiveTab('all');
+    
+    // Single timeout to show the new charts
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsVisible(true);
+      });
+    });
   };
 
   const handleCloseModal = () => {
@@ -1153,7 +1179,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return `${Math.round((amount / monthTotal) * 100)}%`;
   };
 
-  // Render the bar chart for hours breakdown
+  // Update chart rendering to use the new transition approach
   const renderHoursChart = () => {
     const oncallHours = oncallData.length > 0 ? extractHoursData(oncallData[0].description) : { weekday: 0, weekend: 0 };
     const incidentHours = incidentData.length > 0 ? extractHoursData(incidentData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
@@ -1172,7 +1198,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     
     const calculateHeight = (hours: number) => `${Math.max((hours / maxHours) * 180, 10)}px`;
     
-    // Only include bars that have actual values
     const bars = [];
     
     if (oncallHours.weekday > 0) {
@@ -1183,6 +1208,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           color="#3b82f6"
           data-value={`${oncallHours.weekday}h`} 
           data-label="Weekday On-Call"
+          className={isVisible ? 'mounted' : ''}
         />
       );
     }
@@ -1195,6 +1221,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           color="#93c5fd"
           data-value={`${oncallHours.weekend}h`} 
           data-label="Weekend On-Call"
+          className={isVisible ? 'mounted' : ''}
         />
       );
     }
@@ -1207,6 +1234,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           color="#dc2626"
           data-value={`${incidentHours.weekday}h`} 
           data-label="Weekday Incident"
+          className={isVisible ? 'mounted' : ''}
         />
       );
     }
@@ -1219,6 +1247,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           color="#fca5a5"
           data-value={`${incidentHours.weekend}h`} 
           data-label="Weekend Incident"
+          className={isVisible ? 'mounted' : ''}
         />
       );
     }
@@ -1231,6 +1260,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           color="#9f1239"
           data-value={`${incidentHours.nightShift}h`} 
           data-label="Night Shift Incident"
+          className={isVisible ? 'mounted' : ''}
         />
       );
     }
@@ -1243,6 +1273,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           color="#f43f5e"
           data-value={`${incidentHours.weekendNight}h`} 
           data-label="Weekend Night"
+          className={isVisible ? 'mounted' : ''}
         />
       );
     }
@@ -1251,7 +1282,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     if (bars.length === 0) return null;
     
     return (
-      <div>
+      <div className={isVisible ? 'visible' : ''}>
         <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>Hours Breakdown</h3>
         <BarChartContainer>
           {bars}
@@ -1336,7 +1367,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return result;
   };
 
-  // Render pie chart for compensation breakdown
+  // Update chart rendering to use the new transition approach
   const renderCompensationPieChart = () => {
     const compensationData = getCompensationData();
     
@@ -1378,7 +1409,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       
       return (
         <path 
-          key={index}
+          key={`slice-${index}`}
           d={path}
           fill={item.color}
           stroke="white"
@@ -1386,16 +1417,22 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-type={item.type}
           data-amount={item.amount.toFixed(2)}
           data-percentage={percentage.toFixed(0)}
-          onMouseEnter={(e) => handlePieSliceHover(e)}
+          onMouseEnter={handlePieSliceHover}
           onMouseLeave={() => setTooltip(null)}
-          onMouseMove={(e) => handleTooltipMove(e)}
-          style={{ transition: 'transform 0.2s', transformOrigin: 'center', cursor: 'pointer' }}
+          onMouseMove={handleTooltipMove}
+          style={{
+            transition: 'transform 0.3s ease, opacity 0.3s ease',
+            transformOrigin: 'center',
+            opacity: isVisible ? 1 : 0,
+            transform: `scale(${isVisible ? 1 : 0.8})`,
+            cursor: 'pointer'
+          }}
         />
       );
     });
     
     return (
-      <div>
+      <div className={isVisible ? 'visible' : ''}>
         <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>Compensation Breakdown</h3>
         <PieChartContainer>
           <svg width="200" height="200" viewBox="0 0 200 200">
@@ -1403,7 +1440,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               {svgSlices}
             </g>
           </svg>
-          <PieChartLabel>
+          <PieChartLabel style={{
+            transition: 'opacity 0.3s ease',
+            opacity: isVisible ? 1 : 0
+          }}>
             Total
             <span className="amount">€{totalAmount.toFixed(2)}</span>
           </PieChartLabel>

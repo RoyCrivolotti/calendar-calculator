@@ -26,13 +26,18 @@ const Breakdown = styled.div`
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
   margin-top: 1rem;
+  min-height: 100px; /* Ensure consistent height */
+  position: relative; /* For absolute positioning of loading state */
 `;
 
-const BreakdownItem = styled.div`
+const BreakdownItem = styled.div<{ isVisible: boolean }>`
   padding: 1rem;
   background: #f8fafc;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
+  opacity: ${props => props.isVisible ? 1 : 0};
+  transform: translateY(${props => props.isVisible ? '0' : '10px'});
+  transition: opacity 0.3s ease, transform 0.3s ease;
 
   h3 {
     margin: 0 0 0.5rem 0;
@@ -83,9 +88,19 @@ const MonthButton = styled.button`
   }
 `;
 
-const LoadingIndicator = styled.div`
-  text-align: center;
-  padding: 1rem;
+const LoadingIndicator = styled.div<{ isVisible: boolean }>`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.8);
+  opacity: ${props => props.isVisible ? 1 : 0};
+  visibility: ${props => props.isVisible ? 'visible' : 'hidden'};
+  transition: opacity 0.3s ease, visibility 0.3s ease;
   color: #64748b;
   font-style: italic;
 `;
@@ -103,6 +118,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 }) => {
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
   const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
 
   useEffect(() => {
@@ -112,11 +128,24 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         return;
       }
       
+      // Start transition out
+      setIsVisible(false);
       setLoading(true);
+      
       try {
-        // Use the facade to get compensation data with guaranteed sub-events
+        // Short delay to allow fade out
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // Calculate new data
         const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate);
         setBreakdown(result);
+        
+        // Trigger fade in
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIsVisible(true);
+          });
+        });
       } catch (error) {
         logger.error('Error calculating compensation:', error);
         setBreakdown([]);
@@ -167,19 +196,22 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         </MonthButton>
       </MonthSelector>
       
-      {loading ? (
-        <LoadingIndicator>Loading compensation data...</LoadingIndicator>
-      ) : (
-        <Breakdown>
-          {breakdown.map((item, index) => (
-            <BreakdownItem key={index}>
-              <h3>{item.description}</h3>
-              <p>Count: {item.count}</p>
-              <div className="amount">€{item.amount.toFixed(2)}</div>
-            </BreakdownItem>
-          ))}
-        </Breakdown>
-      )}
+      <Breakdown>
+        <LoadingIndicator isVisible={loading}>
+          Loading compensation data...
+        </LoadingIndicator>
+        
+        {breakdown.map((item, index) => (
+          <BreakdownItem 
+            key={index}
+            isVisible={isVisible && !loading}
+          >
+            <h3>{item.description}</h3>
+            <p>Count: {item.count}</p>
+            <div className="amount">€{item.amount.toFixed(2)}</div>
+          </BreakdownItem>
+        ))}
+      </Breakdown>
     </Section>
   );
 };
