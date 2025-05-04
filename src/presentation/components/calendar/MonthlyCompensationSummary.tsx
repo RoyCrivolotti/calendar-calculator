@@ -5,6 +5,7 @@ import { CompensationBreakdown } from '../../../domain/calendar/types/Compensati
 import { storageService } from '../../services/storage';
 import { logger } from '../../../utils/logger';
 import { createMonthDate } from '../../../utils/calendarUtils';
+import { trackOperation } from '../../../utils/errorHandler';
 
 const Container = styled.div`
   width: 93%;
@@ -1093,12 +1094,21 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   };
 
   const handleConfirmClear = async () => {
-    const startTime = performance.now();
     try {
-      logger.info('Starting to clear all data');
-      await storageService.clearAllData();
-      const endTime = performance.now();
-      logger.info(`Successfully cleared all calendar data (${(endTime - startTime).toFixed(2)}ms)`);
+      await trackOperation(
+        'ClearAllData',
+        async () => {
+          logger.info('Starting to clear all data');
+          await storageService.clearAllData();
+          logger.info('Successfully cleared all calendar data');
+          return { success: true };
+        },
+        { 
+          operation: 'data_clearing',
+          userTriggered: true 
+        }
+      );
+      
       // Reload the page to reflect the cleared data
       window.location.reload();
     } catch (error) {
@@ -1620,50 +1630,58 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const monthName = format(selectedMonth, 'MMMM yyyy');
     logger.info(`Attempting to delete all events for month: ${monthName}`);
     
-    const startTime = performance.now();
     try {
-      // Get all events from storage
-      const allEvents = await storageService.loadEvents();
-      const allSubEvents = await storageService.loadSubEvents();
-      
-      // Filter events for the selected month
-      const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
-      const endOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59);
-      
-      // Find events that fall within the selected month
-      const eventsToDelete = allEvents.filter(event => {
-        const eventStart = new Date(event.start);
-        const eventEnd = new Date(event.end);
-        return (
-          (eventStart >= startOfMonth && eventStart <= endOfMonth) ||
-          (eventEnd >= startOfMonth && eventEnd <= endOfMonth) ||
-          (eventStart <= startOfMonth && eventEnd >= endOfMonth)
-        );
-      });
-      
-      const deletedEventIds = eventsToDelete.map(event => event.id);
-      logger.debug(`Found ${deletedEventIds.length} events to delete for month ${monthName}`);
-      
-      // Delete all events by creating a filtered set of remaining events
-      const remainingEvents = allEvents.filter(event => !deletedEventIds.includes(event.id));
-      await storageService.saveEvents(remainingEvents);
-      
-      // Delete associated sub-events
-      const subEventsToDelete = allSubEvents.filter(subEvent => 
-        deletedEventIds.includes(subEvent.parentEventId)
+      await trackOperation(
+        `DeleteMonth(${monthName})`,
+        async () => {
+          // Get all events from storage
+          const allEvents = await storageService.loadEvents();
+          const allSubEvents = await storageService.loadSubEvents();
+          
+          // Filter events for the selected month
+          const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+          const endOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59);
+          
+          // Find events that fall within the selected month
+          const eventsToDelete = allEvents.filter(event => {
+            const eventStart = new Date(event.start);
+            const eventEnd = new Date(event.end);
+            return (
+              (eventStart >= startOfMonth && eventStart <= endOfMonth) ||
+              (eventEnd >= startOfMonth && eventEnd <= endOfMonth) ||
+              (eventStart <= startOfMonth && eventEnd >= endOfMonth)
+            );
+          });
+          
+          const deletedEventIds = eventsToDelete.map(event => event.id);
+          logger.debug(`Found ${deletedEventIds.length} events to delete for month ${monthName}`);
+          
+          // Delete all events by creating a filtered set of remaining events
+          const remainingEvents = allEvents.filter(event => !deletedEventIds.includes(event.id));
+          await storageService.saveEvents(remainingEvents);
+          
+          // Delete associated sub-events
+          const subEventsToDelete = allSubEvents.filter(subEvent => 
+            deletedEventIds.includes(subEvent.parentEventId)
+          );
+          
+          const deletedSubEventsCount = subEventsToDelete.length;
+          logger.debug(`Found ${deletedSubEventsCount} sub-events to delete`);
+          
+          // Update sub-events
+          const remainingSubEvents = allSubEvents.filter(subEvent => 
+            !deletedEventIds.includes(subEvent.parentEventId)
+          );
+          await storageService.saveSubEvents(remainingSubEvents);
+          
+          return { deletedEvents: deletedEventIds.length, deletedSubEvents: deletedSubEventsCount };
+        },
+        {
+          monthName,
+          monthDate: selectedMonth.toISOString(),
+          operation: 'month_deletion'
+        }
       );
-      
-      const deletedSubEventsCount = subEventsToDelete.length;
-      logger.debug(`Found ${deletedSubEventsCount} sub-events to delete`);
-      
-      // Update sub-events
-      const remainingSubEvents = allSubEvents.filter(subEvent => 
-        !deletedEventIds.includes(subEvent.parentEventId)
-      );
-      await storageService.saveSubEvents(remainingSubEvents);
-      
-      const endTime = performance.now();
-      logger.info(`Successfully deleted all events for month: ${monthName} (${(endTime - startTime).toFixed(2)}ms)`);
       
       // Close the modal and reload
       setShowDeleteMonthModal(false);

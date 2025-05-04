@@ -397,7 +397,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     validateTimes(startTime, newEndTime);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const newStart = new Date(startTime);
     const newEnd = new Date(endTime);
 
@@ -407,22 +407,56 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
       return;
     }
 
-    logger.info(`Saving event ${event.id} with time range: ${startTime} - ${endTime}`);
-    const updatedEvent = createCalendarEvent({
-      ...event,
-      start: newStart,
-      end: newEnd,
-      type: event.type
-    });
-
-    onSave(updatedEvent);
-    onClose();
+    try {
+      await trackOperation(
+        `SaveEventChanges(${event.id})`,
+        async () => {
+          logger.info(`Saving event ${event.id} with time range: ${startTime} - ${endTime}`);
+          const updatedEvent = createCalendarEvent({
+            ...event,
+            start: newStart,
+            end: newEnd,
+            type: event.type
+          });
+          
+          onSave(updatedEvent);
+          onClose();
+          return { success: true, eventId: event.id };
+        },
+        {
+          eventType: event.type,
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
+          durationHours: ((newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60)).toFixed(1)
+        }
+      );
+    } catch (error) {
+      logger.error(`Failed to save event ${event.id}:`, error);
+      // Keep modal open when there's an error
+      setValidationError('Failed to save event. Please try again.');
+    }
   };
 
-  const handleDelete = () => {
-    logger.info(`User initiated deletion of event: ${event.id} (${event.type})`);
-    onClose();
-    onDelete(event);
+  const handleDelete = async () => {
+    try {
+      await trackOperation(
+        `DeleteEvent(${event.id})`,
+        async () => {
+          logger.info(`User initiated deletion of event: ${event.id} (${event.type})`);
+          onClose();
+          onDelete(event);
+          return { success: true, eventId: event.id };
+        },
+        {
+          eventType: event.type,
+          eventStart: event.start.toISOString(),
+          eventEnd: event.end.toISOString()
+        }
+      );
+    } catch (error) {
+      logger.error(`Failed to delete event ${event.id}:`, error);
+      alert('Failed to delete event. Please try again.');
+    }
   };
   
   // Calculate simple duration in hours

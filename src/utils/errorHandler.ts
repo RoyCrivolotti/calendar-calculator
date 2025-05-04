@@ -65,21 +65,6 @@ export class BaseError extends Error {
 }
 
 /**
- * Error for database-related issues
- */
-export class DatabaseError extends BaseError {
-  constructor(
-    message: string, 
-    code: string = 'DATABASE_ERROR', 
-    statusCode: number = 500, 
-    originalError?: Error,
-    context?: Record<string, any>
-  ) {
-    super(message, code, statusCode, originalError, context);
-  }
-}
-
-/**
  * Error for validation failures
  */
 export class ValidationError extends BaseError {
@@ -95,13 +80,13 @@ export class ValidationError extends BaseError {
 }
 
 /**
- * Error for not found resources
+ * Error for data access issues
  */
-export class NotFoundError extends BaseError {
+export class DatabaseError extends BaseError {
   constructor(
     message: string, 
-    code: string = 'NOT_FOUND', 
-    statusCode: number = 404, 
+    code: string = 'DATABASE_ERROR', 
+    statusCode: number = 500, 
     originalError?: Error,
     context?: Record<string, any>
   ) {
@@ -117,6 +102,21 @@ export class ApplicationError extends BaseError {
     message: string, 
     code: string = 'APPLICATION_ERROR', 
     statusCode: number = 500, 
+    originalError?: Error,
+    context?: Record<string, any>
+  ) {
+    super(message, code, statusCode, originalError, context);
+  }
+}
+
+/**
+ * Error for not found resources
+ */
+export class NotFoundError extends BaseError {
+  constructor(
+    message: string, 
+    code: string = 'NOT_FOUND', 
+    statusCode: number = 404, 
     originalError?: Error,
     context?: Record<string, any>
   ) {
@@ -188,6 +188,80 @@ export function withErrorHandling<T>(
 }
 
 /**
+ * Track an operation with performance monitoring and error handling
+ * @param operationName Name of the operation being performed
+ * @param fn The async function to execute
+ * @param context Additional context to include in logging
+ * @returns Promise with the operation result
+ */
+export async function trackOperation<T>(
+  operationName: string,
+  fn: () => Promise<T>,
+  context: Record<string, any> = {}
+): Promise<T> {
+  const startTime = performance.now();
+  
+  try {
+    // Log operation start
+    logger.debug(`[${operationName}] Starting operation`, context);
+    
+    // Execute the operation
+    const result = await fn();
+    
+    // Calculate and log performance metrics
+    const endTime = performance.now();
+    const durationMs = endTime - startTime;
+    
+    logger.debug(`[${operationName}] Completed successfully in ${durationMs.toFixed(2)}ms`, {
+      ...context,
+      durationMs
+    });
+    
+    return result;
+  } catch (error: unknown) {
+    // Calculate duration even for failed operations
+    const endTime = performance.now();
+    const durationMs = endTime - startTime;
+    
+    // Enhanced context with timing information
+    const errorContext = {
+      ...context,
+      durationMs,
+      operationName,
+      failedAt: new Date().toISOString()
+    };
+    
+    // Convert to appropriate error type if needed
+    let typedError: BaseError | Error;
+    if (error instanceof BaseError) {
+      typedError = error;
+    } else if (error instanceof Error) {
+      typedError = new ApplicationError(
+        `Operation '${operationName}' failed: ${error.message}`,
+        'OPERATION_FAILED',
+        500,
+        error,
+        errorContext
+      );
+    } else {
+      typedError = new ApplicationError(
+        `Operation '${operationName}' failed: ${String(error)}`,
+        'OPERATION_FAILED',
+        500,
+        new Error(String(error)),
+        errorContext
+      );
+    }
+    
+    // Handle the error with our centralized handler
+    handleError(typedError, errorContext);
+    
+    // Re-throw for caller to handle
+    throw typedError;
+  }
+}
+
+/**
  * Format and standardize error responses
  */
 export function formatErrorResponse(error: Error | BaseError): Record<string, any> {
@@ -208,57 +282,4 @@ export function formatErrorResponse(error: Error | BaseError): Record<string, an
       statusCode: 500
     }
   };
-}
-
-/**
- * Tracks performance and handles errors for async operations in components
- * This method combines performance tracking and error handling in a single convenient method
- */
-export async function trackOperation<T>(
-  operationName: string,
-  fn: () => Promise<T>,
-  context?: Record<string, any>,
-  logger = errorLogger
-): Promise<T> {
-  const startTime = performance.now();
-  try {
-    const result = await fn();
-    const endTime = performance.now();
-    const duration = endTime - startTime;
-    
-    // Log success with performance data
-    if (duration > 1000) {
-      // Only log slow operations at INFO level
-      logger.info(
-        `Operation '${operationName}' completed successfully in ${duration.toFixed(2)}ms`,
-        { ...context, duration, performanceAlert: duration > 1000 ? 'slow' : 'normal' }
-      );
-    } else {
-      // Log normal operations at DEBUG level
-      logger.debug(
-        `Operation '${operationName}' completed in ${duration.toFixed(2)}ms`,
-        { ...context, duration }
-      );
-    }
-    
-    return result;
-  } catch (error) {
-    const endTime = performance.now();
-    const duration = endTime - startTime;
-    
-    // Convert unknown error to an Error object if needed
-    const errorObj = error instanceof Error 
-      ? error 
-      : new Error(typeof error === 'string' ? error : 'Unknown error');
-    
-    // Handle the error
-    handleError(errorObj, { 
-      operation: operationName, 
-      duration: `${duration.toFixed(2)}ms`,
-      ...context
-    });
-    
-    // Re-throw the error after logging
-    throw error;
-  }
 } 
