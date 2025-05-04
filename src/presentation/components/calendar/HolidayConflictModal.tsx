@@ -53,7 +53,7 @@ const ConflictItem = styled.li`
 const ButtonGroup = styled.div`
   display: flex;
   gap: 1rem;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: 1rem;
 `;
 
@@ -160,20 +160,23 @@ const HolidayConflictModal: React.FC<HolidayConflictModalProps> = ({
           )}
         </ModalContent>
         <ButtonGroup>
-          <Button onClick={onCancel}>
-            Cancel
-          </Button>
-          {isHoliday ? (
-            <>
+          <div>
+            <Button onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
+          
+          <div>
+            {isHoliday ? (
               <Button primary onClick={onAdjust}>
                 Save Holiday & Adjust Events
               </Button>
-            </>
-          ) : (
-            <Button primary onClick={onContinue}>
-              Continue
-            </Button>
-          )}
+            ) : (
+              <Button primary onClick={onContinue}>
+                Continue
+              </Button>
+            )}
+          </div>
         </ButtonGroup>
       </ModalContainer>
     </ModalOverlay>

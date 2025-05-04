@@ -330,24 +330,40 @@ const Calendar: React.FC = () => {
     const isNewEvent = event.id.startsWith('temp-');
     logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
     
+    // Clear caches before operation
+    calculatorFacade.clearCaches();
+    
+    // Track the async operation being performed
+    let savePromise;
+    
     // New event with a temporary ID, create a new one
     if (isNewEvent) {
       const eventWithoutTempId = createCalendarEvent({
         ...event.toJSON(),
         id: crypto.randomUUID()
       });
-      dispatch(createEventAsync(eventWithoutTempId.toJSON()));
+      savePromise = dispatch(createEventAsync(eventWithoutTempId.toJSON())).unwrap();
     } else {
       // Existing event, just update it
-      dispatch(updateEventAsync(event.toJSON()));
+      savePromise = dispatch(updateEventAsync(event.toJSON())).unwrap();
     }
-
-    // Clear modals
+    
+    // Clear modals immediately for better UX
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    // Clear caches to ensure fresh calculations
-    calculatorFacade.clearCaches();
+    // After the save completes, ensure compensation data is refreshed
+    savePromise.then(() => {
+      logger.info(`Event ${event.id} saved successfully, updating compensation data`);
+      // Clear caches again just to be safe
+      calculatorFacade.clearCaches();
+      // Update compensation data
+      updateCompensationData();
+    }).catch(error => {
+      logger.error(`Failed to save event ${event.id}:`, error);
+      // Try to update compensation data anyway
+      updateCompensationData();
+    });
   };
 
   const handleConflictModalAdjust = async () => {
@@ -456,12 +472,17 @@ const Calendar: React.FC = () => {
   };
   
   const deleteEventWithoutConfirmation = (event: CalendarEvent) => {
+    // Clear caches before deleting to ensure fresh calculations
+    calculatorFacade.clearCaches();
+    
     dispatch(deleteEventAsync(event.id));
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    // Clear caches to ensure fresh calculations
-    calculatorFacade.clearCaches();
+    // Force recalculation of compensation data
+    setTimeout(() => {
+      updateCompensationData();
+    }, 100);
   };
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
@@ -482,10 +503,15 @@ const Calendar: React.FC = () => {
     
     logger.debug(`Regeneration enabled: ${shouldRegenerateEvents}`);
     
+    // Clear caches immediately to ensure stale data isn't used
+    calculatorFacade.clearCaches();
+    
     // Delete the holiday first
-    deleteEventWithoutConfirmation(pendingEventDelete);
+    await dispatch(deleteEventAsync(pendingEventDelete.id)).unwrap();
+    logger.info(`Holiday ${holidayId} deleted successfully`);
     
     // If there are conflicting events, always regenerate them
+    let updatedEvents = 0;
     if (shouldRegenerateEvents && conflictingEvents.length > 0) {
       try {
         logger.debug(`Regenerating ${conflictingEvents.length} events affected by holiday deletion`);
@@ -494,6 +520,7 @@ const Calendar: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // For each affected event, we need to "update" it to regenerate sub-events
+        const updatePromises = [];
         for (const eventProps of conflictingEvents) {
           // Skip if it's a holiday itself - we don't need to adjust holidays
           if (eventProps.type === 'holiday') continue;
@@ -502,22 +529,39 @@ const Calendar: React.FC = () => {
           
           // Update with the same event properties
           // The sub-events will be regenerated without considering the deleted holiday
-          dispatch(updateEventAsync({
+          const updatePromise = dispatch(updateEventAsync({
             ...eventProps,
             title: eventProps.title || (eventProps.type === 'oncall' ? 'On-Call Shift' : eventProps.type === 'incident' ? 'Incident' : 'Holiday')
-          }));
+          })).unwrap(); // Wait for each update to complete
+          
+          updatePromises.push(updatePromise);
+          updatedEvents++;
         }
         
-        // Ensure compensation data is updated after regeneration
-        setTimeout(() => {
-          logger.debug('Updating compensation data after holiday deletion');
-          updateCompensationData();
-        }, 500);
+        // Wait for all updates to complete
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises);
+          logger.info(`Successfully updated ${updatedEvents} events after holiday deletion`);
+        }
+        
+        // Clear the cache again to ensure we get fresh calculations
+        calculatorFacade.clearCaches();
+        
+        // Force immediate compensation recalculation
+        await updateCompensationData();
+        logger.info('Compensation data updated after holiday deletion');
         
       } catch (error) {
         logger.error('Error regenerating events after holiday deletion:', error);
         alert('Holiday deleted, but there was an error recalculating affected events. Compensation calculations may be affected.');
+        
+        // Try to update compensation data anyway
+        await updateCompensationData();
       }
+    } else {
+      // Even if we don't regenerate events, we should update compensation data
+      await updateCompensationData();
+      logger.info('Compensation data updated after holiday deletion (no regeneration needed)');
     }
     
     // Reset state

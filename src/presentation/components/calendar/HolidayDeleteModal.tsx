@@ -53,7 +53,7 @@ const EventItem = styled.li`
 const ButtonGroup = styled.div`
   display: flex;
   gap: 1rem;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: 1rem;
 `;
 
@@ -152,21 +152,23 @@ const HolidayDeleteModal: React.FC<HolidayDeleteModalProps> = ({
           )}
         </ModalContent>
         <ButtonGroup>
-          <Button onClick={onCancel}>
-            Cancel
-          </Button>
+          <div>
+            <Button onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
           
-          {affectedEvents.length > 0 ? (
-            <>
+          <div>
+            {affectedEvents.length > 0 ? (
               <Button primary onClick={() => onDelete(true)}>
                 Delete Holiday & Recalculate Events
               </Button>
-            </>
-          ) : (
-            <Button danger onClick={() => onDelete(false)}>
-              Delete Holiday
-            </Button>
-          )}
+            ) : (
+              <Button danger onClick={() => onDelete(false)}>
+                Delete Holiday
+              </Button>
+            )}
+          </div>
         </ButtonGroup>
       </ModalContainer>
     </ModalOverlay>
