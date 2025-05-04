@@ -40,7 +40,7 @@ export class CompensationCalculatorFacade {
   private eventSpansAcrossMonths(event: CalendarEvent): boolean {
     const start = new Date(event.start);
     const end = new Date(event.end);
-    return !isSameMonth(start, end);
+    return getMonthKey(start) !== getMonthKey(end);
   }
 
   /**
@@ -99,6 +99,17 @@ export class CompensationCalculatorFacade {
   }
   
   /**
+   * Filter sub-events that belong to a specific month
+   */
+  private filterSubEventsByMonth(subEvents: SubEvent[], monthKey: string): SubEvent[] {
+    return subEvents.filter(subEvent => {
+      const subEventStart = new Date(subEvent.start);
+      const subEventMonthKey = getMonthKey(subEventStart);
+      return subEventMonthKey === monthKey;
+    });
+  }
+  
+  /**
    * Calculate compensation breakdown for a specific month
    * This method ensures sub-events are loaded before calculation
    * and properly handles events that span across month boundaries
@@ -141,10 +152,13 @@ export class CompensationCalculatorFacade {
       // Get relevant event IDs
       const eventIds = monthEvents.map(event => event.id);
       
-      // Filter sub-events for the current month's events
-      const relevantSubEvents = allSubEvents.filter(subEvent => 
+      // First filter sub-events by parent event ID
+      const eventSubEvents = allSubEvents.filter(subEvent => 
         eventIds.includes(subEvent.parentEventId)
       );
+      
+      // Then filter sub-events by month
+      const relevantSubEvents = this.filterSubEventsByMonth(eventSubEvents, monthKey);
       
       logger.info(`Found ${relevantSubEvents.length} relevant sub-events for month ${monthKey}`);
       
