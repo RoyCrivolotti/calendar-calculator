@@ -136,8 +136,8 @@ const HolidayConflictModal: React.FC<HolidayConflictModalProps> = ({
                 ))}
               </ConflictList>
               <p>
-                Would you like to automatically update these events' sub-events to account for the holiday? 
-                This ensures compensation calculations reflect the holiday status.
+                These events' sub-events will be automatically updated to account for the holiday.
+                This ensures accurate compensation calculations that reflect the holiday status.
               </p>
             </>
           ) : (
@@ -165,11 +165,8 @@ const HolidayConflictModal: React.FC<HolidayConflictModalProps> = ({
           </Button>
           {isHoliday ? (
             <>
-              <Button onClick={onContinue}>
-                Continue Without Adjusting
-              </Button>
               <Button primary onClick={onAdjust}>
-                Adjust Events
+                Save Holiday & Adjust Events
               </Button>
             </>
           ) : (

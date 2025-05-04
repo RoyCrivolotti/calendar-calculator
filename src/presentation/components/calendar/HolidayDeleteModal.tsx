@@ -145,8 +145,8 @@ const HolidayDeleteModal: React.FC<HolidayDeleteModalProps> = ({
                 ))}
               </EventList>
               <p>
-                Would you like to recalculate these events' sub-events to reflect that this day is no longer a holiday?
-                This will update compensation calculations accordingly.
+                When this holiday is deleted, these events' sub-events will be recalculated to reflect that this day is no longer a holiday.
+                This will ensure compensation calculations are correctly updated.
               </p>
             </>
           )}
@@ -158,11 +158,8 @@ const HolidayDeleteModal: React.FC<HolidayDeleteModalProps> = ({
           
           {affectedEvents.length > 0 ? (
             <>
-              <Button danger onClick={() => onDelete(false)}>
-                Delete Without Recalculating
-              </Button>
               <Button primary onClick={() => onDelete(true)}>
-                Delete & Recalculate Events
+                Delete Holiday & Recalculate Events
               </Button>
             </>
           ) : (

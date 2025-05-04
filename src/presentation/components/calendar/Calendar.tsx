@@ -423,26 +423,17 @@ const Calendar: React.FC = () => {
     }
   };
 
-  const handleConflictModalContinue = () => {
-    if (!pendingEventSave) return;
-    
-    // Save the event without adjusting conflicting events
-    saveEventWithoutConflictCheck(pendingEventSave);
-    
-    // Close the modal
-    setShowConflictModal(false);
-    setPendingEventSave(null);
-    setConflictingEvents([]);
-    
-    // Clear caches to ensure fresh calculations
-    calculatorFacade.clearCaches();
-  };
-
   const handleConflictModalCancel = () => {
     // Just close the modal without saving anything
     setShowConflictModal(false);
     setPendingEventSave(null);
     setConflictingEvents([]);
+  };
+
+  const handleConflictModalContinue = () => {
+    // This function is now deprecated but we keep it for compatibility
+    // Redirect to handleConflictModalAdjust since we always want to adjust events
+    handleConflictModalAdjust();
   };
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
@@ -481,12 +472,20 @@ const Calendar: React.FC = () => {
     // Group logging for this operation - fallback to console.group
     console.group(`Deleting holiday: ${holidayId}`);
     logger.info(`Deleting holiday: ${holidayId}`);
+    
+    // If there are conflicting events, we should always regenerate
+    const mustRegenerateEvents = conflictingEvents.length > 0;
+    if (mustRegenerateEvents) {
+      logger.info(`Must regenerate ${conflictingEvents.length} events affected by holiday deletion`);
+      shouldRegenerateEvents = true;
+    }
+    
     logger.debug(`Regeneration enabled: ${shouldRegenerateEvents}`);
     
     // Delete the holiday first
     deleteEventWithoutConfirmation(pendingEventDelete);
     
-    // If user chose to regenerate events, do so
+    // If there are conflicting events, always regenerate them
     if (shouldRegenerateEvents && conflictingEvents.length > 0) {
       try {
         logger.debug(`Regenerating ${conflictingEvents.length} events affected by holiday deletion`);
