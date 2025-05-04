@@ -80,7 +80,7 @@ export class ValidationError extends BaseError {
 }
 
 /**
- * Error for data access issues
+ * Base class for database-related errors
  */
 export class DatabaseError extends BaseError {
   constructor(
@@ -91,6 +91,120 @@ export class DatabaseError extends BaseError {
     context?: Record<string, any>
   ) {
     super(message, code, statusCode, originalError, context);
+  }
+}
+
+/**
+ * Error for storage read operations
+ */
+export class StorageReadError extends DatabaseError {
+  constructor(
+    message: string,
+    originalError?: Error,
+    context?: Record<string, any>
+  ) {
+    super(
+      message,
+      'STORAGE_READ_ERROR',
+      500,
+      originalError,
+      context
+    );
+  }
+}
+
+/**
+ * Error for storage write operations
+ */
+export class StorageWriteError extends DatabaseError {
+  constructor(
+    message: string,
+    originalError?: Error,
+    context?: Record<string, any>
+  ) {
+    super(
+      message,
+      'STORAGE_WRITE_ERROR',
+      500,
+      originalError,
+      context
+    );
+  }
+}
+
+/**
+ * Error for storage delete operations
+ */
+export class StorageDeleteError extends DatabaseError {
+  constructor(
+    message: string,
+    originalError?: Error,
+    context?: Record<string, any>
+  ) {
+    super(
+      message,
+      'STORAGE_DELETE_ERROR',
+      500,
+      originalError,
+      context
+    );
+  }
+}
+
+/**
+ * Error for when storage initialization fails
+ */
+export class StorageInitError extends DatabaseError {
+  constructor(
+    message: string,
+    originalError?: Error,
+    context?: Record<string, any>
+  ) {
+    super(
+      message,
+      'STORAGE_INIT_ERROR',
+      500,
+      originalError,
+      context
+    );
+  }
+}
+
+/**
+ * Error for quota exceeded in storage operations
+ */
+export class StorageQuotaError extends DatabaseError {
+  constructor(
+    message: string,
+    originalError?: Error,
+    context?: Record<string, any>
+  ) {
+    super(
+      message,
+      'STORAGE_QUOTA_ERROR',
+      507, // HTTP 507 Insufficient Storage
+      originalError,
+      context
+    );
+  }
+}
+
+/**
+ * Error for transient storage issues that may resolve with retries
+ */
+export class TransientStorageError extends DatabaseError {
+  constructor(
+    message: string,
+    originalError?: Error,
+    context?: Record<string, any>
+  ) {
+    super(
+      message,
+      'TRANSIENT_STORAGE_ERROR',
+      503, // HTTP 503 Service Unavailable
+      originalError,
+      context
+    );
   }
 }
 
@@ -282,4 +396,130 @@ export function formatErrorResponse(error: Error | BaseError): Record<string, an
       statusCode: 500
     }
   };
+}
+
+/**
+ * Determines if an error is considered transient and can be retried
+ */
+export function isTransientError(error: unknown): boolean {
+  if (error instanceof TransientStorageError) {
+    return true;
+  }
+  
+  if (error instanceof StorageQuotaError) {
+    // Quota errors could be resolved if other data is cleared
+    return true;
+  }
+  
+  if (error instanceof Error) {
+    // Check for network-related issues
+    const errorMessage = error.message.toLowerCase();
+    const isNetworkError = errorMessage.includes('network') || 
+                         errorMessage.includes('connection') ||
+                         errorMessage.includes('offline') ||
+                         errorMessage.includes('timeout');
+                         
+    if (isNetworkError) {
+      return true;
+    }
+    
+    // Check for localStorage/IndexedDB specific transient errors
+    const isStorageTransient = errorMessage.includes('quota') ||
+                             errorMessage.includes('full') ||
+                             errorMessage.includes('available') ||
+                             errorMessage.includes('temporary');
+    
+    if (isStorageTransient) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Retry an operation with exponential backoff
+ * @param operation Function to retry
+ * @param options Retry options
+ * @returns Promise with the operation result
+ */
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  options: {
+    retries?: number,
+    initialDelay?: number,
+    maxDelay?: number,
+    factor?: number,
+    operationName?: string,
+    onRetry?: (error: unknown, attempt: number, delay: number) => void
+  } = {}
+): Promise<T> {
+  const {
+    retries = 3,
+    initialDelay = 300,
+    maxDelay = 5000,
+    factor = 2,
+    operationName = 'operation',
+    onRetry = (error, attempt, delay) => {
+      logger.warn(`Retrying ${operationName} (attempt ${attempt}/${retries}) after ${delay}ms due to error:`, 
+        error instanceof Error ? error.message : String(error));
+    }
+  } = options;
+  
+  let attempt = 0;
+  let lastError: unknown;
+  
+  while (attempt <= retries) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      attempt++;
+      
+      // If we've used all retries or it's not a transient error, throw
+      if (attempt > retries || !isTransientError(error)) {
+        throw error;
+      }
+      
+      // Calculate delay with exponential backoff
+      const delay = Math.min(initialDelay * Math.pow(factor, attempt - 1), maxDelay);
+      
+      // Add some jitter to prevent all retries happening at exactly the same time
+      const jitteredDelay = delay * (0.8 + Math.random() * 0.4);
+      
+      // Call the retry callback
+      onRetry(error, attempt, Math.round(jitteredDelay));
+      
+      // Wait before the next attempt
+      await new Promise(resolve => setTimeout(resolve, jitteredDelay));
+    }
+  }
+  
+  // This should never happen due to the throw above, but TypeScript needs it
+  throw lastError;
+}
+
+/**
+ * Combines trackOperation and withRetry to provide a complete solution for 
+ * operations that need both tracking and retry capabilities
+ */
+export async function trackWithRetry<T>(
+  operationName: string,
+  operation: () => Promise<T>,
+  options: {
+    context?: Record<string, any>,
+    retries?: number,
+    initialDelay?: number,
+    maxDelay?: number,
+    factor?: number,
+    onRetry?: (error: unknown, attempt: number, delay: number) => void
+  } = {}
+): Promise<T> {
+  const { context = {}, ...retryOptions } = options;
+  
+  return trackOperation(
+    operationName,
+    () => withRetry(operation, { ...retryOptions, operationName }),
+    context
+  );
 } 

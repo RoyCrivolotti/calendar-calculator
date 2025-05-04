@@ -1,92 +1,184 @@
 import { CalendarEvent, CalendarEventProps } from '../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../domain/calendar/repositories/CalendarEventRepository';
 import { getLogger } from '../../utils/logger';
+import { 
+  trackWithRetry, 
+  StorageReadError, 
+  StorageWriteError, 
+  StorageDeleteError,
+  NotFoundError
+} from '../../utils/errorHandler';
 
 const STORAGE_KEY = 'calendar_events';
 const logger = getLogger('localStorage-repository');
 
 export class LocalStorageCalendarEventRepository implements CalendarEventRepository {
   async save(events: CalendarEvent[]): Promise<void> {
-    const startTime = performance.now();
-    try {
-      logger.debug(`Saving ${events.length} events to localStorage`);
-      const serializedEvents = events.map(event => event.toJSON());
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(serializedEvents));
-      const endTime = performance.now();
-      logger.debug(`Saved ${events.length} events to localStorage (${(endTime - startTime).toFixed(2)}ms)`);
-    } catch (error) {
-      logger.error('Failed to save events to localStorage:', error);
-      throw new Error('Failed to save events to local storage');
-    }
+    return trackWithRetry(
+      'SaveEvents',
+      async () => {
+        logger.debug(`Saving ${events.length} events to localStorage`);
+        
+        try {
+          const serializedEvents = events.map(event => event.toJSON());
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(serializedEvents));
+          
+          logger.debug(`Saved ${events.length} events to localStorage`);
+        } catch (error) {
+          // Convert to a more specific error type
+          logger.error('Failed to save events to localStorage:', error);
+          throw new StorageWriteError(
+            'Failed to save events to local storage',
+            error instanceof Error ? error : new Error(String(error)),
+            { eventCount: events.length }
+          );
+        }
+      },
+      {
+        context: { 
+          eventCount: events.length,
+          storageType: 'localStorage'
+        },
+        retries: 2
+      }
+    );
   }
 
   async getAll(): Promise<CalendarEvent[]> {
-    const startTime = performance.now();
-    try {
-      const serializedEvents = localStorage.getItem(STORAGE_KEY);
-      if (!serializedEvents) {
-        logger.debug('No events found in localStorage');
-        return [];
-      }
+    return trackWithRetry(
+      'GetAllEvents',
+      async () => {
+        try {
+          const serializedEvents = localStorage.getItem(STORAGE_KEY);
+          if (!serializedEvents) {
+            logger.debug('No events found in localStorage');
+            return [];
+          }
 
-      const eventsData = JSON.parse(serializedEvents) as CalendarEventProps[];
-      const events = eventsData.map(eventData => 
-        CalendarEvent.create({
-          id: eventData.id,
-          start: new Date(eventData.start),
-          end: new Date(eventData.end),
-          type: eventData.type
-        })
-      );
-      
-      const endTime = performance.now();
-      logger.debug(`Loaded ${events.length} events from localStorage (${(endTime - startTime).toFixed(2)}ms)`);
-      return events;
-    } catch (error) {
-      logger.error('Failed to load events from localStorage:', error);
-      throw new Error('Failed to load events from local storage');
-    }
+          const eventsData = JSON.parse(serializedEvents) as CalendarEventProps[];
+          const events = eventsData.map(eventData => 
+            CalendarEvent.create({
+              id: eventData.id,
+              start: new Date(eventData.start),
+              end: new Date(eventData.end),
+              type: eventData.type,
+              title: eventData.title
+            })
+          );
+          
+          logger.debug(`Loaded ${events.length} events from localStorage`);
+          return events;
+        } catch (error) {
+          logger.error('Failed to load events from localStorage:', error);
+          throw new StorageReadError(
+            'Failed to load events from local storage',
+            error instanceof Error ? error : new Error(String(error)),
+            { operation: 'getAll' }
+          );
+        }
+      },
+      {
+        context: { 
+          operation: 'getAll',
+          storageType: 'localStorage'
+        },
+        retries: 3
+      }
+    );
   }
 
   async delete(id: string): Promise<void> {
-    const startTime = performance.now();
-    try {
-      const events = await this.getAll();
-      const eventToDelete = events.find(event => event.id === id);
-      if (!eventToDelete) {
-        logger.warn(`Attempted to delete non-existent event with ID: ${id}`);
-        return;
+    return trackWithRetry(
+      `DeleteEvent(${id})`,
+      async () => {
+        try {
+          const events = await this.getAll();
+          const eventToDelete = events.find(event => event.id === id);
+          
+          if (!eventToDelete) {
+            logger.warn(`Attempted to delete non-existent event with ID: ${id}`);
+            // Just return without error since the event doesn't exist anyway
+            return;
+          }
+          
+          const updatedEvents = events.filter(event => event.id !== id);
+          await this.save(updatedEvents);
+          
+          logger.debug(`Deleted event ${id} from localStorage`);
+        } catch (error) {
+          // Check if it's already a StorageReadError from getAll()
+          if (error instanceof StorageReadError) {
+            throw error;
+          }
+          
+          logger.error(`Failed to delete event ${id} from localStorage:`, error);
+          throw new StorageDeleteError(
+            `Failed to delete event ${id} from local storage`,
+            error instanceof Error ? error : new Error(String(error)),
+            { eventId: id }
+          );
+        }
+      },
+      {
+        context: { 
+          eventId: id,
+          storageType: 'localStorage',
+          operation: 'delete'
+        },
+        retries: 2
       }
-      
-      const updatedEvents = events.filter(event => event.id !== id);
-      await this.save(updatedEvents);
-      
-      const endTime = performance.now();
-      logger.debug(`Deleted event ${id} from localStorage (${(endTime - startTime).toFixed(2)}ms)`);
-    } catch (error) {
-      logger.error(`Failed to delete event ${id} from localStorage:`, error);
-      throw new Error('Failed to delete event from local storage');
-    }
+    );
   }
 
   async update(event: CalendarEvent): Promise<void> {
-    const startTime = performance.now();
-    try {
-      const events = await this.getAll();
-      const exists = events.some(e => e.id === event.id);
-      
-      if (!exists) {
-        logger.warn(`Attempted to update non-existent event: ${event.id}`);
+    return trackWithRetry(
+      `UpdateEvent(${event.id})`,
+      async () => {
+        try {
+          const events = await this.getAll();
+          const exists = events.some(e => e.id === event.id);
+          
+          if (!exists) {
+            logger.warn(`Attempted to update non-existent event: ${event.id}`);
+            throw new NotFoundError(
+              `Event with ID ${event.id} not found`,
+              'EVENT_NOT_FOUND',
+              404,
+              undefined,
+              { eventId: event.id }
+            );
+          }
+          
+          const updatedEvents = events.map(e => e.id === event.id ? event : e);
+          await this.save(updatedEvents);
+          
+          logger.debug(`Updated event ${event.id} in localStorage`);
+        } catch (error) {
+          // Don't wrap NotFoundError or StorageReadError
+          if (error instanceof NotFoundError || error instanceof StorageReadError) {
+            throw error;
+          }
+          
+          logger.error(`Failed to update event ${event.id} in localStorage:`, error);
+          throw new StorageWriteError(
+            `Failed to update event ${event.id} in local storage`,
+            error instanceof Error ? error : new Error(String(error)),
+            { 
+              eventId: event.id,
+              eventType: event.type
+            }
+          );
+        }
+      },
+      {
+        context: { 
+          eventId: event.id,
+          eventType: event.type,
+          operation: 'update',
+          storageType: 'localStorage'
+        },
+        retries: 2
       }
-      
-      const updatedEvents = events.map(e => e.id === event.id ? event : e);
-      await this.save(updatedEvents);
-      
-      const endTime = performance.now();
-      logger.debug(`Updated event ${event.id} in localStorage (${(endTime - startTime).toFixed(2)}ms)`);
-    } catch (error) {
-      logger.error(`Failed to update event ${event.id} in localStorage:`, error);
-      throw new Error('Failed to update event in local storage');
-    }
+    );
   }
 } 
