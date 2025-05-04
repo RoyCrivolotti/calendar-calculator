@@ -774,15 +774,30 @@ const EventItem = styled.div`
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   
   &:last-child {
     margin-bottom: 0;
   }
 `;
 
+const EventTimeContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
 const EventTime = styled.span`
   color: #334155;
   font-size: 0.875rem;
+`;
+
+const EventMetadata = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 `;
 
 const EventDuration = styled.span`
@@ -1358,11 +1373,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <EventItem key={event.id}>
                 <EventTime>
                   {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTime>
-                <EventDuration>
-                  Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                </EventDuration>
+                <EventMetadata>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
+                  <EventDuration>
+                    Duration: {formatDuration(new Date(event.start), new Date(event.end))}
+                  </EventDuration>
+                </EventMetadata>
               </EventItem>
             ))}
           </EventTypeSection>
@@ -1376,11 +1393,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <EventItem key={event.id}>
                 <EventTime>
                   {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTime>
-                <EventDuration>
-                  Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                </EventDuration>
+                <EventMetadata>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
+                  <EventDuration>
+                    Duration: {formatDuration(new Date(event.start), new Date(event.end))}
+                  </EventDuration>
+                </EventMetadata>
               </EventItem>
             ))}
           </EventTypeSection>
