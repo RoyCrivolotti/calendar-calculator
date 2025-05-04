@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
@@ -6,11 +6,12 @@ import { CalendarEvent, createCalendarEvent, CalendarEventProps } from '../../..
 import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import CompensationSection from './CompensationSection';
-import EventDetailsModal from './EventDetailsModal';
-import CalendarWrapper from './CalendarWrapper';
 import MonthlyCompensationSummary from './MonthlyCompensationSummary';
-import HolidayConflictModal from './HolidayConflictModal';
-import HolidayDeleteModal from './HolidayDeleteModal';
+import CalendarWrapper from './CalendarWrapper';
+// Lazy load modals since they are only needed when opened
+const EventDetailsModal = lazy(() => import('./EventDetailsModal'));
+const HolidayConflictModal = lazy(() => import('./HolidayConflictModal'));
+const HolidayDeleteModal = lazy(() => import('./HolidayDeleteModal'));
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
   setCurrentDate,
@@ -36,6 +37,19 @@ const CalendarContainer = styled.div`
   min-height: 100vh;
   padding: 1rem;
   gap: 1rem;
+`;
+
+// Simple loading fallback for modals
+const ModalLoadingFallback = styled.div`
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  min-width: 300px;
+  min-height: 200px;
 `;
 
 const Calendar: React.FC = () => {
@@ -611,30 +625,40 @@ const Calendar: React.FC = () => {
         onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
       />
       <MonthlyCompensationSummary data={compensationData} />
+      
+      {/* Lazy-loaded modals with Suspense */}
       {showEventModal && selectedEvent && (
-        <EventDetailsModal
-          event={new CalendarEvent(selectedEvent)}
-          onSave={handleSaveEvent}
-          onDelete={handleDeleteEvent}
-          onClose={handleCloseModal}
-        />
+        <Suspense fallback={<ModalLoadingFallback>Loading...</ModalLoadingFallback>}>
+          <EventDetailsModal
+            event={new CalendarEvent(selectedEvent)}
+            onSave={handleSaveEvent}
+            onDelete={handleDeleteEvent}
+            onClose={handleCloseModal}
+          />
+        </Suspense>
       )}
+      
       {showConflictModal && pendingEventSave && (
-        <HolidayConflictModal
-          isHoliday={isHolidayConflict}
-          conflicts={conflictingEvents}
-          onAdjust={handleConflictModalAdjust}
-          onContinue={handleConflictModalContinue}
-          onCancel={handleConflictModalCancel}
-        />
+        <Suspense fallback={<ModalLoadingFallback>Loading...</ModalLoadingFallback>}>
+          <HolidayConflictModal
+            isHoliday={isHolidayConflict}
+            conflicts={conflictingEvents}
+            onAdjust={handleConflictModalAdjust}
+            onContinue={handleConflictModalContinue}
+            onCancel={handleConflictModalCancel}
+          />
+        </Suspense>
       )}
+      
       {showDeleteModal && pendingEventDelete && (
-        <HolidayDeleteModal
-          holidayDate={pendingEventDelete.start}
-          affectedEvents={conflictingEvents}
-          onDelete={handleDeleteWithRegeneration}
-          onCancel={handleCancelDelete}
-        />
+        <Suspense fallback={<ModalLoadingFallback>Loading...</ModalLoadingFallback>}>
+          <HolidayDeleteModal
+            holidayDate={pendingEventDelete.start}
+            affectedEvents={conflictingEvents}
+            onDelete={handleDeleteWithRegeneration}
+            onCancel={handleCancelDelete}
+          />
+        </Suspense>
       )}
     </CalendarContainer>
   );
