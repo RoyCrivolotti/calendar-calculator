@@ -566,6 +566,52 @@ const LegendColor = styled.div<{ color: string }>`
   background: ${props => props.color};
 `;
 
+const ComparisonSection = styled(DetailSection)`
+  position: relative;
+`;
+
+const ComparisonScrollButton = styled.button`
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: white;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+
+  &:hover {
+    background: #f8fafc;
+    border-color: #3b82f6;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    &:hover {
+      background: white;
+      border-color: #e2e8f0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+  }
+
+  &.prev {
+    left: -16px;
+  }
+
+  &.next {
+    right: -16px;
+  }
+`;
+
 interface MonthData {
   date: Date;
   data: CompensationBreakdown[];
@@ -1032,6 +1078,36 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     );
   };
 
+  const handlePreviousMonth = () => {
+    if (!selectedMonth) return;
+    
+    const currentIndex = monthsWithData.findIndex(
+      m => m.date.getTime() === selectedMonth.getTime()
+    );
+    
+    if (currentIndex > 0) {
+      setSelectedMonth(monthsWithData[currentIndex - 1].date);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (!selectedMonth) return;
+    
+    const currentIndex = monthsWithData.findIndex(
+      m => m.date.getTime() === selectedMonth.getTime()
+    );
+    
+    if (currentIndex < monthsWithData.length - 1) {
+      setSelectedMonth(monthsWithData[currentIndex + 1].date);
+    }
+  };
+
+  // Get the selected month index for navigation disabling
+  const selectedMonthIndex = useMemo(() => {
+    if (!selectedMonth) return -1;
+    return monthsWithData.findIndex(m => m.date.getTime() === selectedMonth.getTime());
+  }, [selectedMonth, monthsWithData]);
+
   return (
     <Container>
       <ScrollButton className="left" onClick={scrollLeft}>←</ScrollButton>
@@ -1208,8 +1284,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             
             {/* Month to Month Comparison - if we have previous month data */}
             {monthsWithData.length > 1 && (
-              <DetailSection>
+              <ComparisonSection>
                 <DetailTitle>Comparison with Previous Months</DetailTitle>
+                
+                <ComparisonScrollButton 
+                  className="prev" 
+                  onClick={handlePreviousMonth}
+                  disabled={selectedMonthIndex <= 0}
+                  title="Previous month"
+                >
+                  ←
+                </ComparisonScrollButton>
+                
                 <BreakdownCard>
                   {monthsWithData.slice(-3).map(({ date, data }) => {
                     const total = data.find(d => d.type === 'total')?.amount || 0;
@@ -1236,7 +1322,16 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                     );
                   })}
                 </BreakdownCard>
-              </DetailSection>
+                
+                <ComparisonScrollButton 
+                  className="next" 
+                  onClick={handleNextMonth}
+                  disabled={selectedMonthIndex >= monthsWithData.length - 1}
+                  title="Next month"
+                >
+                  →
+                </ComparisonScrollButton>
+              </ComparisonSection>
             )}
           </ModalContent>
         </Modal>
