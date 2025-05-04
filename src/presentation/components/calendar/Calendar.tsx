@@ -28,6 +28,7 @@ import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
 import { logger, LogLevel } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
+import { trackOperation } from '../../../utils/errorHandler';
 
 const CalendarContainer = styled.div`
   display: flex;
@@ -296,69 +297,86 @@ const Calendar: React.FC = () => {
   };
 
   const handleSaveEvent = async (event: CalendarEvent) => {
-    logger.info(`Attempting to save event: ${event.id} (${event.type})`);
-    
-    // Check for conflicts
-    const conflicts = findConflictingEvents(event, events);
+    // Check for conflicts with other events when updating or creating
     const isNewEvent = event.id.startsWith('temp-');
-    
-    if (conflicts.length > 0) {
-      logger.info(`Found ${conflicts.length} conflicting events`);
-      setConflictingEvents(conflicts);
+  
+    // If we're creating a new holiday, check for conflicts with existing events
+    // We do this to make sure the sub-events will be regenerated properly
+    const conflictingEvents = findConflictingEvents(event, events);
+    const conflictingEventsExist = conflictingEvents.length > 0;
+
+    if (conflictingEventsExist) {
+      // Show the confirmation dialog before proceeding
       setPendingEventSave(event);
+      setConflictingEvents(conflictingEvents);
       setIsHolidayConflict(event.type === 'holiday');
       setShowConflictModal(true);
       return;
     }
-    
-    await saveEventWithoutConflictCheck(event);
+
+    saveEventWithoutConflictCheck(event);
   };
-  
+
   const saveEventWithoutConflictCheck = (event: CalendarEvent) => {
-    let eventProps = event.toJSON();
+    const isNewEvent = event.id.startsWith('temp-');
+    logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
     
-    // If it's a temporary event, generate a new UUID
-    if (eventProps.id.startsWith('temp-')) {
-      eventProps = {
-        ...eventProps,
+    // New event with a temporary ID, create a new one
+    if (isNewEvent) {
+      const eventWithoutTempId = createCalendarEvent({
+        ...event.toJSON(),
         id: crypto.randomUUID()
-      };
-    }
-    
-    if (events.find(e => e.id === event.id)) {
-      // If event exists, update it
-      dispatch(updateEventAsync(eventProps));
+      });
+      dispatch(createEventAsync(eventWithoutTempId.toJSON()));
     } else {
-      // If it's a new event, add it
-      dispatch(createEventAsync(eventProps));
+      // Existing event, just update it
+      dispatch(updateEventAsync(event.toJSON()));
     }
-    
+
+    // Clear modals
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
+    
+    // Clear caches to ensure fresh calculations
+    calculatorFacade.clearCaches();
   };
-  
+
   const handleConflictModalAdjust = async () => {
+    // This function adjusts the conflicting events to accommodate the new event
     if (!pendingEventSave) return;
-    
-    // Only save the event once, and only here
-    // We'll let regenerateConflictingSubEvents use the event without saving it again
-    saveEventWithoutConflictCheck(pendingEventSave);
-    
-    // For holiday conflicts, regenerate sub-events
-    // Pass true for skipHolidaySave to prevent duplicate saving
-    if (isHolidayConflict) {
-      await regenerateConflictingSubEvents(pendingEventSave, conflictingEvents, true);
+
+    try {
+      await trackOperation(
+        `RegenerateConflictingSubEvents(${pendingEventSave.id})`,
+        async () => {
+          await regenerateConflictingSubEvents(pendingEventSave, conflictingEvents);
+          
+          // Save the pending event
+          saveEventWithoutConflictCheck(pendingEventSave);
+          
+          // Close the modal
+          setShowConflictModal(false);
+          setPendingEventSave(null);
+          setConflictingEvents([]);
+          
+          return { 
+            success: true, 
+            conflictingEventsCount: conflictingEvents.length,
+            eventType: pendingEventSave.type
+          };
+        },
+        {
+          type: pendingEventSave.type,
+          conflictingEventsCount: conflictingEvents.length
+        }
+      );
+    } catch (error) {
+      logger.error('Failed to regenerate sub-events for conflicting events:', error);
+      alert('Failed to update events. Please try again.');
+      setShowConflictModal(false);
     }
-    
-    // Close the modal
-    setShowConflictModal(false);
-    setPendingEventSave(null);
-    setConflictingEvents([]);
-    
-    // Run diagnostic after a delay
-    setTimeout(() => analyzeHolidayDetection(), 1000);
   };
-  
+
   const handleConflictModalContinue = () => {
     if (!pendingEventSave) return;
     
@@ -369,8 +387,11 @@ const Calendar: React.FC = () => {
     setShowConflictModal(false);
     setPendingEventSave(null);
     setConflictingEvents([]);
+    
+    // Clear caches to ensure fresh calculations
+    calculatorFacade.clearCaches();
   };
-  
+
   const handleConflictModalCancel = () => {
     // Just close the modal without saving anything
     setShowConflictModal(false);
@@ -401,6 +422,9 @@ const Calendar: React.FC = () => {
     dispatch(deleteEventAsync(event.id));
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
+    
+    // Clear caches to ensure fresh calculations
+    calculatorFacade.clearCaches();
   };
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {

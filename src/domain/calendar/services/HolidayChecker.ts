@@ -3,6 +3,19 @@ import { SubEvent } from '../entities/SubEvent';
 import { logger } from '../../../utils/logger';
 
 export class HolidayChecker {
+  // Simple static cache to avoid redundant holiday checks
+  private static cache: Map<string, { isHoliday: boolean, timestamp: number }> = new Map();
+  private static readonly CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hour cache TTL
+
+  /**
+   * Clear the holiday check cache
+   * Should be called when holiday events are added, removed, or modified
+   */
+  static clearCache(): void {
+    logger.info('Clearing HolidayChecker cache');
+    HolidayChecker.cache.clear();
+  }
+
   /**
    * Checks if a given date is a holiday based on the holiday events.
    * 
@@ -14,6 +27,15 @@ export class HolidayChecker {
     const dateToCheck = new Date(date);
     // Reset time to ensure we only compare calendar dates
     dateToCheck.setHours(0, 0, 0, 0);
+    
+    // Generate cache key using date string
+    const cacheKey = dateToCheck.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Check if we have a cached result
+    const cachedResult = HolidayChecker.cache.get(cacheKey);
+    if (cachedResult && (Date.now() - cachedResult.timestamp) < HolidayChecker.CACHE_TTL_MS) {
+      return cachedResult.isHoliday;
+    }
     
     logger.debug(`Checking if ${dateToCheck.toDateString()} is a holiday among ${events.length} events`);
     
@@ -54,6 +76,9 @@ export class HolidayChecker {
       logger.debug(`${dateToCheck.toDateString()} is NOT a holiday`);
     }
     
+    // Cache the result
+    HolidayChecker.cache.set(cacheKey, { isHoliday, timestamp: Date.now() });
+    
     return isHoliday;
   }
 
@@ -70,8 +95,17 @@ export class HolidayChecker {
     // Reset time to ensure we only compare calendar dates
     dateToCheck.setHours(0, 0, 0, 0);
     
+    // Generate cache key using date string
+    const cacheKey = `sub_${dateToCheck.toISOString().split('T')[0]}`; // "sub_YYYY-MM-DD"
+    
+    // Check if we have a cached result
+    const cachedResult = HolidayChecker.cache.get(cacheKey);
+    if (cachedResult && (Date.now() - cachedResult.timestamp) < HolidayChecker.CACHE_TTL_MS) {
+      return cachedResult.isHoliday;
+    }
+    
     // Check if there's a sub-event for this day that is marked as a holiday
-    return subEvents.some(subEvent => {
+    const isHoliday = subEvents.some(subEvent => {
       // Only check sub-events from holiday parent events
       if (subEvent.type !== 'holiday') return false;
       
@@ -81,5 +115,10 @@ export class HolidayChecker {
       // Check if the date matches the sub-event's start date
       return dateToCheck.getTime() === subEventStart.getTime();
     });
+    
+    // Cache the result
+    HolidayChecker.cache.set(cacheKey, { isHoliday, timestamp: Date.now() });
+    
+    return isHoliday;
   }
 } 

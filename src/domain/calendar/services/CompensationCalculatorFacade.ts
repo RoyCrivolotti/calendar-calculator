@@ -7,6 +7,7 @@ import { logger } from '../../../utils/logger';
 import { getMonthKey, createMonthDate, isSameMonth } from '../../../utils/calendarUtils';
 import { EventCompensationService } from './EventCompensationService';
 import { CompensationSummary } from '../types/CompensationSummary';
+import { HolidayChecker } from './HolidayChecker';
 
 /**
  * Facade for compensation calculations to ensure consistent results across the application
@@ -30,6 +31,16 @@ export class CompensationCalculatorFacade {
       this.instance = new CompensationCalculatorFacade();
     }
     return this.instance;
+  }
+  
+  /**
+   * Clear all calculation caches
+   * Call this when events or sub-events are modified
+   */
+  public clearCaches(): void {
+    logger.info('Clearing all compensation calculation caches');
+    this.compensationService.clearCache();
+    HolidayChecker.clearCache();
   }
   
   /**

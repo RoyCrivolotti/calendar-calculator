@@ -9,6 +9,19 @@ import { logger } from '../../../utils/logger';
  * Centralized service for all compensation calculations in the application
  */
 export class CompensationService {
+  // Cache storage for expensive calculations
+  private cache: Map<string, { data: CompensationBreakdown[], timestamp: number }> = new Map();
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
+  
+  /**
+   * Clear the calculation cache
+   * This should be called when events or sub-events are modified
+   */
+  public clearCache(): void {
+    logger.info('Clearing CompensationService cache');
+    this.cache.clear();
+  }
+  
   /**
    * Calculate the number of compensated hours for a sub-event
    */
@@ -122,6 +135,16 @@ export class CompensationService {
    */
   calculateMonthlyCompensation(events: CalendarEvent[], subEvents: SubEvent[], date: Date): CompensationBreakdown[] {
     const monthKey = getMonthKey(date);
+    
+    // Generate a simple cache key based on events and sub-events
+    const cacheKey = this.generateCacheKey(events, subEvents, monthKey);
+    
+    // Check if we have a valid cached result
+    const cachedResult = this.cache.get(cacheKey);
+    if (cachedResult && (Date.now() - cachedResult.timestamp) < this.CACHE_TTL_MS) {
+      logger.debug(`Using cached compensation data for ${monthKey}`);
+      return cachedResult.data;
+    }
     
     logger.info(`Calculating compensation for month: ${monthKey}`);
     
@@ -393,6 +416,23 @@ export class CompensationService {
       month: b.month ? b.month.toISOString() : 'undefined'
     })));
 
+    // Store result in cache
+    this.cache.set(cacheKey, {
+      data: breakdown,
+      timestamp: Date.now()
+    });
+
     return breakdown;
+  }
+  
+  /**
+   * Generate a cache key based on events, sub-events, and month
+   */
+  private generateCacheKey(events: CalendarEvent[], subEvents: SubEvent[], monthKey: string): string {
+    // Include the event IDs in the cache key
+    const eventsHash = events.map(e => e.id).sort().join(',');
+    const subEventsHash = subEvents.map(se => se.id).sort().join(',');
+    
+    return `${monthKey}:${eventsHash.length}:${subEventsHash.length}`;
   }
 } 
