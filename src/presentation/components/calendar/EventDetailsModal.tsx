@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from '@emotion/styled';
 import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
@@ -284,81 +284,88 @@ export interface EventDetailsModalProps {
   onClose: () => void;
 }
 
+// Helper functions defined outside of component to avoid dependency issues
+const formatDateForInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({ 
   event, 
   onSave, 
   onDelete,
   onClose 
 }) => {
+  const [title, setTitle] = useState<string>(event.title || '');
+  const [startTime, setStartTime] = useState<string>(formatDateForInput(event.start));
+  const [endTime, setEndTime] = useState<string>(formatDateForInput(event.end));
+  const [isTimeValid, setIsTimeValid] = useState<boolean>(true);
+  const [hasChanges, setHasChanges] = useState<boolean>(event.id.startsWith('temp-'));
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [compensationSummary, setCompensationSummary] = useState<CompensationSummary | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const calculatorFacade = CompensationCalculatorFacade.getInstance();
-  
+  const [isCalculating, setIsCalculating] = useState<boolean>(false);
+  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
+
+  // Set up event listener for escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       }
     };
-
+    
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
-  
-  // Add the formatDuration function
-  const formatDuration = (start: Date, end: Date): string => {
+
+  // Calculate compensation preview when event time changes
+  useEffect(() => {
+    const calculatePreview = async () => {
+      if (!isTimeValid) return;
+      
+      try {
+        setIsCalculating(true);
+        
+        // Create a temporary event with the current times
+        const updatedEvent = createCalendarEvent({
+          ...event.toJSON(),
+          start: new Date(startTime),
+          end: new Date(endTime)
+        });
+        
+        // Calculate compensation for this event
+        const summary = await calculatorFacade.calculateEventCompensation(updatedEvent);
+        setCompensationSummary(summary);
+      } catch (error) {
+        logger.error('Error calculating compensation preview:', error);
+        setCompensationSummary(null);
+      } finally {
+        setIsCalculating(false);
+      }
+    };
+    
+    calculatePreview();
+  }, [startTime, endTime, isTimeValid, event, calculatorFacade]);
+
+  const formatDuration = useCallback((start: Date, end: Date): string => {
     const durationMs = end.getTime() - start.getTime();
     const hours = Math.floor(durationMs / (1000 * 60 * 60));
     const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
     return `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`;
-  };
+  }, []);
 
-  // Fix the useEffect that loads compensation summary
-  useEffect(() => {
-    if (!event || !event.id || !event.start || !event.end) return;
-    
-    // Track the operation of loading compensation summary
-    trackOperation(
-      `LoadCompensationSummary(${event.id})`,
-      async () => {
-        setIsLoading(true);
-        try {
-          const summary = await calculatorFacade.calculateEventCompensation(event);
-          
-          logger.debug(`Loaded compensation summary for event ${event.id}: €${summary.total.toFixed(2)}`);
-          
-          setCompensationSummary(summary);
-          return summary;
-        } finally {
-          setIsLoading(false);
-        }
-      },
-      { 
-        eventType: event.type, 
-        eventDuration: formatDuration(new Date(event.start), new Date(event.end)) 
-      }
-    ).catch(error => {
-      // Error already logged by trackOperation
-      setCompensationSummary(null);
-    });
-  }, [event, calculatorFacade]);
-
-  const formatDateForInput = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  const [startTime, setStartTime] = useState(formatDateForInput(event.start));
-  const [endTime, setEndTime] = useState(formatDateForInput(event.end));
-  const [validationError, setValidationError] = useState<string | null>(null);
-
-  const validateTimes = (start: string, end: string): boolean => {
+  const validateTimes = useCallback((start: string, end: string): boolean => {
     const startDate = new Date(start);
     const endDate = new Date(end);
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      setValidationError('Invalid date format');
+      return false;
+    }
     
     if (startDate >= endDate) {
       setValidationError('End time must be after start time');
@@ -367,113 +374,73 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     
     setValidationError(null);
     return true;
-  };
+  }, []);
 
-  const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStartTimeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartTime = e.target.value;
-    logger.debug(`Start time changed for event ${event.id}: ${newStartTime}`);
     setStartTime(newStartTime);
-    
-    // If new start time is after end time, adjust end time
-    const newStart = new Date(newStartTime);
-    const currentEnd = new Date(endTime);
-    
-    if (newStart >= currentEnd) {
-      // Set end time to start time + 1 hour
-      const adjustedEnd = new Date(newStart);
-      adjustedEnd.setHours(adjustedEnd.getHours() + 1);
-      const newEndTime = formatDateForInput(adjustedEnd);
-      logger.debug(`Auto-adjusting end time to: ${newEndTime}`);
-      setEndTime(newEndTime);
-    } else {
-      validateTimes(newStartTime, endTime);
-    }
-  };
+    const valid = validateTimes(newStartTime, endTime);
+    setIsTimeValid(valid);
+    setHasChanges(true);
+  }, [endTime, validateTimes]);
 
-  const handleEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEndTimeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newEndTime = e.target.value;
-    logger.debug(`End time changed for event ${event.id}: ${newEndTime}`);
     setEndTime(newEndTime);
-    validateTimes(startTime, newEndTime);
-  };
+    const valid = validateTimes(startTime, newEndTime);
+    setIsTimeValid(valid);
+    setHasChanges(true);
+  }, [startTime, validateTimes]);
 
-  const handleSave = async () => {
-    const newStart = new Date(startTime);
-    const newEnd = new Date(endTime);
-
-    if (newStart >= newEnd) {
-      logger.warn(`Invalid time range for event ${event.id}: ${startTime} - ${endTime}`);
-      setValidationError('End time must be after start time');
-      return;
-    }
-
+  const handleSave = useCallback(async () => {
+    if (!isTimeValid) return;
+    
     try {
-      await trackOperation(
-        `SaveEventChanges(${event.id})`,
-        async () => {
-          logger.info(`Saving event ${event.id} with time range: ${startTime} - ${endTime}`);
-          const updatedEvent = createCalendarEvent({
-            ...event,
-            start: newStart,
-            end: newEnd,
-            type: event.type
-          });
-          
-          onSave(updatedEvent);
-          onClose();
-          return { success: true, eventId: event.id };
-        },
-        {
-          eventType: event.type,
-          startTime: newStart.toISOString(),
-          endTime: newEnd.toISOString(),
-          durationHours: ((newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60)).toFixed(1)
-        }
-      );
+      // Create updated event with new times
+      const updatedEvent = createCalendarEvent({
+        ...event.toJSON(),
+        title,
+        start: new Date(startTime),
+        end: new Date(endTime)
+      });
+      
+      // Pass to parent for saving
+      onSave(updatedEvent);
     } catch (error) {
-      logger.error(`Failed to save event ${event.id}:`, error);
-      // Keep modal open when there's an error
-      setValidationError('Failed to save event. Please try again.');
+      logger.error('Error saving event:', error);
     }
-  };
+  }, [event, title, startTime, endTime, isTimeValid, onSave]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     try {
-      await trackOperation(
-        `DeleteEvent(${event.id})`,
-        async () => {
-          logger.info(`User initiated deletion of event: ${event.id} (${event.type})`);
-          onClose();
-          onDelete(event);
-          return { success: true, eventId: event.id };
-        },
-        {
-          eventType: event.type,
-          eventStart: event.start.toISOString(),
-          eventEnd: event.end.toISOString()
-        }
-      );
+      onDelete(event);
     } catch (error) {
-      logger.error(`Failed to delete event ${event.id}:`, error);
-      alert('Failed to delete event. Please try again.');
+      logger.error('Error deleting event:', error);
     }
-  };
-  
-  // Calculate simple duration in hours
-  const durationHours = ((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1);
+  }, [event, onDelete]);
 
-  // Format event type label
-  const getEventTypeLabel = () => {
+  const getEventTypeLabel = useCallback(() => {
     switch(event.type) {
       case 'oncall': return 'On-Call Shift';
       case 'incident': return 'Incident';
       default: return 'Holiday';
     }
-  };
+  }, [event.type]);
+
+  // Calculate simple duration in hours
+  const durationHours = ((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1);
+
+  // Handle modal overlay click with stopPropagation
+  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
+    // Only close if directly clicking the overlay (not its children)
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  }, [onClose]);
 
   return (
-    <ModalOverlay onClick={onClose}>
-      <ModalContent onClick={e => e.stopPropagation()}>
+    <ModalOverlay onClick={handleOverlayClick}>
+      <ModalContent>
         <CloseButton onClick={onClose} aria-label="Close modal">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -482,33 +449,31 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
         </CloseButton>
         
         <ModalHeader>
-          <ModalTitle>Event Details</ModalTitle>
+          <ModalTitle>{getEventTypeLabel()}</ModalTitle>
           <EventTypeIndicator eventType={event.type}>
             {getEventTypeLabel()}
           </EventTypeIndicator>
         </ModalHeader>
         
         <ContentSection>
-          <SectionTitle>Event Time</SectionTitle>
+          <SectionTitle>Event Details</SectionTitle>
           <TimeInputGrid>
             <TimeInputGroup>
-              <InputLabel htmlFor="start-time">Start Time</InputLabel>
+              <InputLabel htmlFor="startTime">Start Time</InputLabel>
               <TimeInput
-                id="start-time"
+                id="startTime"
                 type="datetime-local"
                 value={startTime}
                 onChange={handleStartTimeChange}
-                disabled={event.type === 'holiday'}
               />
             </TimeInputGroup>
             <TimeInputGroup>
-              <InputLabel htmlFor="end-time">End Time</InputLabel>
+              <InputLabel htmlFor="endTime">End Time</InputLabel>
               <TimeInput
-                id="end-time"
+                id="endTime"
                 type="datetime-local"
                 value={endTime}
                 onChange={handleEndTimeChange}
-                disabled={event.type === 'holiday'}
               />
             </TimeInputGroup>
           </TimeInputGrid>
@@ -518,6 +483,9 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           )}
           
           <EventInfoGrid>
+            <InfoLabel>Type:</InfoLabel>
+            <InfoValue>{getEventTypeLabel()}</InfoValue>
+            
             <InfoLabel>Duration:</InfoLabel>
             <InfoValue>{durationHours} hours</InfoValue>
             
@@ -533,9 +501,9 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
         </ContentSection>
         
         {/* Compensation Details Section */}
-        {isLoading ? (
+        {isCalculating ? (
           <LoadingIndicator>
-            Loading compensation details...
+            Calculating compensation...
           </LoadingIndicator>
         ) : (
           compensationSummary && <CompensationSummarySection summary={compensationSummary} />
@@ -545,20 +513,45 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           <ActionButton 
             variant="primary" 
             onClick={handleSave}
-            disabled={!!validationError || (event.type === 'holiday' && !event.id.startsWith('temp-') && event.id.length > 0)}
+            disabled={!isTimeValid}
           >
             Save Changes
           </ActionButton>
-          <ActionButton 
-            variant="delete" 
-            onClick={handleDelete}
-          >
-            Delete Event
-          </ActionButton>
+          {!event.id.startsWith('temp-') && (
+            <ActionButton 
+              variant="delete" 
+              onClick={handleDelete}
+            >
+              Delete Event
+            </ActionButton>
+          )}
         </ButtonGroup>
       </ModalContent>
     </ModalOverlay>
   );
 };
 
-export default EventDetailsModalComponent; 
+// Custom comparison function for React.memo
+const arePropsEqual = (prevProps: EventDetailsModalProps, nextProps: EventDetailsModalProps) => {
+  // Check if the event has changed
+  const prevEvent = prevProps.event;
+  const nextEvent = nextProps.event;
+  
+  if (prevEvent.id !== nextEvent.id ||
+      prevEvent.type !== nextEvent.type ||
+      prevEvent.title !== nextEvent.title ||
+      prevEvent.start.getTime() !== nextEvent.start.getTime() ||
+      prevEvent.end.getTime() !== nextEvent.end.getTime()) {
+    return false;
+  }
+  
+  // For handler functions, we rely on the parent component to memoize them properly
+  return prevProps.onSave === nextProps.onSave &&
+    prevProps.onDelete === nextProps.onDelete &&
+    prevProps.onClose === nextProps.onClose;
+};
+
+// Apply memo with custom comparison
+const EventDetailsModal = React.memo(EventDetailsModalComponent, arePropsEqual);
+
+export default EventDetailsModal; 

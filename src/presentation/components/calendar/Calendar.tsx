@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import React, { useRef, useEffect, useState, useMemo, lazy, Suspense, useCallback } from 'react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
@@ -75,6 +75,14 @@ const Calendar: React.FC = () => {
 
   const calendarRef = useRef<FullCalendar>(null);
 
+  // Make sure we have a clean, non-stale reference to setCompensationData
+  const setCompensationDataRef = useRef(setCompensationData);
+  
+  // Update the ref when the function changes
+  useEffect(() => {
+    setCompensationDataRef.current = setCompensationData;
+  }, [setCompensationData]);
+
   useEffect(() => {
     const loadEvents = async () => {
       const loadedEvents = await storageService.loadEvents();
@@ -82,35 +90,13 @@ const Calendar: React.FC = () => {
     };
     loadEvents();
   }, [dispatch]);
-
-  // Update compensation data when events or current date changes
-  useEffect(() => {
-    debouncedUpdateCompensationData();
-  }, [events, currentDate]);
   
-  // Debounced version of updateCompensationData to prevent flickering
-  const debouncedUpdateCompensationData = () => {
-    // Clear any existing timeout
-    if (updateCompensationTimeoutRef.current) {
-      clearTimeout(updateCompensationTimeoutRef.current);
-    }
-    
-    // Always clear the facade caches before scheduling an update
-    // This ensures we always get fresh data for all components
-    calculatorFacade.clearCaches();
-    
-    // Set a new timeout (300ms is usually a good debounce delay)
-    updateCompensationTimeoutRef.current = setTimeout(() => {
-      updateCompensationData();
-    }, 300);
-  };
-
-  const updateCompensationData = async () => {
+  const updateCompensationData = useCallback(async () => {
     logger.info('Events available for compensation calculation:', events.length);
     
     if (events.length === 0) {
       logger.info('No events available for compensation calculation');
-      setCompensationData([]);
+      setCompensationDataRef.current([]);
       return;
     }
     
@@ -171,26 +157,51 @@ const Calendar: React.FC = () => {
       }
       
       logger.debug('All compensation data:', allData);
-      setCompensationData(allData);
+      logger.info(`Generated ${allData.length} compensation data items`);
+      
+      // Use the ref to avoid closure issues
+      setCompensationDataRef.current(allData);
       
     } catch (error) {
       logger.error('Error in compensation calculation:', error);
-      setCompensationData([]);
+      setCompensationDataRef.current([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [events, calculatorFacade, getMonthKey, logger]);
+  
+  // Debounced version of updateCompensationData to prevent flickering
+  const debouncedUpdateCompensationData = useCallback(() => {
+    // Clear any existing timeout
+    if (updateCompensationTimeoutRef.current) {
+      clearTimeout(updateCompensationTimeoutRef.current);
+    }
+    
+    // Always clear the facade caches before scheduling an update
+    // This ensures we always get fresh data for all components
+    calculatorFacade.clearCaches();
+    
+    // Set a new timeout (300ms is usually a good debounce delay)
+    updateCompensationTimeoutRef.current = setTimeout(() => {
+      updateCompensationData();
+    }, 300);
+  }, [calculatorFacade, updateCompensationData]);
 
-  const handleEventClick = (clickInfo: EventClickArg) => {
+  // Update compensation data when events or current date changes
+  useEffect(() => {
+    debouncedUpdateCompensationData();
+  }, [events, currentDate, debouncedUpdateCompensationData]);
+
+  const handleEventClick = useCallback((clickInfo: EventClickArg) => {
     const event = events.find(e => e.id === clickInfo.event.id);
     if (event) {
       logger.info(`User clicked event: ${event.id} (${event.type})`);
       dispatch(setSelectedEvent(event));
       dispatch(setShowEventModal(true));
     }
-  };
+  }, [events, dispatch]);
 
-  const handleDateSelect = (selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
+  const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
     logger.info(`User selected date range: ${selectInfo.start.toISOString()} to ${selectInfo.end.toISOString()} for ${type} event`);
     const start = new Date(selectInfo.start);
     let end = new Date(selectInfo.end);
@@ -237,12 +248,12 @@ const Calendar: React.FC = () => {
 
     dispatch(setSelectedEvent(newEvent.toJSON()));
     dispatch(setShowEventModal(true));
-  };
+  }, [dispatch]);
 
-  const handleViewChange = (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
+  const handleViewChange = useCallback((info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
     logger.info(`Calendar view changed to: ${info.start.toISOString()} - ${info.end.toISOString()}`);
     dispatch(setCurrentDate(info.start.toISOString()));
-  };
+  }, [dispatch]);
 
   /**
    * Check if two events overlap in time
@@ -343,7 +354,59 @@ const Calendar: React.FC = () => {
     }
   };
 
-  const handleSaveEvent = async (event: CalendarEvent) => {
+  const saveEventWithoutConflictCheck = useCallback((event: CalendarEvent) => {
+    const isNewEvent = event.id.startsWith('temp-');
+    logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
+    
+    // Clear caches before operation
+    calculatorFacade.clearCaches();
+    
+    // Track the async operation being performed
+    let savePromise;
+    
+    // New event with a temporary ID, create a new one
+    if (isNewEvent) {
+      const eventWithoutTempId = createCalendarEvent({
+        ...event.toJSON(),
+        id: crypto.randomUUID()
+      });
+      savePromise = dispatch(createEventAsync(eventWithoutTempId.toJSON())).unwrap();
+    } else {
+      // Existing event, just update it
+      savePromise = dispatch(updateEventAsync(event.toJSON())).unwrap();
+    }
+    
+    // Clear modals immediately for better UX
+    dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
+    
+    // After the save completes, ensure compensation data is refreshed
+    savePromise.then(() => {
+      logger.info(`Event ${event.id} saved successfully, updating compensation data`);
+      
+      // Force refresh all calculations
+      calculatorFacade.clearCaches();
+      
+      // Ensure we calculate for all affected months
+      // This is particularly important for events that span across months
+      setTimeout(() => {
+        updateCompensationData();
+        
+        // Also update the current month view to refresh the display
+        if (calendarRef.current) {
+          const calendarApi = calendarRef.current.getApi();
+          calendarApi.refetchEvents();
+        }
+      }, 100); // Small delay to ensure state updates have propagated
+      
+    }).catch(error => {
+      logger.error(`Failed to save event ${event.id}:`, error);
+      // Try to update compensation data anyway
+      setTimeout(updateCompensationData, 100);
+    });
+  }, [dispatch, calculatorFacade, updateCompensationData, calendarRef, logger]);
+
+  const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     // Check for conflicts with other events when updating or creating
     const isNewEvent = event.id.startsWith('temp-');
     logger.info(`Checking conflicts for ${isNewEvent ? 'new' : 'existing'} ${event.type} event: ${event.id}`);
@@ -391,58 +454,9 @@ const Calendar: React.FC = () => {
 
     // No relevant conflicts, proceed with save
     saveEventWithoutConflictCheck(event);
-  };
+  }, [events, findConflictingEvents, setPendingEventSave, setShowConflictModal, setConflictingEvents, setIsHolidayConflict, saveEventWithoutConflictCheck]);
 
-  const saveEventWithoutConflictCheck = (event: CalendarEvent) => {
-    const isNewEvent = event.id.startsWith('temp-');
-    logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
-    
-    // Clear caches before operation
-    calculatorFacade.clearCaches();
-    
-    // Track the async operation being performed
-    let savePromise;
-    
-    // New event with a temporary ID, create a new one
-    if (isNewEvent) {
-      const eventWithoutTempId = createCalendarEvent({
-        ...event.toJSON(),
-        id: crypto.randomUUID()
-      });
-      savePromise = dispatch(createEventAsync(eventWithoutTempId.toJSON())).unwrap();
-    } else {
-      // Existing event, just update it
-      savePromise = dispatch(updateEventAsync(event.toJSON())).unwrap();
-    }
-    
-    // Clear modals immediately for better UX
-    dispatch(setShowEventModal(false));
-    dispatch(setSelectedEvent(null));
-    
-    // After the save completes, ensure compensation data is refreshed
-    savePromise.then(() => {
-      logger.info(`Event ${event.id} saved successfully, updating compensation data`);
-      
-      // Force refresh all calculations
-      calculatorFacade.clearCaches();
-      
-      // Ensure we calculate for all affected months
-      // This is particularly important for events that span across months
-      updateCompensationData();
-      
-      // Also update the current month view to refresh the display
-      if (calendarRef.current) {
-        const calendarApi = calendarRef.current.getApi();
-        calendarApi.refetchEvents();
-      }
-    }).catch(error => {
-      logger.error(`Failed to save event ${event.id}:`, error);
-      // Try to update compensation data anyway
-      updateCompensationData();
-    });
-  };
-
-  const handleConflictModalAdjust = async () => {
+  const handleConflictModalAdjust = useCallback(async () => {
     // This function adjusts the conflicting events to accommodate the new event
     if (!pendingEventSave) return;
 
@@ -497,14 +511,18 @@ const Calendar: React.FC = () => {
           // Clear caches to ensure fresh calculations
           calculatorFacade.clearCaches();
           
-          // Force a complete refresh of all compensation data
-          updateCompensationData();
-          
-          // Also update the calendar display
-          if (calendarRef.current) {
-            const calendarApi = calendarRef.current.getApi();
-            calendarApi.refetchEvents();
-          }
+          // Force a complete refresh of all compensation data with a small delay
+          // to ensure state updates have propagated
+          setTimeout(() => {
+            logger.info(`Conflict resolved, updating compensation data`);
+            updateCompensationData();
+            
+            // Also update the calendar display
+            if (calendarRef.current) {
+              const calendarApi = calendarRef.current.getApi();
+              calendarApi.refetchEvents();
+            }
+          }, 100);
           
           return { 
             success: true, 
@@ -522,7 +540,20 @@ const Calendar: React.FC = () => {
       alert('Failed to update events. Please try again.');
       setShowConflictModal(false);
     }
-  };
+  }, [
+    pendingEventSave, 
+    dispatch,
+    conflictingEvents, 
+    regenerateConflictingSubEvents, 
+    setShowConflictModal, 
+    setPendingEventSave, 
+    setConflictingEvents, 
+    calculatorFacade, 
+    updateCompensationData,
+    calendarRef,
+    logger,
+    trackOperation
+  ]);
 
   const handleConflictModalCancel = () => {
     // Just close the modal without saving anything
@@ -560,7 +591,7 @@ const Calendar: React.FC = () => {
     deleteEventWithoutConfirmation(event);
   };
   
-  const deleteEventWithoutConfirmation = (event: CalendarEvent) => {
+  const deleteEventWithoutConfirmation = useCallback((event: CalendarEvent) => {
     // Clear caches before deleting to ensure fresh calculations
     calculatorFacade.clearCaches();
     
@@ -568,15 +599,19 @@ const Calendar: React.FC = () => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    // Force immediate recalculation of compensation data
-    updateCompensationData();
-    
-    // Also update the calendar display
-    if (calendarRef.current) {
-      const calendarApi = calendarRef.current.getApi();
-      calendarApi.refetchEvents();
-    }
-  };
+    // Force immediate recalculation of compensation data with a small delay
+    // to ensure state updates have propagated
+    setTimeout(() => {
+      logger.info(`Event ${event.id} deleted, updating compensation data`);
+      updateCompensationData();
+      
+      // Also update the calendar display
+      if (calendarRef.current) {
+        const calendarApi = calendarRef.current.getApi();
+        calendarApi.refetchEvents();
+      }
+    }, 100);
+  }, [dispatch, calculatorFacade, updateCompensationData, calendarRef, logger]);
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
     if (!pendingEventDelete || !pendingEventDelete.id) return;
@@ -674,10 +709,10 @@ const Calendar: React.FC = () => {
     setConflictingEvents([]);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
-  };
+  }, [dispatch]);
 
   /**
    * Diagnostic function to analyze event sub-events and verify holiday detection
@@ -792,7 +827,11 @@ const Calendar: React.FC = () => {
         currentDate={new Date(currentDate)}
         onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
       />
-      <MonthlyCompensationSummary data={compensationData} />
+      {/* Add key using length to force re-render when data changes */}
+      <MonthlyCompensationSummary 
+        key={`summary-${compensationData.length}`} 
+        data={compensationData} 
+      />
       
       {/* Lazy-loaded modals with Suspense */}
       {showEventModal && selectedEvent && (
@@ -832,4 +871,5 @@ const Calendar: React.FC = () => {
   );
 };
 
-export default Calendar; 
+// Export with React.memo for performance optimization
+export default React.memo(Calendar); 

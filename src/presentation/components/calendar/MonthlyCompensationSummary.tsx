@@ -1008,7 +1008,16 @@ interface Event {
   isHoliday?: boolean;
 }
 
+// After the component declaration, add logging to trace data flow
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
+  // Add logging to debug data
+  useEffect(() => {
+    logger.debug(`MonthlyCompensationSummary received data with ${data.length} items`);
+    if (data.length > 0) {
+      logger.debug(`Sample data: ${JSON.stringify(data[0])}`);
+    }
+  }, [data]);
+
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showDeleteMonthModal, setShowDeleteMonthModal] = useState(false);
@@ -1070,18 +1079,22 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
     
-    logger.debug('Monthly Summary Data:', data);
+    logger.debug('Monthly Summary Data:', data.length);
     
     // Get unique months from data
-    const months = new Set<string>();
+    const months = new Map<string, Date>();
     data.forEach(d => {
-      if (d.type === 'total' && d.month) {
+      if (d.month) {
         try {
           // Ensure month is treated as a Date object
           const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
-          const monthKey = monthDate.toISOString();
-        months.add(monthKey);
-          logger.debug(`Found month: ${monthDate.toLocaleString()} from ${d.type} with amount ${d.amount}`);
+          const monthKey = `${monthDate.getFullYear()}-${monthDate.getMonth() + 1}`;
+          
+          // Only add if not already in the map
+          if (!months.has(monthKey)) {
+            months.set(monthKey, monthDate);
+            logger.debug(`Found month: ${monthKey} from ${d.type} with amount ${d.amount}`);
+          }
         } catch (error) {
           logger.error('Error processing month:', d.month, error);
         }
@@ -1091,12 +1104,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     logger.info(`Found ${months.size} unique months`);
 
     // Add months with data
-    Array.from(months).forEach(monthKey => {
+    months.forEach((monthDate, monthKey) => {
       const monthData = data.filter(d => {
         if (d.month) {
           try {
-            const monthDate = d.month instanceof Date ? d.month : new Date(d.month);
-            return monthDate.toISOString() === monthKey;
+            const compMonthDate = d.month instanceof Date ? d.month : new Date(d.month);
+            const compMonthKey = `${compMonthDate.getFullYear()}-${compMonthDate.getMonth() + 1}`;
+            return compMonthKey === monthKey;
           } catch (error) {
             return false;
           }
@@ -1105,7 +1119,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       });
       
       if (monthData.length > 0) {
-        const monthDate = new Date(monthKey);
         logger.debug(`Adding month ${monthDate.toLocaleDateString()} with ${monthData.length} records`);
         result.push({
           date: monthDate,

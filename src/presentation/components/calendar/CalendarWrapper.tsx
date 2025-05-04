@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useRef, useState, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -172,7 +172,7 @@ interface CalendarWrapperProps {
   currentDate: Date;
 }
 
-const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
+const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
   ({ events, onEventClick, onDateSelect, onViewChange, currentDate }, ref) => {
     const [showEventTypeSelector, setShowEventTypeSelector] = useState(false);
     const [pendingEventInfo, setPendingEventInfo] = useState<DateSelectArg | null>(null);
@@ -188,27 +188,27 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
       }
     }, [currentDate, ref]);
 
-    const handleDateSelect = (selectInfo: DateSelectArg) => {
+    const handleDateSelect = useCallback((selectInfo: DateSelectArg) => {
       setPendingEventInfo(selectInfo);
       setShowEventTypeSelector(true);
-    };
+    }, []);
 
-    const handleEventTypeSelect = (type: 'oncall' | 'incident' | 'holiday') => {
+    const handleEventTypeSelect = useCallback((type: 'oncall' | 'incident' | 'holiday') => {
       if (pendingEventInfo) {
         onDateSelect(pendingEventInfo, type);
       }
       setShowEventTypeSelector(false);
       setPendingEventInfo(null);
-    };
+    }, [pendingEventInfo, onDateSelect]);
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
       setShowEventTypeSelector(false);
       setPendingEventInfo(null);
       const calendar = ref as React.RefObject<FullCalendar>;
       if (calendar.current) {
         calendar.current.getApi().unselect();
       }
-    };
+    }, [ref]);
 
     useEffect(() => {
       const handleEscape = (e: KeyboardEvent) => {
@@ -219,7 +219,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
 
       window.addEventListener('keydown', handleEscape);
       return () => window.removeEventListener('keydown', handleEscape);
-    }, [showEventTypeSelector]);
+    }, [showEventTypeSelector, handleClose]);
 
     useEffect(() => {
       const container = calendarContainerRef.current;
@@ -280,7 +280,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
       return () => container.removeEventListener('wheel', handleWheel);
     }, [ref]);
 
-    const formatEventTitle = (event: CalendarEvent) => {
+    const formatEventTitle = useCallback((event: CalendarEvent) => {
       if (event.title) return event.title;
       switch (event.type) {
         case 'oncall':
@@ -292,9 +292,9 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
         default:
           return event.type;
       }
-    };
+    }, []);
 
-    const formatEventColor = (event: CalendarEvent) => {
+    const formatEventColor = useCallback((event: CalendarEvent) => {
       const isWeekend = event.start.getDay() === 0 || event.start.getDay() === 6;
       if (event.type === 'oncall') {
         return isWeekend ? '#f59e0b' : '#3b82f6';
@@ -303,7 +303,7 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
         return isWeekend ? '#dc2626' : '#ef4444';
       }
       return '#6b7280'; // Gray color for holidays
-    };
+    }, []);
 
     return (
       <>
@@ -418,4 +418,38 @@ const CalendarWrapper = forwardRef<FullCalendar, CalendarWrapperProps>(
   }
 );
 
+// Add a custom comparison function for React.memo
+const arePropsEqual = (prevProps: CalendarWrapperProps, nextProps: CalendarWrapperProps) => {
+  // Check if events array has changed
+  if (prevProps.events.length !== nextProps.events.length) {
+    return false;
+  }
+  
+  // Deep check of events - compare each event by ID and data
+  for (let i = 0; i < prevProps.events.length; i++) {
+    const prevEvent = prevProps.events[i];
+    const nextEvent = nextProps.events[i];
+    
+    if (prevEvent.id !== nextEvent.id || 
+        prevEvent.type !== nextEvent.type ||
+        prevEvent.start.getTime() !== nextEvent.start.getTime() ||
+        prevEvent.end.getTime() !== nextEvent.end.getTime()) {
+      return false;
+    }
+  }
+  
+  // Check if currentDate has changed
+  if (prevProps.currentDate.getTime() !== nextProps.currentDate.getTime()) {
+    return false;
+  }
+  
+  // For handler functions, we rely on the parent component to memoize them properly
+  // Only re-render if the function references have changed
+  return prevProps.onEventClick === nextProps.onEventClick &&
+    prevProps.onDateSelect === nextProps.onDateSelect &&
+    prevProps.onViewChange === nextProps.onViewChange;
+};
+
+// Export with React.memo for performance optimization
+const CalendarWrapper = React.memo(CalendarWrapperComponent, arePropsEqual);
 export default CalendarWrapper; 
