@@ -3,7 +3,7 @@ import { CalendarEvent } from './CalendarEvent';
 export interface CompensationRates {
   weekdayOnCallRate: number;      // €3.90/hr for weekday on-call outside office hours
   weekendOnCallRate: number;      // €7.34/hr for weekend on-call
-  baseHourlySalary: number;       // €35.58 base hourly salary
+  baseHourlySalary: number;       // 33.50 base hourly salary
   weekdayIncidentMultiplier: number; // 1.8x for weekday incidents
   weekendIncidentMultiplier: number; // 2x for weekend incidents
   nightShiftBonusMultiplier: number; // 1.4x (40% bonus) for night shift incidents

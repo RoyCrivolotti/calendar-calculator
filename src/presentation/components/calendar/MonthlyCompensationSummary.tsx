@@ -313,7 +313,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     });
 
     // Sort by date, most recent first
-    return result.sort((a, b) => b.date.getTime() - a.date.getTime());
+    return result.sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [data]);
 
   const handleMonthClick = (month: Date) => {
