@@ -79,22 +79,34 @@ const CloseButton = styled.button`
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: none;
-  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  background: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 1.25rem;
   color: #64748b;
-
+  z-index: 10;
+  
   &:hover {
-    background: #e2e8f0;
+    background: #f8fafc;
     color: #0f172a;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2;
   }
 `;
 
@@ -395,7 +407,11 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   return (
     <ModalOverlay onClick={onClose}>
       <ModalContent onClick={e => e.stopPropagation()}>
-        <CloseButton onClick={onClose}>×</CloseButton>
+        <CloseButton onClick={onClose} aria-label="Close modal">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </CloseButton>
         
         <ModalHeader>
           <ModalTitle>Event Details</ModalTitle>

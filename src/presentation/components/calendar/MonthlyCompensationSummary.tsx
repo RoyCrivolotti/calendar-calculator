@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
@@ -156,22 +156,34 @@ const CloseButton = styled.button`
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: none;
-  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  background: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 1.25rem;
   color: #64748b;
-
+  z-index: 10;
+  
   &:hover {
-    background: #e2e8f0;
+    background: #f8fafc;
     color: #0f172a;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2;
   }
 `;
 
@@ -1222,6 +1234,24 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return monthsWithData.findIndex(m => m.date.getTime() === selectedMonth.getTime());
   }, [selectedMonth, monthsWithData]);
 
+  // Add ESC key event listener
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showConfirmModal) {
+          setShowConfirmModal(false);
+        } else if (selectedMonth) {
+          setSelectedMonth(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      window.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [selectedMonth, showConfirmModal]);
+
   return (
     <Container>
       <ScrollButton className="left" onClick={scrollLeft}>←</ScrollButton>
@@ -1244,7 +1274,11 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       {selectedMonth && (
         <Modal onClick={handleCloseModal}>
           <ModalContent onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
-            <CloseButton onClick={handleCloseModal}>×</CloseButton>
+            <CloseButton onClick={handleCloseModal} aria-label="Close modal">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </CloseButton>
             
             <ModalHeader>
               <ModalTitle>{format(selectedMonth, 'MMMM yyyy')}</ModalTitle>
@@ -1481,7 +1515,11 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       {showConfirmModal && (
         <Modal onClick={handleCancelClear}>
           <ConfirmModalContent onClick={e => e.stopPropagation()}>
-            <CloseButton onClick={handleCancelClear}>×</CloseButton>
+            <CloseButton onClick={handleCancelClear} aria-label="Close modal">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </CloseButton>
             <ConfirmTitle>Clear All Data</ConfirmTitle>
             <ConfirmMessage>
               Are you sure you want to clear all calendar data? <br />
