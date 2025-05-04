@@ -355,6 +355,13 @@ const ChartContainer = styled.div`
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+  
+  h3 {
+    margin: 0 0 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #334155;
+  }
 `;
 
 const ChartGrid = styled.div`
@@ -364,6 +371,12 @@ const ChartGrid = styled.div`
   
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
+  }
+  
+  & > div {
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
   }
 `;
 
@@ -422,6 +435,7 @@ const BarChartContainer = styled.div`
   gap: 1rem;
   padding: 1rem 0;
   margin-bottom: 40px;
+  flex: 1;
   
   @media (max-width: 768px) {
     margin-bottom: 60px;
@@ -458,33 +472,7 @@ const Bar = styled.div<{ height: string, color: string }>`
   }
   
   &:after {
-    content: attr(data-label);
-    position: absolute;
-    bottom: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: #64748b;
-    font-size: 0.8rem;
-    white-space: nowrap;
-    text-align: center;
-    width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    
-    @media (max-width: 768px) {
-      transform: translateX(-50%) rotate(-45deg);
-      transform-origin: top left;
-      width: auto;
-      max-width: none;
-      bottom: -36px;
-      font-size: 0.75rem;
-    }
-    
-    @media (max-width: 480px) {
-      transform: translateX(-50%) rotate(-60deg);
-      bottom: -28px;
-      font-size: 0.7rem;
-    }
+    content: none;
   }
 `;
 
@@ -575,9 +563,14 @@ const ConfirmButton = styled.button`
 
 const Legend = styled.div`
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
   margin-top: 2rem;
   justify-content: center;
+  
+  &:empty {
+    display: none;
+  }
 `;
 
 const LegendItem = styled.div`
@@ -941,63 +934,94 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       incidentHours.weekendNight || 0
     );
     
+    // Return null if there are no hours to show
     if (maxHours === 0) return null;
     
     const calculateHeight = (hours: number) => `${Math.max((hours / maxHours) * 180, 10)}px`;
     
-    // Updated colors for better contrast
+    // Only include bars that have actual values
+    const bars = [];
+    
+    if (oncallHours.weekday > 0) {
+      bars.push(
+        <Bar 
+          key="weekday-oncall"
+          height={calculateHeight(oncallHours.weekday)} 
+          color="#3b82f6"
+          data-value={`${oncallHours.weekday}h`} 
+          data-label="Weekday On-Call"
+        />
+      );
+    }
+    
+    if (oncallHours.weekend > 0) {
+      bars.push(
+        <Bar 
+          key="weekend-oncall"
+          height={calculateHeight(oncallHours.weekend)} 
+          color="#93c5fd"
+          data-value={`${oncallHours.weekend}h`} 
+          data-label="Weekend On-Call"
+        />
+      );
+    }
+    
+    if (incidentHours.weekday > 0) {
+      bars.push(
+        <Bar 
+          key="weekday-incident"
+          height={calculateHeight(incidentHours.weekday)} 
+          color="#dc2626"
+          data-value={`${incidentHours.weekday}h`} 
+          data-label="Weekday Incident"
+        />
+      );
+    }
+    
+    if (incidentHours.weekend > 0) {
+      bars.push(
+        <Bar 
+          key="weekend-incident"
+          height={calculateHeight(incidentHours.weekend)} 
+          color="#fca5a5"
+          data-value={`${incidentHours.weekend}h`} 
+          data-label="Weekend Incident"
+        />
+      );
+    }
+    
+    if (incidentHours.nightShift && incidentHours.nightShift > 0) {
+      bars.push(
+        <Bar 
+          key="night-incident"
+          height={calculateHeight(incidentHours.nightShift)} 
+          color="#9f1239"
+          data-value={`${incidentHours.nightShift}h`} 
+          data-label="Night Shift Incident"
+        />
+      );
+    }
+    
+    if (incidentHours.weekendNight && incidentHours.weekendNight > 0) {
+      bars.push(
+        <Bar 
+          key="weekend-night"
+          height={calculateHeight(incidentHours.weekendNight)} 
+          color="#f43f5e"
+          data-value={`${incidentHours.weekendNight}h`} 
+          data-label="Weekend Night"
+        />
+      );
+    }
+    
+    // Only return content if we have bars to show
+    if (bars.length === 0) return null;
+    
     return (
       <div>
         <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>Hours Breakdown</h3>
         <BarChartContainer>
-          {oncallHours.weekday > 0 && (
-            <Bar 
-              height={calculateHeight(oncallHours.weekday)} 
-              color="#3b82f6" // Darker blue for weekday on-call
-              data-value={`${oncallHours.weekday}h`} 
-              data-label="Weekday On-Call"
-            />
-          )}
-          {oncallHours.weekend > 0 && (
-            <Bar 
-              height={calculateHeight(oncallHours.weekend)} 
-              color="#93c5fd" // Lighter blue for weekend on-call
-              data-value={`${oncallHours.weekend}h`} 
-              data-label="Weekend On-Call"
-            />
-          )}
-          {incidentHours.weekday > 0 && (
-            <Bar 
-              height={calculateHeight(incidentHours.weekday)} 
-              color="#dc2626" // Darker red for weekday incident
-              data-value={`${incidentHours.weekday}h`} 
-              data-label="Weekday Incident"
-            />
-          )}
-          {incidentHours.weekend > 0 && (
-            <Bar 
-              height={calculateHeight(incidentHours.weekend)} 
-              color="#fca5a5" // Lighter red for weekend incident
-              data-value={`${incidentHours.weekend}h`} 
-              data-label="Weekend Incident"
-            />
-          )}
-          {incidentHours.nightShift && incidentHours.nightShift > 0 && (
-            <Bar 
-              height={calculateHeight(incidentHours.nightShift)} 
-              color="#9f1239" // Dark pink for night shift incident
-              data-value={`${incidentHours.nightShift}h`} 
-              data-label="Night Shift Incident"
-            />
-          )}
-          {incidentHours.weekendNight && incidentHours.weekendNight > 0 && (
-            <Bar 
-              height={calculateHeight(incidentHours.weekendNight)} 
-              color="#f43f5e" // Lighter pink for weekend night incident
-              data-value={`${incidentHours.weekendNight}h`} 
-              data-label="Weekend Night"
-            />
-          )}
+          {bars}
         </BarChartContainer>
       </div>
     );
@@ -1293,36 +1317,58 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 {renderHoursChart()}
                 {renderCompensationPieChart()}
               </ChartGrid>
-              <Legend>
-                <LegendItem>
-                  <LegendColor color="#3b82f6" />
-                  <span>Weekday On-Call</span>
-                </LegendItem>
-                <LegendItem>
-                  <LegendColor color="#93c5fd" />
-                  <span>Weekend On-Call</span>
-                </LegendItem>
-                <LegendItem>
-                  <LegendColor color="#dc2626" />
-                  <span>Weekday Incident</span>
-                </LegendItem>
-                <LegendItem>
-                  <LegendColor color="#fca5a5" />
-                  <span>Weekend Incident</span>
-                </LegendItem>
-                {(incidentData.length > 0 && extractHoursData(incidentData[0].description).nightShift) && (
-                  <LegendItem>
-                    <LegendColor color="#9f1239" />
-                    <span>Night Shift Incident</span>
-                  </LegendItem>
-                )}
-                {(incidentData.length > 0 && extractHoursData(incidentData[0].description).weekendNight) && (
-                  <LegendItem>
-                    <LegendColor color="#f43f5e" />
-                    <span>Weekend Night</span>
-                  </LegendItem>
-                )}
-              </Legend>
+              
+              {/* Only show legend when we actually have chart data */}
+              {(!!renderHoursChart() || !!renderCompensationPieChart()) && (
+                <Legend>
+                  {/* Only include legend items for data that actually exists */}
+                  {oncallData.length > 0 && extractHoursData(oncallData[0].description).weekday > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#3b82f6" />
+                      <span>Weekday On-Call</span>
+                    </LegendItem>
+                  )}
+                  
+                  {oncallData.length > 0 && extractHoursData(oncallData[0].description).weekend > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#93c5fd" />
+                      <span>Weekend On-Call</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && extractHoursData(incidentData[0].description).weekday > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#dc2626" />
+                      <span>Weekday Incident</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && extractHoursData(incidentData[0].description).weekend > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#fca5a5" />
+                      <span>Weekend Incident</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && 
+                    extractHoursData(incidentData[0].description).nightShift !== undefined && 
+                    extractHoursData(incidentData[0].description).nightShift! > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#9f1239" />
+                      <span>Night Shift Incident</span>
+                    </LegendItem>
+                  )}
+                  
+                  {incidentData.length > 0 && 
+                    extractHoursData(incidentData[0].description).weekendNight !== undefined && 
+                    extractHoursData(incidentData[0].description).weekendNight! > 0 && (
+                    <LegendItem>
+                      <LegendColor color="#f43f5e" />
+                      <span>Weekend Night</span>
+                    </LegendItem>
+                  )}
+                </Legend>
+              )}
             </ChartContainer>
             
             {/* Compensation Rate Information */}
