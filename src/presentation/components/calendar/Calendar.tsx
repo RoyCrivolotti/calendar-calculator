@@ -69,6 +69,9 @@ const Calendar: React.FC = () => {
   const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
   const [isHolidayConflict, setIsHolidayConflict] = useState(false);
   const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
+  
+  // Create a ref to store the timeout ID for debouncing
+  const updateCompensationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const calendarRef = useRef<FullCalendar>(null);
 
@@ -82,8 +85,21 @@ const Calendar: React.FC = () => {
 
   // Update compensation data when events or current date changes
   useEffect(() => {
-    updateCompensationData();
+    debouncedUpdateCompensationData();
   }, [events, currentDate]);
+  
+  // Debounced version of updateCompensationData to prevent flickering
+  const debouncedUpdateCompensationData = () => {
+    // Clear any existing timeout
+    if (updateCompensationTimeoutRef.current) {
+      clearTimeout(updateCompensationTimeoutRef.current);
+    }
+    
+    // Set a new timeout (300ms is usually a good debounce delay)
+    updateCompensationTimeoutRef.current = setTimeout(() => {
+      updateCompensationData();
+    }, 300);
+  };
 
   const updateCompensationData = async () => {
     logger.info('Events available for compensation calculation:', events.length);
@@ -386,12 +402,12 @@ const Calendar: React.FC = () => {
       logger.info(`Event ${event.id} saved successfully, updating compensation data`);
       // Clear caches again just to be safe
       calculatorFacade.clearCaches();
-      // Update compensation data
-      updateCompensationData();
+      // Update compensation data using the debounced version
+      debouncedUpdateCompensationData();
     }).catch(error => {
       logger.error(`Failed to save event ${event.id}:`, error);
-      // Try to update compensation data anyway
-      updateCompensationData();
+      // Try to update compensation data anyway using the debounced version
+      debouncedUpdateCompensationData();
     });
   };
 
@@ -512,10 +528,8 @@ const Calendar: React.FC = () => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    // Force recalculation of compensation data
-    setTimeout(() => {
-      updateCompensationData();
-    }, 100);
+    // Force recalculation of compensation data using the debounced function
+    debouncedUpdateCompensationData();
   };
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
@@ -581,7 +595,7 @@ const Calendar: React.FC = () => {
         calculatorFacade.clearCaches();
         
         // Force immediate compensation recalculation
-        await updateCompensationData();
+        debouncedUpdateCompensationData();
         logger.info('Compensation data updated after holiday deletion');
         
       } catch (error) {
@@ -589,11 +603,11 @@ const Calendar: React.FC = () => {
         alert('Holiday deleted, but there was an error recalculating affected events. Compensation calculations may be affected.');
         
         // Try to update compensation data anyway
-        await updateCompensationData();
+        debouncedUpdateCompensationData();
       }
     } else {
       // Even if we don't regenerate events, we should update compensation data
-      await updateCompensationData();
+      debouncedUpdateCompensationData();
       logger.info('Compensation data updated after holiday deletion (no regeneration needed)');
     }
     

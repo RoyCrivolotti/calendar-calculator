@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import styled from '@emotion/styled';
 import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
 import { format } from 'date-fns';
@@ -30,14 +30,12 @@ const Breakdown = styled.div`
   position: relative; /* For absolute positioning of loading state */
 `;
 
-const BreakdownItem = styled.div<{ isVisible: boolean }>`
+const BreakdownItem = styled.div`
   padding: 1rem;
   background: #f8fafc;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
-  opacity: ${props => props.isVisible ? 1 : 0};
-  transform: translateY(${props => props.isVisible ? '0' : '10px'});
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity 0.3s ease;
 
   h3 {
     margin: 0 0 0.5rem 0;
@@ -88,7 +86,7 @@ const MonthButton = styled.button`
   }
 `;
 
-const LoadingIndicator = styled.div<{ isVisible: boolean }>`
+const LoadingOverlay = styled.div`
   position: absolute;
   top: 0;
   left: 0;
@@ -98,11 +96,24 @@ const LoadingIndicator = styled.div<{ isVisible: boolean }>`
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.8);
-  opacity: ${props => props.isVisible ? 1 : 0};
-  visibility: ${props => props.isVisible ? 'visible' : 'hidden'};
-  transition: opacity 0.3s ease, visibility 0.3s ease;
   color: #64748b;
   font-style: italic;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+
+  &.active {
+    opacity: 1;
+    visibility: visible;
+  }
+`;
+
+const EmptyMessage = styled.div`
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+  padding: 2rem;
+  grid-column: 1 / -1;
 `;
 
 interface CompensationSectionProps {
@@ -118,45 +129,83 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 }) => {
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
   const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
-
+  
+  // Track calculations in progress
+  const pendingCalculation = useRef<boolean>(false);
+  const previousData = useRef<string>('');
+  const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Debounced loading setter to prevent flickering
+  const setLoadingDebounced = useCallback((isLoading: boolean) => {
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+    }
+    
+    if (isLoading) {
+      // Show loading after a small delay to prevent flicker on fast operations
+      loadingTimerRef.current = setTimeout(() => {
+        setLoading(true);
+      }, 300);
+    } else {
+      setLoading(false);
+    }
+  }, []);
+  
+  // Effect cleanup
   useEffect(() => {
-    const calculateCompensation = async () => {
-      if (events.length === 0) {
-        setBreakdown([]);
+    return () => {
+      if (loadingTimerRef.current) {
+        clearTimeout(loadingTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Effect to calculate compensation data
+  useEffect(() => {
+    // Define an async function to calculate compensation
+    const calculateData = async () => {
+      // Prevent duplicate calculations
+      if (pendingCalculation.current) {
         return;
       }
       
-      // Start transition out
-      setIsVisible(false);
-      setLoading(true);
+      pendingCalculation.current = true;
+      setLoadingDebounced(true);
       
       try {
-        // Short delay to allow fade out
-        await new Promise(resolve => setTimeout(resolve, 150));
+        logger.info(`Calculating compensation for ${format(currentDate, 'MMMM yyyy')}`);
         
-        // Calculate new data
+        // Calculate compensation data
         const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate);
-        setBreakdown(result);
         
-        // Trigger fade in
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setIsVisible(true);
-          });
-        });
+        // Check if the data has actually changed
+        const dataString = JSON.stringify(result);
+        if (dataString !== previousData.current) {
+          logger.info(`Received ${result.length} compensation items - data changed`);
+          setBreakdown(result);
+          previousData.current = dataString;
+        } else {
+          logger.info('Compensation data unchanged, avoiding rerender');
+        }
+        
       } catch (error) {
         logger.error('Error calculating compensation:', error);
         setBreakdown([]);
       } finally {
-        setLoading(false);
+        // Ensure loading state is cleared
+        logger.info('Compensation calculation complete, hiding loading indicator');
+        setLoadingDebounced(false);
+        pendingCalculation.current = false;
       }
     };
-    
-    calculateCompensation();
-  }, [events, currentDate, calculatorFacade]);
 
+    // Run the calculation
+    calculateData();
+    
+  }, [events, currentDate, calculatorFacade, setLoadingDebounced]);
+
+  // Generate month options for the selector
   const months = useMemo(() => {
     const result = [];
     // Add previous month
@@ -174,6 +223,11 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     
     return result;
   }, [currentDate]);
+
+  // For debugging
+  useEffect(() => {
+    logger.info(`CompensationSection render - loading: ${loading}, breakdown items: ${breakdown.length}`);
+  });
 
   return (
     <Section>
@@ -197,20 +251,21 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       </MonthSelector>
       
       <Breakdown>
-        <LoadingIndicator isVisible={loading}>
+        <LoadingOverlay className={loading ? 'active' : ''}>
           Loading compensation data...
-        </LoadingIndicator>
+        </LoadingOverlay>
         
-        {breakdown.map((item, index) => (
-          <BreakdownItem 
-            key={index}
-            isVisible={isVisible && !loading}
-          >
-            <h3>{item.description}</h3>
-            <p>Count: {item.count}</p>
-            <div className="amount">€{item.amount.toFixed(2)}</div>
-          </BreakdownItem>
-        ))}
+        {breakdown.length > 0 ? (
+          breakdown.map((item, index) => (
+            <BreakdownItem key={index}>
+              <h3>{item.description}</h3>
+              <p>Count: {item.count}</p>
+              <div className="amount">€{item.amount.toFixed(2)}</div>
+            </BreakdownItem>
+          ))
+        ) : (
+          <EmptyMessage>No compensation data available for this month</EmptyMessage>
+        )}
       </Breakdown>
     </Section>
   );
