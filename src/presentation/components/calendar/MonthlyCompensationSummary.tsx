@@ -23,7 +23,7 @@ const ScrollContainer = styled.div`
   gap: 1rem;
   overflow-x: auto;
   scroll-behavior: smooth;
-  padding: 1rem 0;
+  padding: 1rem 0.75rem;
   -ms-overflow-style: none;
   scrollbar-width: none;
   &::-webkit-scrollbar {
