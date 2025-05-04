@@ -5,6 +5,8 @@ import { CompensationService } from './CompensationService';
 import { storageService } from '../../../presentation/services/storage';
 import { logger } from '../../../utils/logger';
 import { getMonthKey, createMonthDate, isSameMonth } from '../../../utils/calendarUtils';
+import { EventCompensationService } from './EventCompensationService';
+import { CompensationSummary } from '../types/CompensationSummary';
 
 /**
  * Facade for compensation calculations to ensure consistent results across the application
@@ -13,9 +15,11 @@ import { getMonthKey, createMonthDate, isSameMonth } from '../../../utils/calend
 export class CompensationCalculatorFacade {
   private static instance: CompensationCalculatorFacade;
   private compensationService: CompensationService;
+  private eventCompensationService: EventCompensationService;
   
   private constructor() {
     this.compensationService = new CompensationService();
+    this.eventCompensationService = EventCompensationService.getInstance();
   }
   
   /**
@@ -155,6 +159,50 @@ export class CompensationCalculatorFacade {
     } catch (error) {
       logger.error('Error in compensation calculation facade:', error);
       return [];
+    }
+  }
+
+  /**
+   * Calculate detailed compensation summary for a specific event
+   * @param event The event to calculate compensation for
+   * @returns A detailed compensation summary
+   */
+  public async calculateEventCompensation(event: CalendarEvent): Promise<CompensationSummary> {
+    try {
+      logger.info(`Calculating detailed compensation for event ${event.id}`);
+      
+      // Load all sub-events from storage
+      const allSubEvents = await storageService.loadSubEvents();
+      
+      // Filter sub-events for this event
+      const eventSubEvents = allSubEvents.filter(subEvent => 
+        subEvent.parentEventId === event.id
+      );
+      
+      logger.info(`Found ${eventSubEvents.length} sub-events for event ${event.id}`);
+      
+      // Calculate compensation summary
+      const summary = this.eventCompensationService.calculateEventCompensation(
+        event,
+        eventSubEvents
+      );
+      
+      return summary;
+    } catch (error) {
+      logger.error(`Error calculating compensation for event ${event.id}:`, error);
+      return {
+        eventId: event.id,
+        total: 0,
+        hours: {
+          total: 0,
+          billable: 0,
+          weekday: 0,
+          weekend: 0,
+          nightShift: 0,
+          officeHours: 0
+        },
+        details: []
+      };
     }
   }
 } 

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
+import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
+import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
+import CompensationSummarySection from './CompensationSummarySection';
 
 const EventTypeSelector = styled.div`
   position: fixed;
@@ -19,6 +22,8 @@ const EventTypeSelector = styled.div`
   min-width: 600px;
   max-width: 90vw;
   background-color: white;
+  max-height: 90vh;
+  overflow-y: auto;
 `;
 
 const CloseButton = styled.button`
@@ -174,6 +179,34 @@ const ButtonGroup = styled.div`
   margin-top: 1rem;
 `;
 
+const LoadingIndicator = styled.div`
+  text-align: center;
+  padding: 1rem;
+  color: #64748b;
+  font-style: italic;
+`;
+
+const BasicInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  
+  p {
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+  }
+  
+  .label {
+    color: #64748b;
+    font-weight: 500;
+  }
+  
+  .value {
+    color: #0f172a;
+  }
+`;
+
 export interface EventDetailsModalProps {
   event: CalendarEvent;
   onSave: (event: CalendarEvent) => void;
@@ -187,6 +220,10 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   onDelete,
   onClose 
 }) => {
+  const [compensationSummary, setCompensationSummary] = useState<CompensationSummary | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const calculatorFacade = CompensationCalculatorFacade.getInstance();
+  
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -197,6 +234,25 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
+  
+  // Load compensation summary on mount
+  useEffect(() => {
+    const loadCompensationSummary = async () => {
+      if (event.type === 'holiday') return; // Don't calculate for holidays
+      
+      setIsLoading(true);
+      try {
+        const summary = await calculatorFacade.calculateEventCompensation(event);
+        setCompensationSummary(summary);
+      } catch (error) {
+        console.error('Error loading compensation summary:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadCompensationSummary();
+  }, [event, calculatorFacade]);
 
   const formatDateForInput = (date: Date) => {
     const year = date.getFullYear();
@@ -272,6 +328,9 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     onClose();
     onDelete(event);
   };
+  
+  // Calculate simple duration in hours
+  const durationHours = ((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1);
 
   return (
     <ModalOverlay>
@@ -279,7 +338,13 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
         <CloseButton onClick={onClose}>×</CloseButton>
         <ModalTitle>Event Details</ModalTitle>
         <EventDetails>
-          <p><strong>Type:</strong> {event.type === 'oncall' ? 'On-Call Shift' : 'Incident'}</p>
+          <BasicInfo>
+            <p>
+              <span className="label">Type:</span>
+              <span className="value">{event.type === 'oncall' ? 'On-Call Shift' : event.type === 'incident' ? 'Incident' : 'Holiday'}</span>
+            </p>
+          </BasicInfo>
+          
           <TimeInputGroup>
             <TimeInput>
               <label>Start Time</label>
@@ -301,10 +366,20 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
             </TimeInput>
           </TimeInputGroup>
           {validationError && <p style={{ color: '#e53e3e', marginTop: '-0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem' }}>{validationError}</p>}
-          <p><strong>Duration:</strong> {((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1)} hours</p>
-          <p><strong>Weekend:</strong> {(event.start.getDay() === 0 || event.start.getDay() === 6) ? 'Yes' : 'No'}</p>
-          <p><strong>Night Shift:</strong> {(event.start.getHours() >= 22 || event.start.getHours() < 6) ? 'Yes' : 'No'}</p>
-          {event.type === 'holiday' && <p><em>Holiday events span the entire day and cannot be modified</em></p>}
+          
+          <BasicInfo>
+            <p>
+              <span className="label">Duration:</span>
+              <span className="value">{durationHours} hours</span>
+            </p>
+            {event.type === 'holiday' && <p><em>Holiday events span the entire day and cannot be modified</em></p>}
+          </BasicInfo>
+          
+          {isLoading ? (
+            <LoadingIndicator>Loading compensation details...</LoadingIndicator>
+          ) : (
+            compensationSummary && <CompensationSummarySection summary={compensationSummary} />
+          )}
         </EventDetails>
         <ButtonGroup>
           <EventTypeButton
