@@ -618,8 +618,6 @@ const Calendar: React.FC = () => {
     
     const holidayId = pendingEventDelete.id;
     
-    // Group logging for this operation - fallback to console.group
-    console.group(`Deleting holiday: ${holidayId}`);
     logger.info(`Deleting holiday: ${holidayId}`);
     
     // If there are conflicting events, we should always regenerate
@@ -697,8 +695,6 @@ const Calendar: React.FC = () => {
     setPendingEventDelete(null);
     setConflictingEvents([]);
     
-    console.groupEnd();
-    
     // Run diagnostic after a delay
     setTimeout(() => analyzeHolidayDetection(), 1000);
   };
@@ -723,8 +719,6 @@ const Calendar: React.FC = () => {
     const dateToAnalyze = targetDate || new Date();
     const dateString = dateToAnalyze.toLocaleDateString();
     
-    // Start a log group for the analysis - fallback to console.group
-    console.group(`Holiday Detection Analysis: ${dateString}`);
     logger.debug(`Starting holiday detection analysis for ${dateString}`);
     
     // 1. Check if any holiday events exist for this date
@@ -769,7 +763,6 @@ const Calendar: React.FC = () => {
       
       if (relevantSubEvents.length === 0) {
         logger.debug(`No sub-events found for ${dateString}`);
-        console.groupEnd();
         return;
       }
       

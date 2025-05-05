@@ -107,22 +107,32 @@ const ModalTitle = styled.h3`
 
 const CalendarContainer = styled.div`
   width: 100%;
-  height: 800px;
+  min-height: 650px;
+  height: auto;
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   padding: 1rem;
   border: 2px solid #e2e8f0;
-  overflow: hidden;
+  overflow: visible;
+  margin-bottom: 2rem;
 
   .fc {
     height: 100%;
+    min-height: 600px;
     background: white;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
-  .fc-view-harness {
+  /* Month view specific styles - allow natural height */
+  .fc-dayGridMonth-view {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Week view specific styles - maintain scrolling */
+  .fc-timeGridWeek-view .fc-view-harness {
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 #f1f5f9;
@@ -237,33 +247,44 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
         const calendarEl = container.querySelector('.fc-view-harness');
         if (!calendarEl) return;
 
-        // Handle horizontal scroll for week view
-        if (isWeekView && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-          e.preventDefault();
-          scrollAccumulator.current.x += e.deltaX;
-
-          if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
-            const direction = scrollAccumulator.current.x > 0 ? 1 : -1;
-            calendar.current.getApi().incrementDate({ days: direction });
-            scrollAccumulator.current.x = 0;
+        // For month view, allow vertical scrolling to bubble up to the page
+        // Only handle horizontal scrolling
+        if (isMonthView) {
+          // Only prevent default for horizontal scrolling
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+            e.preventDefault();
+            
+            // Add debug console logs
+            console.log('Month view wheel event:', e.deltaX, scrollAccumulator.current.x);
+            
+            scrollAccumulator.current.x += e.deltaX;
+            
+            if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
+              // For month view, use month increments instead of days
+              const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
+              calendar.current.getApi().incrementDate({ months: direction });
+              
+              // Reset accumulator
+              scrollAccumulator.current.x = 0;
+            }
           }
+          // Let vertical scroll pass through to the page
           return;
         }
 
-        // Handle vertical scroll for month view
-        if (isMonthView) {
-          // Always prevent default for month view to avoid website scroll
+        // Handle horizontal scroll for week view
+        if (isWeekView && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
           e.preventDefault();
           
-          // Only accumulate vertical scroll
-          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-            scrollAccumulator.current.y += e.deltaY;
+          scrollAccumulator.current.x += e.deltaX;
 
-            if (Math.abs(scrollAccumulator.current.y) >= SCROLL_THRESHOLD) {
-              const direction = scrollAccumulator.current.y > 0 ? 1 : -1;
-              calendar.current.getApi().incrementDate({ weeks: direction });
-              scrollAccumulator.current.y = 0;
-            }
+          if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
+            // Use same direction mapping as month view for consistency
+            const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
+            calendar.current.getApi().incrementDate({ weeks: direction });
+            
+            // Reset accumulator
+            scrollAccumulator.current.x = 0;
           }
           return;
         }
@@ -334,7 +355,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             eventClick={onEventClick}
             select={handleDateSelect}
             datesSet={onViewChange}
-            height="100%"
+            height="auto"
             slotMinTime="00:00:00"
             slotMaxTime="24:00:00"
             allDaySlot={false}
@@ -357,8 +378,8 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
                 scrollTimeReset: false,
                 scrollTimeSensitivity: 'fixed',
                 scrollTimeScroll: '01:00:00',
-                height: 'auto',
-                contentHeight: 'auto',
+                height: 600,
+                contentHeight: 600,
                 dateIncrement: { days: 1 }
               },
               dayGridMonth: {
@@ -366,8 +387,8 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
                 fixedWeekCount: false,
                 showNonCurrentDates: false,
                 dayMaxEvents: true,
-                height: 'auto',
-                contentHeight: 'auto',
+                height: "auto",
+                contentHeight: "auto",
                 expandRows: true,
                 stickyHeaderDates: true
               }

@@ -377,10 +377,6 @@ class StorageService {
             request.onerror = () => {
               logger.error('Error saving event:', event.id, request.error);
             };
-            
-            request.onsuccess = () => {
-              // console.log('Successfully saved event:', event.id);
-            };
           });
         };
         
@@ -445,10 +441,6 @@ class StorageService {
             
             request.onerror = () => {
               logger.error('Error saving sub-event:', subEvent.id, request.error);
-            };
-            
-            request.onsuccess = () => {
-              // console.log('Successfully saved sub-event:', subEvent.id);
             };
           });
         };
