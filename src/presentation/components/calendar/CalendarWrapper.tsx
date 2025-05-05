@@ -250,70 +250,53 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
         const isMonthView = view.type === 'dayGridMonth';
         const isWeekView = view.type === 'timeGridWeek';
 
-        // Get the calendar element
+        // Always prevent browser navigation
+        if (Math.abs(e.deltaX) > 0) {
+          e.preventDefault();
+        }
+
         const calendarEl = container.querySelector('.fc-view-harness');
         if (!calendarEl) return;
 
-        // For month view, allow vertical scrolling to bubble up to the page
-        // Only handle horizontal scrolling
         if (isMonthView) {
-          // Only prevent default for horizontal scrolling
           if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-            e.preventDefault();
-
             scrollAccumulator.current.x += e.deltaX;
-            
+
             if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
-              // For month view, use month increments instead of days
               const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
               calendar.current.getApi().incrementDate({ months: direction });
               scrollAccumulator.current.x = 0;
             }
           }
-          // Let vertical scroll pass through to the page
           return;
         }
 
-        // Handle horizontal scroll for week view
-        if (isWeekView && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-          e.preventDefault();
-          
-          scrollAccumulator.current.x += e.deltaX;
+        if (isWeekView) {
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+            scrollAccumulator.current.x += e.deltaX;
 
-          if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
-            // For week view, scroll day-by-day using direct navigation
-            const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
-            
-            // Get API reference and current date
-            const api = calendar.current.getApi();
-            const currentDate = api.getDate();
-            
-            // Create new date offset by one day
-            const newDate = new Date(currentDate);
-            newDate.setDate(currentDate.getDate() + direction);
-            
-            // Explicitly go to the new date
-            api.gotoDate(newDate);
-            
-            scrollAccumulator.current.x = 0;
+            if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
+              const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
+              const api = calendar.current.getApi();
+              const currentDate = api.getDate();
+              const newDate = new Date(currentDate);
+              newDate.setDate(currentDate.getDate() + direction);
+              api.gotoDate(newDate);
+              scrollAccumulator.current.x = 0;
+            }
+            return;
           }
-          return;
-        }
 
-        // Handle vertical scroll for time grid view - use proper element
-        if (isWeekView && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-          e.preventDefault();
-          
-          // Try to find the right scrollable element
-          const timeGridBody = container.querySelector('.fc-timegrid-body');
-          
-          if (timeGridBody && timeGridBody.scrollHeight > timeGridBody.clientHeight) {
-            timeGridBody.scrollTop += e.deltaY;
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            const timeGridBody = container.querySelector('.fc-timegrid-body');
+            if (timeGridBody && timeGridBody.scrollHeight > timeGridBody.clientHeight) {
+              timeGridBody.scrollTop += e.deltaY;
+            }
+            return;
           }
-          
-          return;
         }
       };
+
 
       // Add wheel event listener with passive: false to allow preventDefault
       container.addEventListener('wheel', handleWheel, { passive: false });
