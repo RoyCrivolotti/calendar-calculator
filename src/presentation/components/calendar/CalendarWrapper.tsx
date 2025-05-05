@@ -281,9 +281,20 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
           scrollAccumulator.current.x += e.deltaX;
 
           if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
-            // For week view, use week increments for consistent navigation
+            // For week view, scroll day-by-day using direct navigation
             const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
-            calendar.current.getApi().incrementDate({ weeks: direction });
+            
+            // Get API reference and current date
+            const api = calendar.current.getApi();
+            const currentDate = api.getDate();
+            
+            // Create new date offset by one day
+            const newDate = new Date(currentDate);
+            newDate.setDate(currentDate.getDate() + direction);
+            
+            // Explicitly go to the new date
+            api.gotoDate(newDate);
+            
             scrollAccumulator.current.x = 0;
           }
           return;
@@ -388,7 +399,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
                 eventOverlap: true,
                 nowIndicator: true,
                 allDaySlot: false,
-                dateIncrement: { weeks: 1 }
+                dateIncrement: { days: 1 }
               },
               dayGridMonth: {
                 dayHeaderFormat: { weekday: 'long' },
