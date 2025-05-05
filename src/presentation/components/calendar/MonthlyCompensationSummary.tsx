@@ -1016,6 +1016,31 @@ interface Event {
   isHoliday?: boolean;
 }
 
+// Simple global tooltip
+const GlobalTooltip = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  background: #ffffff;
+  border: 2px solid #3b82f6;
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+  font-size: 14px;
+  color: #000000;
+  z-index: 99999;
+  pointer-events: none;
+  max-width: 200px;
+  visibility: hidden; /* Start hidden */
+  opacity: 0;
+  transition: opacity 0.2s;
+  
+  &.visible {
+    visibility: visible;
+    opacity: 1;
+  }
+`;
+
 // After the component declaration, add logging to trace data flow
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
   // Add logging to debug data
@@ -1032,6 +1057,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
   const [isVisible, setIsVisible] = useState(false);
+  
+  // Global tooltip state
+  const [globalTooltip, setGlobalTooltip] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+    content: {
+      title: '',
+      value: '',
+      extra: ''
+    }
+  });
   
   // Keep tooltip state for pie chart
   const [tooltip, setTooltip] = useState<{
@@ -1054,7 +1091,28 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     setIncidentPage(1);
   }, [selectedMonth]);
   
-  // Handler functions for tooltip moved to component level
+  // Function to update global tooltip
+  const showTooltip = (e: React.MouseEvent, title: string, value: string, extra: string) => {
+    setGlobalTooltip({
+      visible: true,
+      x: e.clientX + 15,
+      y: e.clientY + 15,
+      content: {
+        title,
+        value,
+        extra
+      }
+    });
+  };
+  
+  const hideTooltip = () => {
+    setGlobalTooltip(prev => ({
+      ...prev,
+      visible: false
+    }));
+  };
+  
+  // Original tooltip handlers can remain for backward compatibility
   const handlePieSliceHover = useCallback((e: React.MouseEvent<SVGPathElement>) => {
     if (e.currentTarget) {
       const target = e.currentTarget;
@@ -1062,6 +1120,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       const amount = target.getAttribute('data-amount') || '';
       const percentage = target.getAttribute('data-percentage') || '';
       
+      // Update global tooltip instead
+      showTooltip(e, type, `€${amount}`, `${percentage}% of total`);
+      
+      // Original code can stay for backward compatibility
       setTooltip({
         visible: true,
         x: e.clientX,
@@ -1074,6 +1136,14 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   }, []);
   
   const handleTooltipMove = useCallback((e: React.MouseEvent) => {
+    // Update global tooltip position
+    setGlobalTooltip(prev => ({
+      ...prev,
+      x: e.clientX + 15,
+      y: e.clientY + 15
+    }));
+    
+    // Original code can stay for backward compatibility
     if (tooltip) {
       setTooltip({
         ...tooltip,
@@ -1310,6 +1380,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-value={`${oncallHours.weekday}h`} 
           data-label="Weekday On-Call"
           className={isVisible ? 'mounted' : ''}
+          onMouseEnter={(e) => showTooltip(e, "Weekday On-Call", `${oncallHours.weekday} hours`, `${Math.round((oncallHours.weekday / maxHours) * 100)}% of max`)}
+          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+          onMouseLeave={hideTooltip}
         />
       );
     }
@@ -1323,6 +1396,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-value={`${oncallHours.weekend}h`} 
           data-label="Weekend On-Call"
           className={isVisible ? 'mounted' : ''}
+          onMouseEnter={(e) => showTooltip(e, "Weekend On-Call", `${oncallHours.weekend} hours`, `${Math.round((oncallHours.weekend / maxHours) * 100)}% of max`)}
+          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+          onMouseLeave={hideTooltip}
         />
       );
     }
@@ -1336,6 +1412,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-value={`${incidentHours.weekday}h`} 
           data-label="Weekday Incident"
           className={isVisible ? 'mounted' : ''}
+          onMouseEnter={(e) => showTooltip(e, "Weekday Incident", `${incidentHours.weekday} hours`, `${Math.round((incidentHours.weekday / maxHours) * 100)}% of max`)}
+          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+          onMouseLeave={hideTooltip}
         />
       );
     }
@@ -1349,6 +1428,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-value={`${incidentHours.weekend}h`} 
           data-label="Weekend Incident"
           className={isVisible ? 'mounted' : ''}
+          onMouseEnter={(e) => showTooltip(e, "Weekend Incident", `${incidentHours.weekend} hours`, `${Math.round((incidentHours.weekend / maxHours) * 100)}% of max`)}
+          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+          onMouseLeave={hideTooltip}
         />
       );
     }
@@ -1362,6 +1444,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-value={`${incidentHours.nightShift}h`} 
           data-label="Night Shift Incident"
           className={isVisible ? 'mounted' : ''}
+          onMouseEnter={(e) => showTooltip(e, "Night Shift Incident", `${incidentHours.nightShift} hours`, `${Math.round((incidentHours.nightShift / maxHours) * 100)}% of max`)}
+          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+          onMouseLeave={hideTooltip}
         />
       );
     }
@@ -1375,6 +1460,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-value={`${incidentHours.weekendNight}h`} 
           data-label="Weekend Night"
           className={isVisible ? 'mounted' : ''}
+          onMouseEnter={(e) => showTooltip(e, "Weekend Night", `${incidentHours.weekendNight} hours`, `${Math.round((incidentHours.weekendNight / maxHours) * 100)}% of max`)}
+          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+          onMouseLeave={hideTooltip}
         />
       );
     }
@@ -1519,7 +1607,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           data-amount={item.amount.toFixed(2)}
           data-percentage={percentage.toFixed(0)}
           onMouseEnter={handlePieSliceHover}
-          onMouseLeave={() => setTooltip(null)}
+          onMouseLeave={hideTooltip}
           onMouseMove={handleTooltipMove}
           style={{
             transition: 'transform 0.3s ease, opacity 0.3s ease',
@@ -1876,6 +1964,21 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   return (
     <Container>
+      {/* Global tooltip rendered at the top level */}
+      <GlobalTooltip 
+        className={globalTooltip.visible ? 'visible' : ''}
+        style={{ 
+          left: `${globalTooltip.x}px`, 
+          top: `${globalTooltip.y}px`
+        }}
+      >
+        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+          {globalTooltip.content.title}
+        </div>
+        <div>{globalTooltip.content.value}</div>
+        <div>{globalTooltip.content.extra}</div>
+      </GlobalTooltip>
+      
       <SectionTitle>Monthly Compensation Summary</SectionTitle>
       <ScrollButton className="left" onClick={scrollLeft}>
         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
