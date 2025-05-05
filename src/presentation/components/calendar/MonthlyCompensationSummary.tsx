@@ -1494,11 +1494,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const getCompensationData = () => {
     const result = [];
     
-    // Weekday on-call
+    // Use the actual precalculated oncall amount if available
     if (oncallData.length > 0) {
-      const weekdayHours = extractHoursData(oncallData[0].description).weekday;
-      if (weekdayHours > 0) {
-        const amount = weekdayHours * 3.90; // Weekday on-call rate
+      const oncallHours = extractHoursData(oncallData[0].description);
+      const totalOncallAmount = oncallData[0].amount;
+      
+      // Calculate the proportion of weekday vs weekend for distribution
+      const totalOncallHours = oncallHours.weekday + oncallHours.weekend;
+      
+      // Weekday on-call - distribute the actual amount proportionally
+      if (oncallHours.weekday > 0 && totalOncallHours > 0) {
+        const weekdayProportion = oncallHours.weekday / totalOncallHours;
+        const amount = totalOncallAmount * weekdayProportion;
         result.push({
           type: 'Weekday On-Call',
           amount,
@@ -1506,10 +1513,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         });
       }
       
-      // Weekend on-call
-      const weekendHours = extractHoursData(oncallData[0].description).weekend;
-      if (weekendHours > 0) {
-        const amount = weekendHours * 7.34; // Weekend on-call rate
+      // Weekend on-call - distribute the actual amount proportionally
+      if (oncallHours.weekend > 0 && totalOncallHours > 0) {
+        const weekendProportion = oncallHours.weekend / totalOncallHours;
+        const amount = totalOncallAmount * weekendProportion;
         result.push({
           type: 'Weekend On-Call',
           amount,
@@ -1518,48 +1525,63 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       }
     }
     
-    // Incidents
+    // Use the actual precalculated incident amount if available
     if (incidentData.length > 0) {
       const hours = extractHoursData(incidentData[0].description);
+      const totalIncidentAmount = incidentData[0].amount;
       
-      // Weekday incidents
-      if (hours.weekday > 0) {
-        const amount = hours.weekday * 33.50 * 1.8; // Base * weekday multiplier
-        result.push({
-          type: 'Weekday Incident',
-          amount,
-          color: '#dc2626' // Updated color
-        });
-      }
+      // Calculate total incident hours for proportion
+      const totalIncidentHours = 
+        hours.weekday + 
+        hours.weekend + 
+        (hours.nightShift || 0) + 
+        (hours.weekendNight || 0);
       
-      // Weekend incidents
-      if (hours.weekend > 0) {
-        const amount = hours.weekend * 33.50 * 2.0; // Base * weekend multiplier
-        result.push({
-          type: 'Weekend Incident',
-          amount,
-          color: '#fca5a5'
-        });
-      }
-      
-      // Night shift incidents
-      if (hours.nightShift && hours.nightShift > 0) {
-        const amount = hours.nightShift * 33.50 * 1.8 * 1.4; // Base * weekday * night
-        result.push({
-          type: 'Night Shift Incident',
-          amount,
-          color: '#9f1239' // Updated color
-        });
-      }
-      
-      // Weekend night incidents
-      if (hours.weekendNight && hours.weekendNight > 0) {
-        const amount = hours.weekendNight * 33.50 * 2.0 * 1.4; // Base * weekend * night
-        result.push({
-          type: 'Weekend Night',
-          amount,
-          color: '#f43f5e'
-        });
+      // Only proceed with distribution if we have hours
+      if (totalIncidentHours > 0) {
+        // Weekday incidents
+        if (hours.weekday > 0) {
+          const proportion = hours.weekday / totalIncidentHours;
+          const amount = totalIncidentAmount * proportion;
+          result.push({
+            type: 'Weekday Incident',
+            amount,
+            color: '#dc2626' // Updated color
+          });
+        }
+        
+        // Weekend incidents
+        if (hours.weekend > 0) {
+          const proportion = hours.weekend / totalIncidentHours;
+          const amount = totalIncidentAmount * proportion;
+          result.push({
+            type: 'Weekend Incident',
+            amount,
+            color: '#fca5a5'
+          });
+        }
+        
+        // Night shift incidents
+        if (hours.nightShift && hours.nightShift > 0) {
+          const proportion = hours.nightShift / totalIncidentHours;
+          const amount = totalIncidentAmount * proportion;
+          result.push({
+            type: 'Night Shift Incident',
+            amount,
+            color: '#9f1239' // Updated color
+          });
+        }
+        
+        // Weekend night incidents
+        if (hours.weekendNight && hours.weekendNight > 0) {
+          const proportion = hours.weekendNight / totalIncidentHours;
+          const amount = totalIncidentAmount * proportion;
+          result.push({
+            type: 'Weekend Night',
+            amount,
+            color: '#f43f5e'
+          });
+        }
       }
     }
     
