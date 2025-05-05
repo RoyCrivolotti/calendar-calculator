@@ -34,6 +34,105 @@ A React-based calendar application for tracking on-call shifts, managing inciden
 - **Storage**: Browser LocalStorage with structured serialization
 - **Error Handling**: Centralized error tracking and logging
 
+## System Architecture
+
+Below are visual representations of the application's architecture and key processes.
+
+### Application Architecture
+
+```mermaid
+graph TD
+    User[User] -->|Interacts with| UI[UI Components]
+    UI -->|Renders| Calendar[Calendar View]
+    UI -->|Renders| EventEditor[Event Editor]
+    UI -->|Renders| Summary[Monthly Summary]
+    
+    UI -->|Uses| PresentationServices[Presentation Services]
+    PresentationServices -->|Uses| StorageService[Storage Service]
+    
+    UI -->|Calls| DomainServices[Domain Services]
+    DomainServices -->|Uses| Entities[Domain Entities]
+    DomainServices -->|Uses| Constants[Business Constants]
+    
+    StorageService -->|Persists| LocalStorage[(Browser LocalStorage)]
+    
+    subgraph "Presentation Layer"
+        UI
+        PresentationServices
+        Calendar
+        EventEditor
+        Summary
+    end
+    
+    subgraph "Domain Layer"
+        DomainServices
+        Entities
+        Constants
+    end
+    
+    subgraph "Infrastructure Layer"
+        StorageService
+        LocalStorage
+    end
+```
+
+### Compensation Calculation Flow
+
+```mermaid
+flowchart TD
+    Start([User views monthly summary]) --> LoadEvents[Load Events from Storage]
+    LoadEvents --> LoadSubEvents[Load SubEvents]
+    LoadSubEvents --> FilterMonth[Filter for Selected Month]
+    
+    FilterMonth --> A{Event Type?}
+    A -->|On-Call| ProcessOnCall[Process On-Call Hours]
+    A -->|Incident| ProcessIncident[Process Incident Hours]
+    
+    ProcessOnCall --> B{Time Period?}
+    B -->|Weekday| CalcWeekdayOnCall[Apply Weekday Rate: €3.90/h]
+    B -->|Weekend| CalcWeekendOnCall[Apply Weekend Rate: €7.34/h]
+    
+    ProcessIncident --> C{Time Period?}
+    C -->|Weekday| CalcWeekdayIncident[Apply Base × 1.8]
+    C -->|Weekend| CalcWeekendIncident[Apply Base × 2.0]
+    
+    CalcWeekdayIncident --> D{Night Shift?}
+    CalcWeekendIncident --> D
+    D -->|Yes| ApplyNightBonus[Apply Additional 1.4× Multiplier]
+    D -->|No| SkipNightBonus[Skip Night Bonus]
+    
+    CalcWeekdayOnCall --> AggregateResults[Aggregate Results]
+    CalcWeekendOnCall --> AggregateResults
+    ApplyNightBonus --> AggregateResults
+    SkipNightBonus --> AggregateResults
+    
+    AggregateResults --> GenerateBreakdown[Generate Compensation Breakdown]
+    GenerateBreakdown --> RenderVisualizations[Render Charts and Tables]
+    RenderVisualizations --> End([Display to User])
+```
+
+### Event Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created: User creates event
+    Created --> Scheduled: Save event
+    Scheduled --> Active: Event time begins
+    Active --> Processing: User handles incident
+    Active --> Completed: Event time ends
+    Processing --> Completed: Incident resolved
+    Completed --> Analyzed: Calculate compensation
+    Analyzed --> [*]: Display in monthly summary
+    
+    state Active {
+        [*] --> OnCall: Monitoring
+        OnCall --> Incident: Issue detected
+        Incident --> Resolution: Handle issue
+        Resolution --> OnCall: Resume monitoring
+        OnCall --> [*]: End of shift
+    }
+```
+
 ## Architecture & Design Patterns
 
 This application follows a clean, domain-driven architecture with clear separation of concerns:
@@ -50,6 +149,38 @@ This application follows a clean, domain-driven architecture with clear separati
 - **Factory Pattern**: Creation of entities with complex initialization
 - **Observer Pattern**: React state management for UI updates
 - **Strategy Pattern**: Different compensation strategies based on event types/time
+
+### Component Interaction Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Calendar as Calendar View
+    participant Editor as Event Editor
+    participant Summary as Monthly Summary
+    participant Calculator as CompensationCalculator
+    participant Storage as Storage Service
+    
+    User->>Calendar: View Calendar
+    Calendar->>Storage: Load Events
+    Storage-->>Calendar: Return Events
+    Calendar-->>User: Display Events
+    
+    User->>Calendar: Click "Add Event"
+    Calendar->>Editor: Open Editor
+    User->>Editor: Input Event Details
+    Editor->>Storage: Save Event
+    
+    User->>Summary: View Monthly Summary
+    Summary->>Storage: Load Events for Month
+    Storage-->>Summary: Return Events
+    Summary->>Calculator: Calculate Compensation
+    Calculator-->>Summary: Return Breakdown
+    Summary-->>User: Display Charts & Data
+    
+    User->>Summary: Toggle Breakdown View
+    Summary-->>User: Update Visualization
+```
 
 ### Code Organization Principles
 - **Single Responsibility Principle**: Each component and service has a clear, focused purpose
@@ -75,6 +206,54 @@ src/
 │   └── services/      # Presentation-layer services (Storage)
 │
 └── utils/             # Shared utilities for dates, logging, etc.
+```
+
+## Data Model
+
+```mermaid
+classDiagram
+    class CalendarEvent {
+        +string id
+        +Date start
+        +Date end
+        +string title
+        +string type
+        +boolean allDay
+    }
+    
+    class SubEvent {
+        +string id
+        +string parentEventId
+        +Date start
+        +Date end
+        +string type
+        +boolean isWeekend
+        +boolean isNightShift
+        +boolean isHoliday
+        +boolean isOfficeHours
+    }
+    
+    class CompensationBreakdown {
+        +string type
+        +number amount
+        +number count
+        +string description
+        +Date month
+        +Event[] events
+    }
+    
+    class CompensationRates {
+        +number weekdayOnCallRate
+        +number weekendOnCallRate
+        +number baseHourlySalary
+        +number weekdayIncidentMultiplier
+        +number weekendIncidentMultiplier
+        +number nightShiftBonusMultiplier
+    }
+    
+    CalendarEvent "1" --> "*" SubEvent : contains
+    SubEvent --> CompensationBreakdown : calculates
+    CompensationRates --> CompensationBreakdown : uses
 ```
 
 ## Compensation Calculation Logic
