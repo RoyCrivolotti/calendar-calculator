@@ -1534,33 +1534,49 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     
     return (
       <div className={isVisible ? 'visible' : ''}>
-        <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155', textAlign: 'center' }}>Compensation Breakdown</h3>
-        <PieChartContainer>
-          <svg width="200" height="200" viewBox="0 0 200 200">
-            <g transform="translate(0, 0)">
-              {svgSlices}
-            </g>
-          </svg>
-          <TotalLabel style={{
-            transition: 'opacity 0.3s ease',
-            opacity: isVisible ? 1 : 0
-          }}>
-            Total: €{totalAmount.toFixed(2)}
-          </TotalLabel>
-          {tooltip && tooltip.visible && (
-            <PieChartTooltip
-              style={{
-                left: `${tooltip.x + 10}px`,
-                top: `${tooltip.y + 10}px`,
-                position: 'fixed'
-              }}
-            >
-              <div className="type">{tooltip.type}</div>
-              <div className="amount">€{tooltip.amount}</div>
-              <div className="percentage">{tooltip.percentage}% of total</div>
-            </PieChartTooltip>
-          )}
-        </PieChartContainer>
+        {/* Chart section wrapper */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155', width: '220px', textAlign: 'center' }}>Compensation Breakdown</h3>
+          
+          {/* Chart wrapper to control exact dimensions */}
+          <div style={{ width: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Pie chart */}
+            <div style={{ width: '220px', height: '220px', position: 'relative' }}>
+              <svg width="200" height="200" viewBox="0 0 200 200" style={{ display: 'block', margin: '0 auto' }}>
+                <g transform="translate(0, 0)">
+                  {svgSlices}
+                </g>
+              </svg>
+              {tooltip && tooltip.visible && (
+                <PieChartTooltip
+                  style={{
+                    left: `${tooltip.x + 10}px`,
+                    top: `${tooltip.y + 10}px`,
+                    position: 'fixed'
+                  }}
+                >
+                  <div className="type">{tooltip.type}</div>
+                  <div className="amount">€{tooltip.amount}</div>
+                  <div className="percentage">{tooltip.percentage}% of total</div>
+                </PieChartTooltip>
+              )}
+            </div>
+            
+            {/* Total label (same exact width as chart container) */}
+            <div style={{
+              width: '220px',
+              textAlign: 'center',
+              marginTop: '1rem',
+              fontSize: '1.25rem',
+              fontWeight: 600,
+              color: '#0f172a',
+              transition: 'opacity 0.3s ease',
+              opacity: isVisible ? 1 : 0
+            }}>
+              Total: €{totalAmount.toFixed(2)}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
