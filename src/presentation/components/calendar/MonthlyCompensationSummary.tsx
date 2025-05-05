@@ -448,6 +448,14 @@ const PieChartLabel = styled.div`
   }
 `;
 
+const TotalLabel = styled.div`
+  margin-top: 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: center;
+`;
+
 const PieChartTooltip = styled.div`
   position: absolute;
   background: white;
@@ -1376,7 +1384,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     
     return (
       <div className={isVisible ? 'visible' : ''}>
-        <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>Hours Breakdown</h3>
+        <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155', textAlign: 'center' }}>Hours Breakdown</h3>
         <BarChartContainer>
           {bars}
         </BarChartContainer>
@@ -1526,20 +1534,19 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     
     return (
       <div className={isVisible ? 'visible' : ''}>
-        <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>Compensation Breakdown</h3>
+        <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155', textAlign: 'center' }}>Compensation Breakdown</h3>
         <PieChartContainer>
           <svg width="200" height="200" viewBox="0 0 200 200">
             <g transform="translate(0, 0)">
               {svgSlices}
             </g>
           </svg>
-          <PieChartLabel style={{
+          <TotalLabel style={{
             transition: 'opacity 0.3s ease',
             opacity: isVisible ? 1 : 0
           }}>
-            Total
-            <span className="amount">€{totalAmount.toFixed(2)}</span>
-          </PieChartLabel>
+            Total: €{totalAmount.toFixed(2)}
+          </TotalLabel>
           {tooltip && tooltip.visible && (
             <PieChartTooltip
               style={{
