@@ -1355,6 +1355,16 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const oncallHours = oncallData.length > 0 ? extractHoursData(oncallData[0].description) : { weekday: 0, weekend: 0 };
     const incidentHours = incidentData.length > 0 ? extractHoursData(incidentData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
     
+    // Calculate total hours across all categories
+    const totalHours = (
+      oncallHours.weekday + 
+      oncallHours.weekend + 
+      incidentHours.weekday + 
+      incidentHours.weekend + 
+      (incidentHours.nightShift || 0) + 
+      (incidentHours.weekendNight || 0)
+    );
+    
     const maxHours = Math.max(
       oncallHours.weekday,
       oncallHours.weekend,
@@ -1372,99 +1382,99 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const bars = [];
     
     if (oncallHours.weekday > 0) {
-      bars.push(
-        <Bar 
-          key="weekday-oncall"
-          height={calculateHeight(oncallHours.weekday)} 
-          color="#3b82f6"
-          data-value={`${oncallHours.weekday}h`} 
-          data-label="Weekday On-Call"
-          className={isVisible ? 'mounted' : ''}
-          onMouseEnter={(e) => showTooltip(e, "Weekday On-Call", `${oncallHours.weekday} hours`, `${Math.round((oncallHours.weekday / maxHours) * 100)}% of max`)}
-          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
-          onMouseLeave={hideTooltip}
-        />
-      );
+     bars.push(
+       <Bar 
+         key="weekday-oncall"
+         height={calculateHeight(oncallHours.weekday)} 
+         color="#3b82f6"
+         data-value={`${oncallHours.weekday}h`} 
+         data-label="Weekday On-Call"
+         className={isVisible ? 'mounted' : ''}
+         onMouseEnter={(e) => showTooltip(e, "Weekday On-Call", `${oncallHours.weekday} hours`, `${Math.round((oncallHours.weekday / totalHours) * 100)}% of total hours`)}
+         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseLeave={hideTooltip}
+       />
+     );
     }
     
     if (oncallHours.weekend > 0) {
-      bars.push(
-        <Bar 
-          key="weekend-oncall"
-          height={calculateHeight(oncallHours.weekend)} 
-          color="#93c5fd"
-          data-value={`${oncallHours.weekend}h`} 
-          data-label="Weekend On-Call"
-          className={isVisible ? 'mounted' : ''}
-          onMouseEnter={(e) => showTooltip(e, "Weekend On-Call", `${oncallHours.weekend} hours`, `${Math.round((oncallHours.weekend / maxHours) * 100)}% of max`)}
-          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
-          onMouseLeave={hideTooltip}
-        />
-      );
+     bars.push(
+       <Bar 
+         key="weekend-oncall"
+         height={calculateHeight(oncallHours.weekend)} 
+         color="#93c5fd"
+         data-value={`${oncallHours.weekend}h`} 
+         data-label="Weekend On-Call"
+         className={isVisible ? 'mounted' : ''}
+         onMouseEnter={(e) => showTooltip(e, "Weekend On-Call", `${oncallHours.weekend} hours`, `${Math.round((oncallHours.weekend / totalHours) * 100)}% of total hours`)}
+         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseLeave={hideTooltip}
+       />
+     );
     }
     
     if (incidentHours.weekday > 0) {
-      bars.push(
-        <Bar 
-          key="weekday-incident"
-          height={calculateHeight(incidentHours.weekday)} 
-          color="#dc2626"
-          data-value={`${incidentHours.weekday}h`} 
-          data-label="Weekday Incident"
-          className={isVisible ? 'mounted' : ''}
-          onMouseEnter={(e) => showTooltip(e, "Weekday Incident", `${incidentHours.weekday} hours`, `${Math.round((incidentHours.weekday / maxHours) * 100)}% of max`)}
-          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
-          onMouseLeave={hideTooltip}
-        />
-      );
+     bars.push(
+       <Bar 
+         key="weekday-incident"
+         height={calculateHeight(incidentHours.weekday)} 
+         color="#dc2626"
+         data-value={`${incidentHours.weekday}h`} 
+         data-label="Weekday Incident"
+         className={isVisible ? 'mounted' : ''}
+         onMouseEnter={(e) => showTooltip(e, "Weekday Incident", `${incidentHours.weekday} hours`, `${Math.round((incidentHours.weekday / totalHours) * 100)}% of total hours`)}
+         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseLeave={hideTooltip}
+       />
+     );
     }
     
     if (incidentHours.weekend > 0) {
-      bars.push(
-        <Bar 
-          key="weekend-incident"
-          height={calculateHeight(incidentHours.weekend)} 
-          color="#fca5a5"
-          data-value={`${incidentHours.weekend}h`} 
-          data-label="Weekend Incident"
-          className={isVisible ? 'mounted' : ''}
-          onMouseEnter={(e) => showTooltip(e, "Weekend Incident", `${incidentHours.weekend} hours`, `${Math.round((incidentHours.weekend / maxHours) * 100)}% of max`)}
-          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
-          onMouseLeave={hideTooltip}
-        />
-      );
+     bars.push(
+       <Bar 
+         key="weekend-incident"
+         height={calculateHeight(incidentHours.weekend)} 
+         color="#fca5a5"
+         data-value={`${incidentHours.weekend}h`} 
+         data-label="Weekend Incident"
+         className={isVisible ? 'mounted' : ''}
+         onMouseEnter={(e) => showTooltip(e, "Weekend Incident", `${incidentHours.weekend} hours`, `${Math.round((incidentHours.weekend / totalHours) * 100)}% of total hours`)}
+         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseLeave={hideTooltip}
+       />
+     );
     }
     
     if (incidentHours.nightShift && incidentHours.nightShift > 0) {
-      bars.push(
-        <Bar 
-          key="night-incident"
-          height={calculateHeight(incidentHours.nightShift)} 
-          color="#9f1239"
-          data-value={`${incidentHours.nightShift}h`} 
-          data-label="Night Shift Incident"
-          className={isVisible ? 'mounted' : ''}
-          onMouseEnter={(e) => showTooltip(e, "Night Shift Incident", `${incidentHours.nightShift} hours`, `${Math.round((incidentHours.nightShift / maxHours) * 100)}% of max`)}
-          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
-          onMouseLeave={hideTooltip}
-        />
-      );
+     bars.push(
+       <Bar 
+         key="night-incident"
+         height={calculateHeight(incidentHours.nightShift)} 
+         color="#9f1239"
+         data-value={`${incidentHours.nightShift}h`} 
+         data-label="Night Shift Incident"
+         className={isVisible ? 'mounted' : ''}
+         onMouseEnter={(e) => showTooltip(e, "Night Shift Incident", `${incidentHours.nightShift} hours`, `${Math.round((incidentHours.nightShift / totalHours) * 100)}% of total hours`)}
+         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseLeave={hideTooltip}
+       />
+     );
     }
     
     if (incidentHours.weekendNight && incidentHours.weekendNight > 0) {
-      bars.push(
-        <Bar 
-          key="weekend-night"
-          height={calculateHeight(incidentHours.weekendNight)} 
-          color="#f43f5e"
-          data-value={`${incidentHours.weekendNight}h`} 
-          data-label="Weekend Night"
-          className={isVisible ? 'mounted' : ''}
-          onMouseEnter={(e) => showTooltip(e, "Weekend Night", `${incidentHours.weekendNight} hours`, `${Math.round((incidentHours.weekendNight / maxHours) * 100)}% of max`)}
-          onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
-          onMouseLeave={hideTooltip}
-        />
-      );
+     bars.push(
+       <Bar 
+         key="weekend-night"
+         height={calculateHeight(incidentHours.weekendNight)} 
+         color="#f43f5e"
+         data-value={`${incidentHours.weekendNight}h`} 
+         data-label="Weekend Night"
+         className={isVisible ? 'mounted' : ''}
+         onMouseEnter={(e) => showTooltip(e, "Weekend Night", `${incidentHours.weekendNight} hours`, `${Math.round((incidentHours.weekendNight / totalHours) * 100)}% of total hours`)}
+         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseLeave={hideTooltip}
+       />
+     );
     }
     
     // Only return content if we have bars to show
