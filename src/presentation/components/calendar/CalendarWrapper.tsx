@@ -249,30 +249,23 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
         const view = calendar.current.getApi().view;
         const isMonthView = view.type === 'dayGridMonth';
         const isWeekView = view.type === 'timeGridWeek';
+        const isHorizontalScroll = Math.abs(e.deltaX) > Math.abs(e.deltaY);
 
-        // Always prevent browser navigation
+        // Always prevent browser navigation for horizontal scrolling
         if (Math.abs(e.deltaX) > 0) {
           e.preventDefault();
         }
 
-        const calendarEl = container.querySelector('.fc-view-harness');
-        if (!calendarEl) return;
+        if (isMonthView && isHorizontalScroll) {
+          scrollAccumulator.current.x += e.deltaX;
 
-        if (isMonthView) {
-          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-            scrollAccumulator.current.x += e.deltaX;
-
-            if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
-              const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
-              calendar.current.getApi().incrementDate({ months: direction });
-              scrollAccumulator.current.x = 0;
-            }
+          if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
+            const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
+            calendar.current.getApi().incrementDate({ months: direction });
+            scrollAccumulator.current.x = 0;
           }
-          return;
-        }
-
-        if (isWeekView) {
-          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        } else if (isWeekView) {
+          if (isHorizontalScroll) {
             scrollAccumulator.current.x += e.deltaX;
 
             if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
@@ -284,21 +277,15 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
               api.gotoDate(newDate);
               scrollAccumulator.current.x = 0;
             }
-            return;
-          }
-
-          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          } else if (Math.abs(e.deltaY) > 0) {
             const timeGridBody = container.querySelector('.fc-timegrid-body');
             if (timeGridBody && timeGridBody.scrollHeight > timeGridBody.clientHeight) {
               timeGridBody.scrollTop += e.deltaY;
             }
-            return;
           }
         }
       };
 
-
-      // Add wheel event listener with passive: false to allow preventDefault
       container.addEventListener('wheel', handleWheel, { passive: false });
       return () => container.removeEventListener('wheel', handleWheel);
     }, [ref]);
