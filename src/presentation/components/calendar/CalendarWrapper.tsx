@@ -356,6 +356,16 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             expandRows={true}
             stickyHeaderDates={true}
             dayHeaderFormat={{ weekday: 'long' }}
+            slotLabelFormat={{
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }}
+            eventTimeFormat={{
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }}
             views={{
               timeGridWeek: {
                 dayHeaderFormat: { weekday: 'long', day: 'numeric' },
