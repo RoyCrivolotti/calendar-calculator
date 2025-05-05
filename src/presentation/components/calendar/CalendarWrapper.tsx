@@ -114,7 +114,7 @@ const CalendarContainer = styled.div`
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   padding: 1rem;
   border: 2px solid #e2e8f0;
-  overflow: visible;
+  overflow: hidden;
   margin-bottom: 2rem;
 
   .fc {
@@ -132,45 +132,52 @@ const CalendarContainer = styled.div`
   }
 
   /* Week view specific styles - maintain scrolling */
-  .fc-timeGridWeek-view .fc-view-harness {
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f1f5f9;
-
-    &::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    &::-webkit-scrollbar-track {
-      background: #f1f5f9;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      background-color: #cbd5e1;
-      border-radius: 4px;
-      border: 2px solid #f1f5f9;
-    }
+  .fc-timeGridWeek-view {
+    height: 500px !important;
+    overflow: hidden !important;
   }
-
-  .fc-scroller {
+  
+  /* Week view scrolling container */
+  .fc-timeGridWeek-view .fc-scroller {
+    overflow: hidden !important;
+  }
+  
+  /* Main scrollable container for the week view timeline */
+  .fc-timeGridWeek-view .fc-timegrid-body {
+    height: 450px !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
   }
 
-  .fc-scroller-liquid-absolute {
-    position: relative !important;
-  }
-
-  .fc-timegrid-body {
-    width: 100% !important;
-  }
-
+  /* Format the time slots */
   .fc-timegrid-slot {
     height: 48px !important;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  /* Proper structure for the time slots container */
+  .fc-timegrid-slots table {
+    min-height: 1200px !important;
+  }
+  
+  /* Ensure events stay in place when scrolling */
+  .fc-timegrid-event-harness {
+    position: absolute !important;
+  }
+  
+  /* Custom scrollbar styling */
+  .fc-timegrid-body::-webkit-scrollbar {
+    width: 8px;
   }
 
-  .fc-daygrid-body {
-    width: 100% !important;
+  .fc-timegrid-body::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+
+  .fc-timegrid-body::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
+    border: 2px solid #f1f5f9;
   }
 `;
 
@@ -253,15 +260,13 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
           // Only prevent default for horizontal scrolling
           if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
             e.preventDefault();
-            
+
             scrollAccumulator.current.x += e.deltaX;
             
             if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
               // For month view, use month increments instead of days
               const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
               calendar.current.getApi().incrementDate({ months: direction });
-              
-              // Reset accumulator
               scrollAccumulator.current.x = 0;
             }
           }
@@ -276,20 +281,26 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
           scrollAccumulator.current.x += e.deltaX;
 
           if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
-            // For week view, use day increments for finer control
+            // For week view, use week increments for consistent navigation
             const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
-            calendar.current.getApi().incrementDate({ days: direction });
-            
-            // Reset accumulator
+            calendar.current.getApi().incrementDate({ weeks: direction });
             scrollAccumulator.current.x = 0;
           }
           return;
         }
 
-        // Handle vertical scroll for time grid view
-        if (calendarEl.scrollHeight > calendarEl.clientHeight) {
+        // Handle vertical scroll for time grid view - use proper element
+        if (isWeekView && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
           e.preventDefault();
-          calendarEl.scrollTop += e.deltaY;
+          
+          // Try to find the right scrollable element
+          const timeGridBody = container.querySelector('.fc-timegrid-body');
+          
+          if (timeGridBody && timeGridBody.scrollHeight > timeGridBody.clientHeight) {
+            timeGridBody.scrollTop += e.deltaY;
+          }
+          
+          return;
         }
       };
 
@@ -330,6 +341,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             ref={ref}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
+            initialDate={currentDate}
             headerToolbar={{
               left: 'prev,next today',
               center: 'title',
@@ -359,7 +371,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             slotDuration="01:00:00"
             slotLabelInterval="01:00"
             snapDuration="00:15:00"
-            scrollTime="00:00:00"
+            scrollTime="08:00:00"
             expandRows={true}
             stickyHeaderDates={true}
             dayHeaderFormat={{ weekday: 'long' }}
@@ -369,40 +381,27 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
                 slotDuration: '01:00:00',
                 slotLabelInterval: '01:00',
                 snapDuration: '00:15:00',
-                scrollTime: '00:00:00',
+                scrollTime: '08:00:00',
                 expandRows: true,
                 stickyHeaderDates: true,
-                scrollTimeReset: false,
-                scrollTimeSensitivity: 'fixed',
-                scrollTimeScroll: '01:00:00',
-                height: 600,
-                contentHeight: 600,
-                dateIncrement: { days: 1 }
+                eventMaxStack: 3,
+                eventOverlap: true,
+                nowIndicator: true,
+                allDaySlot: false,
+                dateIncrement: { weeks: 1 }
               },
               dayGridMonth: {
                 dayHeaderFormat: { weekday: 'long' },
                 fixedWeekCount: false,
                 showNonCurrentDates: false,
                 dayMaxEvents: true,
-                height: "auto",
-                contentHeight: "auto",
-                expandRows: true,
-                stickyHeaderDates: true
+                dateIncrement: { months: 1 }
               }
             }}
             handleWindowResize={true}
             windowResizeDelay={100}
             nowIndicator={true}
-            nowIndicatorClassNames={['now-indicator']}
             dayMaxEventRows={true}
-            moreLinkClick="popover"
-            moreLinkContent={(args) => `+${args.num} more`}
-            eventTimeFormat={{
-              hour: '2-digit',
-              minute: '2-digit',
-              meridiem: false,
-              hour12: false
-            }}
           />
         </CalendarContainer>
         {showEventTypeSelector && (
