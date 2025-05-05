@@ -254,9 +254,6 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
           if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
             e.preventDefault();
             
-            // Add debug console logs
-            console.log('Month view wheel event:', e.deltaX, scrollAccumulator.current.x);
-            
             scrollAccumulator.current.x += e.deltaX;
             
             if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
@@ -279,9 +276,9 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
           scrollAccumulator.current.x += e.deltaX;
 
           if (Math.abs(scrollAccumulator.current.x) >= SCROLL_THRESHOLD) {
-            // Use same direction mapping as month view for consistency
+            // For week view, use day increments for finer control
             const direction = scrollAccumulator.current.x > 0 ? -1 : 1;
-            calendar.current.getApi().incrementDate({ weeks: direction });
+            calendar.current.getApi().incrementDate({ days: direction });
             
             // Reset accumulator
             scrollAccumulator.current.x = 0;

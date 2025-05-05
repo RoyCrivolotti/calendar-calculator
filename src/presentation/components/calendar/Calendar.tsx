@@ -357,6 +357,8 @@ const Calendar: React.FC = () => {
   const saveEventWithoutConflictCheck = useCallback((event: CalendarEvent) => {
     const isNewEvent = event.id.startsWith('temp-');
     logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
+    logger.debug(`Event times: ${event.start.toISOString()} - ${event.end.toISOString()}`);
+    logger.debug(`Event title: ${event.title}`);
     
     // Clear caches before operation
     calculatorFacade.clearCaches();
@@ -366,13 +368,34 @@ const Calendar: React.FC = () => {
     
     // New event with a temporary ID, create a new one
     if (isNewEvent) {
+      // Generate a permanent ID
+      const permanentId = crypto.randomUUID();
+      logger.debug(`Converting temp ID ${event.id} to permanent ID ${permanentId}`);
+      
       const eventWithoutTempId = createCalendarEvent({
         ...event.toJSON(),
-        id: crypto.randomUUID()
+        id: permanentId
       });
+      
+      // Ensure event has a title
+      if (!eventWithoutTempId.title) {
+        const defaultTitle = eventWithoutTempId.type === 'oncall' ? 'On-Call Shift' : 
+                            eventWithoutTempId.type === 'incident' ? 'Incident' : 'Holiday';
+        logger.debug(`Setting default title for event: ${defaultTitle}`);
+        eventWithoutTempId.title = defaultTitle;
+      }
+      
       savePromise = dispatch(createEventAsync(eventWithoutTempId.toJSON())).unwrap();
     } else {
       // Existing event, just update it
+      // Ensure event has a title
+      if (!event.title) {
+        const defaultTitle = event.type === 'oncall' ? 'On-Call Shift' : 
+                           event.type === 'incident' ? 'Incident' : 'Holiday';
+        logger.debug(`Setting default title for event: ${defaultTitle}`);
+        event.title = defaultTitle;
+      }
+      
       savePromise = dispatch(updateEventAsync(event.toJSON())).unwrap();
     }
     
@@ -618,6 +641,8 @@ const Calendar: React.FC = () => {
     
     const holidayId = pendingEventDelete.id;
     
+    // Group logging for this operation - fallback to console.group
+    console.group(`Deleting holiday: ${holidayId}`);
     logger.info(`Deleting holiday: ${holidayId}`);
     
     // If there are conflicting events, we should always regenerate
@@ -695,6 +720,8 @@ const Calendar: React.FC = () => {
     setPendingEventDelete(null);
     setConflictingEvents([]);
     
+    console.groupEnd();
+    
     // Run diagnostic after a delay
     setTimeout(() => analyzeHolidayDetection(), 1000);
   };
@@ -719,6 +746,8 @@ const Calendar: React.FC = () => {
     const dateToAnalyze = targetDate || new Date();
     const dateString = dateToAnalyze.toLocaleDateString();
     
+    // Start a log group for the analysis - fallback to console.group
+    console.group(`Holiday Detection Analysis: ${dateString}`);
     logger.debug(`Starting holiday detection analysis for ${dateString}`);
     
     // 1. Check if any holiday events exist for this date
@@ -763,6 +792,7 @@ const Calendar: React.FC = () => {
       
       if (relevantSubEvents.length === 0) {
         logger.debug(`No sub-events found for ${dateString}`);
+        console.groupEnd();
         return;
       }
       
