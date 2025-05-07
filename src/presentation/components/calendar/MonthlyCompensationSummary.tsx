@@ -1349,6 +1349,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return hours.weekday + hours.nightShift;
   };
 
+  // Helper function to get combined weekend hours for incidents
+  const getIncidentWeekendHours = (description: string): number => {
+    const hours = extractHoursData(description);
+    // Combine regular weekend hours and weekend night hours
+    return hours.weekend + hours.weekendNight;
+  };
+
   // Get the total amount for the selected month
   const monthTotal = totalData.length > 0 ? totalData[0].amount : 0;
 
@@ -2112,7 +2119,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                   </SummaryRow>
                   <SummaryRow>
                     <SummaryLabel>Weekend Hours</SummaryLabel>
-                    <SummaryValue>{extractHoursData(incidentData[0].description).weekend}h</SummaryValue>
+                    <SummaryValue>{getIncidentWeekendHours(incidentData[0].description)}h</SummaryValue>
                   </SummaryRow>
                   {extractHoursData(incidentData[0].description).nightShift && (
                     <SummaryRow>
