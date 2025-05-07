@@ -715,10 +715,14 @@ const Calendar: React.FC = () => {
       logger.info('Compensation data updated after holiday deletion (no regeneration needed)');
     }
     
-    // Reset state
+    // Reset all modal state
     setShowDeleteModal(false);
     setPendingEventDelete(null);
     setConflictingEvents([]);
+    
+    // Also close the event details modal
+    dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
     
     console.groupEnd();
     
