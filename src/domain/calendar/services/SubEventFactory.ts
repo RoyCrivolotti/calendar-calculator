@@ -21,7 +21,7 @@ export class SubEventFactory {
     
     // Create hourly sub-events
     const currentTime = new Date(start);
-    currentTime.setMinutes(0, 0, 0); // Round to the nearest hour start
+    currentTime.setMinutes(0, 0, 0);
     
     while (currentTime < end) {
       // Determine the end of this sub-event (1 hour later or the end of the parent event)
@@ -39,7 +39,8 @@ export class SubEventFactory {
       const isWeekendHour = isWeekend(currentTime);
       const isHolidayHour = HolidayChecker.isHoliday(currentTime, allEvents);
       const isNightShiftHour = isNightShift(currentTime, subEventEnd);
-      const isOfficeHoursTime = isOfficeHours(currentTime);
+      // Check office hours - but never consider holidays as office hours
+      const isOfficeHoursTime = !isHolidayHour && isOfficeHours(currentTime);
       
       const hourString = `${currentTime.getHours().toString().padStart(2, '0')}:00`;
       logger.debug(`Sub-event at ${hourString}: Weekend: ${isWeekendHour}, Holiday: ${isHolidayHour}, Night Shift: ${isNightShiftHour}, Office Hours: ${isOfficeHoursTime}`);

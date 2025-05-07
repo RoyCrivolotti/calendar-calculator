@@ -7,7 +7,7 @@ export const isWeekend = (date: Date): boolean => {
 };
 
 /**
- * Determines if a time period is during night shift hours (22:00-6:00)
+ * Checks if a time falls during night shift hours (22:00-6:00)
  * Only checks the starting hour to determine if it's a night shift
  */
 export const isNightShift = (start: Date, end: Date): boolean => {
@@ -21,9 +21,18 @@ export const isNightShift = (start: Date, end: Date): boolean => {
   return isNight;
 };
 
+/**
+ * Checks if a time falls during office hours (9:00-18:00 on weekdays)
+ * This should return false for weekends and holidays
+ */
 export const isOfficeHours = (date: Date): boolean => {
   const hour = date.getHours();
   const day = date.getDay();
+  
+  // Weekend days are never office hours
+  if (isWeekend(date)) {
+    return false;
+  }
   
   // Check if it's a weekday in the OFFICE_HOURS.days array and between OFFICE_HOURS.start and OFFICE_HOURS.end
   const isWorkingDay = OFFICE_HOURS.days.includes(day);
@@ -66,6 +75,31 @@ export const calculateCompensatedHours = (start: Date, end: Date, isOnCall: bool
   // For incidents, round up to the nearest hour
   if (!isOnCall) {
     totalHours = Math.ceil(totalHours);
+  }
+
+  return totalHours;
+};
+
+/**
+ * Calculates the number of hours that fall on weekends
+ */
+export const calculateWeekendHours = (start: Date, end: Date): number => {
+  let totalHours = 0;
+  let current = new Date(start);
+
+  while (current < end) {
+    const nextHour = new Date(current);
+    nextHour.setHours(current.getHours() + 1);
+
+    // If the next hour would be past the end time, use the end time
+    const segmentEnd = nextHour > end ? end : nextHour;
+
+    if (isWeekend(current)) {
+      const hoursInSegment = (segmentEnd.getTime() - current.getTime()) / (1000 * 60 * 60);
+      totalHours += hoursInSegment;
+    }
+
+    current = nextHour;
   }
 
   return totalHours;
