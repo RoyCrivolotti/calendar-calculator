@@ -1310,17 +1310,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   );
 
   // Extract hours from description for visualization
-  const extractHoursData = (description: string): { weekday: number, weekend: number, nightShift?: number, weekendNight?: number } => {
+  const extractHoursData = (description: string): { weekday: number, weekend: number, nightShift: number, weekendNight: number } => {
     try {
       const match = description.match(/\((.+?)\)/);
-      if (!match) return { weekday: 0, weekend: 0 };
+      if (!match) return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
       
       const parts = match[1].split(',').map(s => s.trim());
       
       const result = { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
       
       parts.forEach(part => {
-        const [hoursStr, type] = part.split(' ');
+        const [hoursStr, ...typeParts] = part.split(' ');
+        const type = typeParts.join(' '); // Rejoin in case there are spaces in the type
         const hours = parseFloat(hoursStr);
         
         if (type.includes('weekday') && !type.includes('night')) {
@@ -1337,8 +1338,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       return result;
     } catch (error) {
       logger.error('Error parsing hours:', error);
-      return { weekday: 0, weekend: 0 };
+      return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
     }
+  };
+  
+  // Helper function to get combined billable hours for incidents
+  const getIncidentBillableWeekdayHours = (description: string): number => {
+    const hours = extractHoursData(description);
+    // For incident charts, weekday hours should include both regular weekday and night shift hours
+    return hours.weekday + hours.nightShift;
   };
 
   // Get the total amount for the selected month
@@ -1352,7 +1360,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   // Update chart rendering to use the new transition approach
   const renderHoursChart = () => {
-    const oncallHours = oncallData.length > 0 ? extractHoursData(oncallData[0].description) : { weekday: 0, weekend: 0 };
+    const oncallHours = oncallData.length > 0 ? extractHoursData(oncallData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
     const incidentHours = incidentData.length > 0 ? extractHoursData(incidentData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
     
     // Calculate total hours across all categories
@@ -1361,8 +1369,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       oncallHours.weekend + 
       incidentHours.weekday + 
       incidentHours.weekend + 
-      (incidentHours.nightShift || 0) + 
-      (incidentHours.weekendNight || 0)
+      incidentHours.nightShift + 
+      incidentHours.weekendNight
     );
     
     const maxHours = Math.max(
@@ -1370,8 +1378,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       oncallHours.weekend,
       incidentHours.weekday,
       incidentHours.weekend,
-      incidentHours.nightShift || 0,
-      incidentHours.weekendNight || 0
+      incidentHours.nightShift,
+      incidentHours.weekendNight
     );
     
     // Return null if there are no hours to show
@@ -1445,7 +1453,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
      );
     }
     
-    if (incidentHours.nightShift && incidentHours.nightShift > 0) {
+    if (incidentHours.nightShift > 0) {
      bars.push(
        <Bar 
          key="night-incident"
@@ -1461,7 +1469,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
      );
     }
     
-    if (incidentHours.weekendNight && incidentHours.weekendNight > 0) {
+    if (incidentHours.weekendNight > 0) {
      bars.push(
        <Bar 
          key="weekend-night"
@@ -1534,8 +1542,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       const totalIncidentHours = 
         hours.weekday + 
         hours.weekend + 
-        (hours.nightShift || 0) + 
-        (hours.weekendNight || 0);
+        hours.nightShift + 
+        hours.weekendNight;
       
       // Only proceed with distribution if we have hours
       if (totalIncidentHours > 0) {
@@ -1562,7 +1570,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         }
         
         // Night shift incidents
-        if (hours.nightShift && hours.nightShift > 0) {
+        if (hours.nightShift > 0) {
           const proportion = hours.nightShift / totalIncidentHours;
           const amount = totalIncidentAmount * proportion;
           result.push({
@@ -1573,7 +1581,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         }
         
         // Weekend night incidents
-        if (hours.weekendNight && hours.weekendNight > 0) {
+        if (hours.weekendNight > 0) {
           const proportion = hours.weekendNight / totalIncidentHours;
           const amount = totalIncidentAmount * proportion;
           result.push({
@@ -1994,6 +2002,18 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     setShowDeleteMonthModal(false);
   }, []);
 
+  // Hide tooltip when selectedMonth changes or component unmounts
+  useEffect(() => {
+    return () => {
+      // Hide tooltip when unmounting
+      setGlobalTooltip(prev => ({
+        ...prev,
+        visible: false
+      }));
+      setTooltip(null);
+    };
+  }, [selectedMonth]);
+
   return (
     <Container>
       {/* Global tooltip rendered at the top level */}
@@ -2087,8 +2107,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                     <SummaryValue>{incidentData[0].count}</SummaryValue>
                   </SummaryRow>
                   <SummaryRow>
-                    <SummaryLabel>Weekday Hours</SummaryLabel>
-                    <SummaryValue>{extractHoursData(incidentData[0].description).weekday}h</SummaryValue>
+                    <SummaryLabel>Billable Weekday Hours</SummaryLabel>
+                    <SummaryValue>{getIncidentBillableWeekdayHours(incidentData[0].description)}h</SummaryValue>
                   </SummaryRow>
                   <SummaryRow>
                     <SummaryLabel>Weekend Hours</SummaryLabel>
