@@ -2121,7 +2121,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                     <SummaryLabel>Weekend Hours</SummaryLabel>
                     <SummaryValue>{getIncidentWeekendHours(incidentData[0].description)}h</SummaryValue>
                   </SummaryRow>
-                  {extractHoursData(incidentData[0].description).nightShift && (
+                  {extractHoursData(incidentData[0].description).nightShift > 0 && (
                     <SummaryRow>
                       <SummaryLabel>Night Shift Hours</SummaryLabel>
                       <SummaryValue>{extractHoursData(incidentData[0].description).nightShift}h</SummaryValue>
