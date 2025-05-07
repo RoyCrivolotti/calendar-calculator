@@ -100,8 +100,8 @@ export class EventCompensationService {
       const subEventEnd = new Date(subEvent.end);
       const hours = (subEventEnd.getTime() - subEventStart.getTime()) / (1000 * 60 * 60);
       
-      // For incidents, all hours are billable
-      if (subEvent.type === 'incident') {
+      // For incidents, only hours outside office hours, on weekends or night shifts are billable
+      if (subEvent.type === 'incident' && (!subEvent.isOfficeHours || subEvent.isWeekend || subEvent.isNightShift)) {
         billableHours += hours;
       } 
       // For on-call, only non-office hours are billable
@@ -263,13 +263,22 @@ export class EventCompensationService {
   }
 
   /**
-   * Helper method to sum hours across sub-events
+   * Helper method to sum hours across sub-events with proper rounding
    */
   private sumSubEventHours(subEvents: SubEvent[]): number {
     return subEvents.reduce((sum, subEvent) => {
       const start = new Date(subEvent.start);
       const end = new Date(subEvent.end);
-      const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      const rawHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      
+      // Skip incidents during office hours (not billable)
+      if (subEvent.type === 'incident' && subEvent.isOfficeHours && !subEvent.isWeekend && !subEvent.isNightShift) {
+        return sum;
+      }
+      
+      // Round up to the nearest hour for compensation calculations
+      let hours = Math.ceil(rawHours);
+      
       return sum + hours;
     }, 0);
   }

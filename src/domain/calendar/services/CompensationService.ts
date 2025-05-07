@@ -45,16 +45,15 @@ export class CompensationService {
         logger.debug(`Incident: Counting full ${Math.ceil(hours)}h (outside office hours)`);
         return Math.ceil(hours);
       }
-      logger.debug(`Incident: Counting full ${Math.ceil(hours)}h (default)`);
-      return Math.ceil(hours);
+      // Incidents during office hours are not compensated
+      return 0;
     }
     
-    // For on-call shifts, count exact hours (no rounding)
+    // For on-call shifts, also round up to the nearest hour
     if (subEvent.type === 'oncall') {
       // Only count non-office hours for on-call
       if (!subEvent.isOfficeHours || subEvent.isNightShift) {
-        logger.debug(`On-call: Counting exact ${hours}h (outside office hours or night shift)`);
-        return hours;
+        return Math.ceil(hours);
       }
       logger.debug(`On-call: Not counting ${hours}h (office hours)`);
       return 0;
