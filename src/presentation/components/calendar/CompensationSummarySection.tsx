@@ -45,6 +45,17 @@ const Value = styled.span`
   text-align: right;
 `;
 
+const NightShiftBadge = styled.span`
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  background-color: #fef9c3;
+  color: #854d0e;
+  margin-left: 0.5rem;
+`;
+
 const TotalRow = styled(SummaryRow)`
   font-weight: 600;
   font-size: 1rem;
@@ -97,6 +108,9 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
   
   const { hours, details, total, monthlyBreakdown } = summary;
   
+  // Determine if this is an incident event based on the first detail
+  const isIncident = details.length > 0 && details[0].description.toLowerCase().includes('incident');
+  
   return (
     <SummaryContainer>
       <SummaryTitle>Compensation Details</SummaryTitle>
@@ -108,29 +122,43 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
           <Label>Total Event Duration</Label>
           <Value>{hours.total.toFixed(1)}h</Value>
         </SummaryRow>
-        <SummaryRow>
-          <Label>Billable Hours</Label>
-          <Value>{hours.billable.toFixed(1)}h</Value>
-        </SummaryRow>
-        {hours.weekday > 0 && (
+        
+        {/* For on-call events: billable weekday hours */}
+        {!isIncident && hours.weekday > 0 && (
           <SummaryRow>
-            <Label>Weekday Hours</Label>
+            <Label>Billable Weekday Hours</Label>
             <Value>{hours.weekday.toFixed(1)}h</Value>
           </SummaryRow>
         )}
+        
+        {/* For incident events: weekday hours with NS badge if applicable */}
+        {isIncident && hours.weekday > 0 && (
+          <SummaryRow>
+            <Label>Weekday Hours</Label>
+            <Value>
+              {hours.weekday.toFixed(1)}h
+              {hours.nightShift > 0 && hours.weekday === hours.nightShift && (
+                <NightShiftBadge>NS</NightShiftBadge>
+              )}
+            </Value>
+          </SummaryRow>
+        )}
+        
+        {/* Weekend hours for all events */}
         {hours.weekend > 0 && (
           <SummaryRow>
             <Label>Weekend/Holiday Hours</Label>
-            <Value>{hours.weekend.toFixed(1)}h</Value>
+            <Value>
+              {hours.weekend.toFixed(1)}h
+              {isIncident && hours.nightShift > 0 && hours.nightShift > hours.weekday && (
+                <NightShiftBadge>NS</NightShiftBadge>
+              )}
+            </Value>
           </SummaryRow>
         )}
-        {hours.nightShift > 0 && (
-          <SummaryRow>
-            <Label>Night Shift Hours</Label>
-            <Value>{hours.nightShift.toFixed(1)}h</Value>
-          </SummaryRow>
-        )}
-        {hours.officeHours > 0 && (
+        
+        {/* Office hours for on-call events only */}
+        {!isIncident && hours.officeHours > 0 && (
           <SummaryRow>
             <Label>Office Hours (Non-billable)</Label>
             <Value>{hours.officeHours.toFixed(1)}h</Value>
