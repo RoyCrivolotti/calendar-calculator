@@ -1390,6 +1390,324 @@ const formatDuration = (start: Date, end: Date) => {
   return `${hours} hour${hours !== 1 ? 's' : ''}`;
 };
 
+// Render slide panel content based on the selected type
+const renderSlidePanelContent = () => {
+  switch (slidePanelContent) {
+    case 'rates':
+      return (
+        <>
+          <SlidePanelHeader>
+            <SlidePanelTitle>Compensation Rates</SlidePanelTitle>
+          </SlidePanelHeader>
+          <CompensationTable>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Rate</th>
+                <th>Multiplier</th>
+                <th>Effective Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Weekday On-Call (non-office hours)</td>
+                <td>€3.90/hour</td>
+                <td>-</td>
+                <td>€3.90/hour</td>
+              </tr>
+              <tr>
+                <td>Weekend On-Call</td>
+                <td>€7.34/hour</td>
+                <td>-</td>
+                <td>€7.34/hour</td>
+              </tr>
+              <tr>
+                <td>Weekday Incident</td>
+                <td>€33.50/hour</td>
+                <td>1.8×</td>
+                <td>€60.30/hour</td>
+              </tr>
+              <tr>
+                <td>Weekend Incident</td>
+                <td>€33.50/hour</td>
+                <td>2.0×</td>
+                <td>€67.00/hour</td>
+              </tr>
+              <tr>
+                <td>Night Shift (additional)</td>
+                <td>-</td>
+                <td>1.4×</td>
+                <td>+40% bonus</td>
+              </tr>
+            </tbody>
+          </CompensationTable>
+        </>
+      );
+    
+    case 'events':
+      // Extract events from current month
+      const events: Event[] = [];
+      
+      // Extract events from oncallData
+      if (oncallData.length > 0 && oncallData[0].events) {
+        const oncallEvents = oncallData[0].events;
+        events.push(...oncallEvents.map(event => ({
+          id: event.id,
+          type: 'oncall' as const,
+          start: event.start,
+          end: event.end,
+          isHoliday: event.isHoliday
+        })));
+      }
+      
+      // Extract events from incidentData
+      if (incidentData.length > 0 && incidentData[0].events) {
+        const incidentEvents = incidentData[0].events;
+        events.push(...incidentEvents.map(event => ({
+          id: event.id,
+          type: 'incident' as const,
+          start: event.start,
+          end: event.end,
+          isHoliday: event.isHoliday
+        })));
+      }
+      
+      // Group events by type
+      const groupedEvents = {
+        oncall: events.filter(e => e.type === 'oncall'),
+        incident: events.filter(e => e.type === 'incident')
+      };
+      
+      // Calculate pagination for on-call events
+      const totalOncallPages = Math.ceil(groupedEvents.oncall.length / EVENTS_PER_PAGE);
+      const oncallStartIndex = (oncallPage - 1) * EVENTS_PER_PAGE;
+      const oncallEndIndex = Math.min(oncallStartIndex + EVENTS_PER_PAGE, groupedEvents.oncall.length);
+      const paginatedOncallEvents = groupedEvents.oncall.slice(oncallStartIndex, oncallEndIndex);
+      
+      // Calculate pagination for incident events
+      const totalIncidentPages = Math.ceil(groupedEvents.incident.length / EVENTS_PER_PAGE);
+      const incidentStartIndex = (incidentPage - 1) * EVENTS_PER_PAGE;
+      const incidentEndIndex = Math.min(incidentStartIndex + EVENTS_PER_PAGE, groupedEvents.incident.length);
+      const paginatedIncidentEvents = groupedEvents.incident.slice(incidentStartIndex, incidentEndIndex);
+      
+      return (
+        <>
+          <SlidePanelHeader>
+            <SlidePanelTitle>Events for {format(currentMonth, 'MMMM yyyy')}</SlidePanelTitle>
+          </SlidePanelHeader>
+          
+          <TabContainer>
+            <TabButton 
+              isActive={activeTab === 'all'}
+              onClick={() => setActiveTab('all')}
+            >
+              All
+            </TabButton>
+            <TabButton 
+              isActive={activeTab === 'oncall'}
+              onClick={() => setActiveTab('oncall')}
+            >
+              On-Call ({groupedEvents.oncall.length})
+            </TabButton>
+            <TabButton 
+              isActive={activeTab === 'incident'}
+              onClick={() => setActiveTab('incident')}
+            >
+              Incidents ({groupedEvents.incident.length})
+            </TabButton>
+          </TabContainer>
+          
+          {/* On-Call Shifts */}
+          {(activeTab === 'all' || activeTab === 'oncall') && groupedEvents.oncall.length > 0 && (
+            <EventTypeSection>
+              <EventTypeName>
+                On-Call Shifts
+                <EventCount>{groupedEvents.oncall.length} events</EventCount>
+              </EventTypeName>
+              
+              {paginatedOncallEvents.map(event => (
+                <EventItem key={event.id}>
+                  <EventTime>
+                    {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
+                  </EventTime>
+                  <EventMetadata>
+                    {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
+                    <EventDuration>
+                      Duration: {formatDuration(new Date(event.start), new Date(event.end))}
+                    </EventDuration>
+                  </EventMetadata>
+                </EventItem>
+              ))}
+              
+              {/* Pagination controls for on-call events */}
+              {totalOncallPages > 1 && (
+                <PaginationControls>
+                  <PageInfo>
+                    Showing {oncallStartIndex + 1}-{oncallEndIndex} of {groupedEvents.oncall.length}
+                  </PageInfo>
+                  <PageButtons>
+                    <PageButton 
+                      disabled={oncallPage === 1}
+                      onClick={() => setOncallPage(prev => Math.max(prev - 1, 1))}
+                    >
+                      Previous
+                    </PageButton>
+                    <PageNumber>{oncallPage} / {totalOncallPages}</PageNumber>
+                    <PageButton 
+                      disabled={oncallPage === totalOncallPages}
+                      onClick={() => setOncallPage(prev => Math.min(prev + 1, totalOncallPages))}
+                    >
+                      Next
+                    </PageButton>
+                  </PageButtons>
+                </PaginationControls>
+              )}
+            </EventTypeSection>
+          )}
+          
+          {/* Incidents */}
+          {(activeTab === 'all' || activeTab === 'incident') && groupedEvents.incident.length > 0 && (
+            <EventTypeSection>
+              <EventTypeName>
+                Incidents
+                <EventCount>{groupedEvents.incident.length} events</EventCount>
+              </EventTypeName>
+              
+              {paginatedIncidentEvents.map(event => (
+                <EventItem key={event.id}>
+                  <EventTime>
+                    {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
+                  </EventTime>
+                  <EventMetadata>
+                    {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
+                    <EventDuration>
+                      Duration: {formatDuration(new Date(event.start), new Date(event.end))}
+                    </EventDuration>
+                  </EventMetadata>
+                </EventItem>
+              ))}
+              
+              {/* Pagination controls for incident events */}
+              {totalIncidentPages > 1 && (
+                <PaginationControls>
+                  <PageInfo>
+                    Showing {incidentStartIndex + 1}-{incidentEndIndex} of {groupedEvents.incident.length}
+                  </PageInfo>
+                  <PageButtons>
+                    <PageButton 
+                      disabled={incidentPage === 1}
+                      onClick={() => setIncidentPage(prev => Math.max(prev - 1, 1))}
+                    >
+                      Previous
+                    </PageButton>
+                    <PageNumber>{incidentPage} / {totalIncidentPages}</PageNumber>
+                    <PageButton 
+                      disabled={incidentPage === totalIncidentPages}
+                      onClick={() => setIncidentPage(prev => Math.min(prev + 1, totalIncidentPages))}
+                    >
+                      Next
+                    </PageButton>
+                  </PageButtons>
+                </PaginationControls>
+              )}
+            </EventTypeSection>
+          )}
+          
+          {/* Delete month section */}
+          <DeleteMonthSection>
+            <DeleteSectionText>
+              Remove all events for this month, including events that overlap with other months.
+            </DeleteSectionText>
+            <DeleteMonthButton onClick={handleOpenDeleteMonthModal}>
+              Remove All Events for {format(currentMonth, 'MMMM yyyy')}
+            </DeleteMonthButton>
+          </DeleteMonthSection>
+        </>
+      );
+    
+    case 'details':
+      return (
+        <>
+          <SlidePanelHeader>
+            <SlidePanelTitle>Monthly History</SlidePanelTitle>
+          </SlidePanelHeader>
+          
+          {monthsWithData.map(({ date, data }) => {
+            const total = data.find(d => d.type === 'total')?.amount || 0;
+            const oncall = data.find(d => d.type === 'oncall')?.amount || 0;
+            const incident = data.find(d => d.type === 'incident')?.amount || 0;
+            const isCurrentMonth = date.getMonth() === currentMonth.getMonth() && 
+                                 date.getFullYear() === currentMonth.getFullYear();
+            
+            return (
+              <div 
+                key={date.toISOString()}
+                style={{
+                  padding: '1rem',
+                  borderRadius: '8px',
+                  marginBottom: '0.75rem',
+                  border: isCurrentMonth ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                  backgroundColor: isCurrentMonth ? '#f0f9ff' : 'white'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <h3 style={{ 
+                    margin: 0, 
+                    fontSize: '1rem',
+                    fontWeight: 500,
+                    color: isCurrentMonth ? '#0369a1' : '#334155'
+                  }}>
+                    {format(date, 'MMMM yyyy')}
+                    {isCurrentMonth && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#3b82f6' }}>Current</span>}
+                  </h3>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#0f172a' }}>
+                    {formatCurrency(total)}
+                  </div>
+                </div>
+                
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.9rem', color: '#64748b' }}>On-Call:</span>
+                    <span style={{ fontSize: '0.9rem', color: '#334155' }}>{formatCurrency(oncall)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.9rem', color: '#64748b' }}>Incidents:</span>
+                    <span style={{ fontSize: '0.9rem', color: '#334155' }}>{formatCurrency(incident)}</span>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#3b82f6',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '4px',
+                      transition: 'background 0.2s'
+                    }}
+                    onClick={() => {
+                      handleMonthClick(date);
+                      closeSlidePanel();
+                    }}
+                  >
+                    View Details
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      );
+    
+    default:
+      return null;
+  }
+};
+
 // Main render function for the component
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
   // Add logging to debug data
@@ -2271,343 +2589,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         )}
       </DashboardContainer>
     );
-  };
-
-  // Define tooltip helper functions
-  const showTooltip = (e: React.MouseEvent, title: string, value: string, extra: string = '') => {
-    setGlobalTooltip({
-      visible: true,
-      x: e.clientX + 15,
-      y: e.clientY + 15,
-      content: {
-        title,
-        value,
-        extra
-      }
-    });
-  };
-  
-  const hideTooltip = () => {
-    setGlobalTooltip(prev => ({
-      ...prev,
-      visible: false
-    }));
-  };
-
-  // Render slide panel content based on the selected type
-  const renderSlidePanelContent = () => {
-    switch (slidePanelContent) {
-      case 'rates':
-        return (
-          <>
-            <SlidePanelHeader>
-              <SlidePanelTitle>Compensation Rates</SlidePanelTitle>
-            </SlidePanelHeader>
-            <CompensationTable>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Rate</th>
-                  <th>Multiplier</th>
-                  <th>Effective Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Weekday On-Call (non-office hours)</td>
-                  <td>€3.90/hour</td>
-                  <td>-</td>
-                  <td>€3.90/hour</td>
-                </tr>
-                <tr>
-                  <td>Weekend On-Call</td>
-                  <td>€7.34/hour</td>
-                  <td>-</td>
-                  <td>€7.34/hour</td>
-                </tr>
-                <tr>
-                  <td>Weekday Incident</td>
-                  <td>€33.50/hour</td>
-                  <td>1.8×</td>
-                  <td>€60.30/hour</td>
-                </tr>
-                <tr>
-                  <td>Weekend Incident</td>
-                  <td>€33.50/hour</td>
-                  <td>2.0×</td>
-                  <td>€67.00/hour</td>
-                </tr>
-                <tr>
-                  <td>Night Shift (additional)</td>
-                  <td>-</td>
-                  <td>1.4×</td>
-                  <td>+40% bonus</td>
-                </tr>
-              </tbody>
-            </CompensationTable>
-          </>
-        );
-      
-      case 'events':
-        // Extract events from current month
-        const events: Event[] = [];
-        
-        // Extract events from oncallData
-        if (oncallData.length > 0 && oncallData[0].events) {
-          const oncallEvents = oncallData[0].events;
-          events.push(...oncallEvents.map(event => ({
-            id: event.id,
-            type: 'oncall' as const,
-            start: event.start,
-            end: event.end,
-            isHoliday: event.isHoliday
-          })));
-        }
-        
-        // Extract events from incidentData
-        if (incidentData.length > 0 && incidentData[0].events) {
-          const incidentEvents = incidentData[0].events;
-          events.push(...incidentEvents.map(event => ({
-            id: event.id,
-            type: 'incident' as const,
-            start: event.start,
-            end: event.end,
-            isHoliday: event.isHoliday
-          })));
-        }
-        
-        // Group events by type
-        const groupedEvents = {
-          oncall: events.filter(e => e.type === 'oncall'),
-          incident: events.filter(e => e.type === 'incident')
-        };
-        
-        // Calculate pagination for on-call events
-        const totalOncallPages = Math.ceil(groupedEvents.oncall.length / EVENTS_PER_PAGE);
-        const oncallStartIndex = (oncallPage - 1) * EVENTS_PER_PAGE;
-        const oncallEndIndex = Math.min(oncallStartIndex + EVENTS_PER_PAGE, groupedEvents.oncall.length);
-        const paginatedOncallEvents = groupedEvents.oncall.slice(oncallStartIndex, oncallEndIndex);
-        
-        // Calculate pagination for incident events
-        const totalIncidentPages = Math.ceil(groupedEvents.incident.length / EVENTS_PER_PAGE);
-        const incidentStartIndex = (incidentPage - 1) * EVENTS_PER_PAGE;
-        const incidentEndIndex = Math.min(incidentStartIndex + EVENTS_PER_PAGE, groupedEvents.incident.length);
-        const paginatedIncidentEvents = groupedEvents.incident.slice(incidentStartIndex, incidentEndIndex);
-        
-        return (
-          <>
-            <SlidePanelHeader>
-              <SlidePanelTitle>Events for {format(currentMonth, 'MMMM yyyy')}</SlidePanelTitle>
-            </SlidePanelHeader>
-            
-            <TabContainer>
-              <TabButton 
-                isActive={activeTab === 'all'}
-                onClick={() => setActiveTab('all')}
-              >
-                All
-              </TabButton>
-              <TabButton 
-                isActive={activeTab === 'oncall'}
-                onClick={() => setActiveTab('oncall')}
-              >
-                On-Call ({groupedEvents.oncall.length})
-              </TabButton>
-              <TabButton 
-                isActive={activeTab === 'incident'}
-                onClick={() => setActiveTab('incident')}
-              >
-                Incidents ({groupedEvents.incident.length})
-              </TabButton>
-            </TabContainer>
-            
-            {/* On-Call Shifts */}
-            {(activeTab === 'all' || activeTab === 'oncall') && groupedEvents.oncall.length > 0 && (
-              <EventTypeSection>
-                <EventTypeName>
-                  On-Call Shifts
-                  <EventCount>{groupedEvents.oncall.length} events</EventCount>
-                </EventTypeName>
-                
-                {paginatedOncallEvents.map(event => (
-                  <EventItem key={event.id}>
-                    <EventTime>
-                      {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
-                    </EventTime>
-                    <EventMetadata>
-                      {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
-                      <EventDuration>
-                        Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                      </EventDuration>
-                    </EventMetadata>
-                  </EventItem>
-                ))}
-                
-                {/* Pagination controls for on-call events */}
-                {totalOncallPages > 1 && (
-                  <PaginationControls>
-                    <PageInfo>
-                      Showing {oncallStartIndex + 1}-{oncallEndIndex} of {groupedEvents.oncall.length}
-                    </PageInfo>
-                    <PageButtons>
-                      <PageButton 
-                        disabled={oncallPage === 1}
-                        onClick={() => setOncallPage(prev => Math.max(prev - 1, 1))}
-                      >
-                        Previous
-                      </PageButton>
-                      <PageNumber>{oncallPage} / {totalOncallPages}</PageNumber>
-                      <PageButton 
-                        disabled={oncallPage === totalOncallPages}
-                        onClick={() => setOncallPage(prev => Math.min(prev + 1, totalOncallPages))}
-                      >
-                        Next
-                      </PageButton>
-                    </PageButtons>
-                  </PaginationControls>
-                )}
-              </EventTypeSection>
-            )}
-            
-            {/* Incidents */}
-            {(activeTab === 'all' || activeTab === 'incident') && groupedEvents.incident.length > 0 && (
-              <EventTypeSection>
-                <EventTypeName>
-                  Incidents
-                  <EventCount>{groupedEvents.incident.length} events</EventCount>
-                </EventTypeName>
-                
-                {paginatedIncidentEvents.map(event => (
-                  <EventItem key={event.id}>
-                    <EventTime>
-                      {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
-                    </EventTime>
-                    <EventMetadata>
-                      {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
-                      <EventDuration>
-                        Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                      </EventDuration>
-                    </EventMetadata>
-                  </EventItem>
-                ))}
-                
-                {/* Pagination controls for incident events */}
-                {totalIncidentPages > 1 && (
-                  <PaginationControls>
-                    <PageInfo>
-                      Showing {incidentStartIndex + 1}-{incidentEndIndex} of {groupedEvents.incident.length}
-                    </PageInfo>
-                    <PageButtons>
-                      <PageButton 
-                        disabled={incidentPage === 1}
-                        onClick={() => setIncidentPage(prev => Math.max(prev - 1, 1))}
-                      >
-                        Previous
-                      </PageButton>
-                      <PageNumber>{incidentPage} / {totalIncidentPages}</PageNumber>
-                      <PageButton 
-                        disabled={incidentPage === totalIncidentPages}
-                        onClick={() => setIncidentPage(prev => Math.min(prev + 1, totalIncidentPages))}
-                      >
-                        Next
-                      </PageButton>
-                    </PageButtons>
-                  </PaginationControls>
-                )}
-              </EventTypeSection>
-            )}
-            
-            {/* Delete month section */}
-            <DeleteMonthSection>
-              <DeleteSectionText>
-                Remove all events for this month, including events that overlap with other months.
-              </DeleteSectionText>
-              <DeleteMonthButton onClick={handleOpenDeleteMonthModal}>
-                Remove All Events for {format(currentMonth, 'MMMM yyyy')}
-              </DeleteMonthButton>
-            </DeleteMonthSection>
-          </>
-        );
-      
-      case 'details':
-      default:
-        return (
-          <>
-            <SlidePanelHeader>
-              <SlidePanelTitle>Monthly History</SlidePanelTitle>
-            </SlidePanelHeader>
-            
-            {monthsWithData.map(({ date, data }) => {
-              const total = data.find(d => d.type === 'total')?.amount || 0;
-              const oncall = data.find(d => d.type === 'oncall')?.amount || 0;
-              const incident = data.find(d => d.type === 'incident')?.amount || 0;
-              const isCurrentMonth = date.getMonth() === currentMonth.getMonth() && 
-                                   date.getFullYear() === currentMonth.getFullYear();
-              
-              return (
-                <div 
-                  key={date.toISOString()}
-                  style={{
-                    padding: '1rem',
-                    borderRadius: '8px',
-                    marginBottom: '0.75rem',
-                    border: isCurrentMonth ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-                    backgroundColor: isCurrentMonth ? '#f0f9ff' : 'white'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <h3 style={{ 
-                      margin: 0, 
-                      fontSize: '1rem',
-                      fontWeight: 500,
-                      color: isCurrentMonth ? '#0369a1' : '#334155'
-                    }}>
-                      {format(date, 'MMMM yyyy')}
-                      {isCurrentMonth && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#3b82f6' }}>Current</span>}
-                    </h3>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#0f172a' }}>
-                      {formatCurrency(total)}
-                    </div>
-                  </div>
-                  
-                  <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '0.9rem', color: '#64748b' }}>On-Call:</span>
-                      <span style={{ fontSize: '0.9rem', color: '#334155' }}>{formatCurrency(oncall)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '0.9rem', color: '#64748b' }}>Incidents:</span>
-                      <span style={{ fontSize: '0.9rem', color: '#334155' }}>{formatCurrency(incident)}</span>
-                    </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#3b82f6',
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        transition: 'background 0.2s'
-                      }}
-                      onClick={() => {
-                        handleMonthClick(date);
-                        closeSlidePanel();
-                      }}
-                    >
-                      View Details
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </>
-        );
-    }
   };
 
   return (
