@@ -167,11 +167,15 @@ const CompensationCategory = styled.div`
   min-width: 180px;
 `;
 
+// Fix to remove title from props interface
 const CategoryColor = styled.div<{ color: string }>`
   width: 12px;
   height: 12px;
   border-radius: 2px;
   background: ${props => props.color};
+  flex-shrink: 0;
+  margin-right: 0.25rem;
+  position: relative;
 `;
 
 const CategoryAmount = styled.div`
@@ -226,8 +230,8 @@ const SidePanel = styled.div<{ isOpen: boolean }>`
   position: fixed;
   top: 0;
   right: 0;
-  width: 400px;
-  max-width: 90vw;
+  width: 450px;
+  max-width: 95vw;
   height: 100vh;
   background: white;
   box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
@@ -236,6 +240,7 @@ const SidePanel = styled.div<{ isOpen: boolean }>`
   z-index: 1010;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   
   @media (max-width: 768px) {
     width: 100%;
@@ -288,11 +293,17 @@ const SidePanelCloseButton = styled.button`
     background: #f8fafc;
     color: #0f172a;
   }
+  
+  svg {
+    width: 16px;
+    height: 16px;
+  }
 `;
 
 const SidePanelBody = styled.div`
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1.25rem;
 `;
 
@@ -372,14 +383,7 @@ const EventMetadata = styled.div`
   align-items: center;
   justify-content: space-between;
   margin-top: 0.5rem;
-`;
-
-const EventDuration = styled.span`
-  color: #64748b;
-  font-size: 0.875rem;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  flex-wrap: wrap;
 `;
 
 const HolidayIndicator = styled.span`
@@ -388,7 +392,16 @@ const HolidayIndicator = styled.span`
   font-size: 0.75rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  margin-left: 0.5rem;
+  margin-right: auto;
+`;
+
+const EventDuration = styled.span`
+  color: #64748b;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
 `;
 
 const PaginationControls = styled.div`
@@ -467,11 +480,14 @@ const CompensationTable = styled.table`
   width: 100%;
   border-collapse: collapse;
   margin-top: 1rem;
+  table-layout: fixed;
   
   th, td {
     padding: 0.75rem 1rem;
     text-align: left;
     border-bottom: 1px solid #e2e8f0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
   
   th {
@@ -492,6 +508,13 @@ const CompensationTable = styled.table`
   
   tr:hover td {
     background: #f8fafc;
+  }
+  
+  @media (max-width: 768px) {
+    th, td {
+      padding: 0.5rem;
+      font-size: 0.8rem;
+    }
   }
 `;
 
@@ -888,12 +911,41 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           ))}
         </CompensationBar>
         
+        <div style={{ marginTop: '0.75rem', marginBottom: '0.5rem', fontWeight: 500, color: '#64748b', fontSize: '0.9rem' }}>
+          Compensation Breakdown by Category:
+        </div>
+        
         <CompensationBreakdownSection>
           {compensationData.map((segment, index) => (
             <CompensationCategory key={`category-${index}`}>
-              <CategoryColor color={segment.color} />
+              <CategoryColor 
+                color={segment.color}
+                title={`Color indicator for ${segment.type}`}
+              />
               <div>
-                <div>{segment.type}</div>
+                <div>
+                  <span style={{ 
+                    verticalAlign: 'middle', 
+                    color: '#0f172a',
+                    fontWeight: 500
+                  }}>
+                    {segment.type}
+                  </span>
+                  <span style={{ 
+                    fontSize: '0.75rem', 
+                    marginLeft: '0.5rem', 
+                    padding: '0.1rem 0.3rem', 
+                    background: segment.color, 
+                    color: '#fff', 
+                    borderRadius: '3px', 
+                    display: 'inline-block',
+                    verticalAlign: 'middle',
+                    fontWeight: 'bold'
+                  }}>
+                    {segment.type.includes('Weekend') ? 'WEEKEND' : 
+                     segment.type.includes('Night') ? 'NIGHT SHIFT' : 'STANDARD'}
+                  </span>
+                </div>
                 <CategoryAmount>€{segment.amount.toFixed(2)}</CategoryAmount>
                 <CategoryPercentage>{segment.percentage?.toFixed(1)}% of total</CategoryPercentage>
               </div>
@@ -1161,17 +1213,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           
           {sidePanelContent === 'rates' && (
             <div>
-              <h3 style={{ 
-                color: '#334155', 
-                fontSize: '1.1rem', 
-                fontWeight: 600, 
-                margin: '0 0 1rem 0',
-                paddingBottom: '0.75rem',
-                borderBottom: '1px solid #e2e8f0'
-              }}>
-                Compensation Rates
-              </h3>
-              
               <CompensationTable>
                 <thead>
                   <tr>
