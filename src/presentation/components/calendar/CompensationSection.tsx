@@ -522,6 +522,9 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   currentDate,
   onDateChange
 }) => {
+  // Pagination settings for event lists
+  const EVENTS_PER_PAGE = 10;
+
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
   const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
@@ -531,8 +534,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   const [sidePanelContent, setSidePanelContent] = useState<'events' | 'rates'>('events');
   const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
   
-  // Pagination settings for event lists
-  const EVENTS_PER_PAGE = 10;
+  // Pagination states
   const [oncallPage, setOncallPage] = useState(1);
   const [incidentPage, setIncidentPage] = useState(1);
   
@@ -613,7 +615,21 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       }
     };
   }, []);
-
+  
+  // Handle ESC key to close side panel
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && sidePanelOpen) {
+        closeSidePanel();
+      }
+    };
+    
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      window.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [sidePanelOpen, closeSidePanel]);
+  
   // Effect to calculate compensation data
   useEffect(() => {
     // Define an async function to calculate compensation
@@ -1087,44 +1103,164 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   };
 
   return (
-    <Section>
-      <Title>Compensation Breakdown for {format(currentDate, 'MMMM yyyy')}</Title>
-      <MonthSelector>
-        <MonthButton onClick={() => onDateChange(months[0])}>
-          Previous Month
-        </MonthButton>
-        {months.map(month => (
-          <MonthButton
-            key={month.toISOString()}
-            onClick={() => onDateChange(month)}
-            disabled={month.getTime() === currentDate.getTime()}
-          >
-            {format(month, 'MMMM yyyy')}
-          </MonthButton>
-        ))}
-        <MonthButton onClick={() => onDateChange(months[2])}>
-          Next Month
-        </MonthButton>
-      </MonthSelector>
+    <>
+      {/* Global tooltip */}
+      <GlobalTooltip 
+        className={globalTooltip.visible ? 'visible' : ''}
+        style={{ 
+          top: `${globalTooltip.y}px`, 
+          left: `${globalTooltip.x}px` 
+        }}
+      >
+        <div style={{ fontWeight: 'bold' }}>{globalTooltip.content.title}</div>
+        <div>{globalTooltip.content.value}</div>
+        <div>{globalTooltip.content.extra}</div>
+      </GlobalTooltip>
       
-      <Breakdown>
-        <LoadingOverlay className={loading ? 'active' : ''}>
-          Loading compensation data...
-        </LoadingOverlay>
+      {/* Side panel for events and rates */}
+      <SidePanelOverlay isOpen={sidePanelOpen} onClick={closeSidePanel} />
+      <SidePanel isOpen={sidePanelOpen}>
+        <SidePanelHeader>
+          <SidePanelTitle>
+            {sidePanelContent === 'events' 
+              ? `Events for ${format(currentDate, 'MMMM yyyy')}` 
+              : 'Compensation Rates'}
+          </SidePanelTitle>
+          <SidePanelCloseButton onClick={closeSidePanel}>
+            <XIcon />
+          </SidePanelCloseButton>
+        </SidePanelHeader>
         
-        {breakdown.length > 0 ? (
-          breakdown.map((item, index) => (
-            <BreakdownItem key={index}>
-              <h3>{item.description}</h3>
-              <p>Count: {item.count}</p>
-              <div className="amount">€{item.amount.toFixed(2)}</div>
-            </BreakdownItem>
-          ))
-        ) : (
-          <EmptyMessage>No compensation data available for this month</EmptyMessage>
-        )}
-      </Breakdown>
-    </Section>
+        <SidePanelBody>
+          {sidePanelContent === 'events' && (
+            <>
+              <SidePanelTabs>
+                <SidePanelTab 
+                  isActive={sidePanelTab === 'all'} 
+                  onClick={() => setSidePanelTab('all')}
+                >
+                  All Events
+                </SidePanelTab>
+                <SidePanelTab 
+                  isActive={sidePanelTab === 'oncall'} 
+                  onClick={() => setSidePanelTab('oncall')}
+                >
+                  On-Call
+                </SidePanelTab>
+                <SidePanelTab 
+                  isActive={sidePanelTab === 'incident'} 
+                  onClick={() => setSidePanelTab('incident')}
+                >
+                  Incidents
+                </SidePanelTab>
+              </SidePanelTabs>
+              
+              {renderEventsList()}
+            </>
+          )}
+          
+          {sidePanelContent === 'rates' && (
+            <div>
+              <h3 style={{ 
+                color: '#334155', 
+                fontSize: '1.1rem', 
+                fontWeight: 600, 
+                margin: '0 0 1rem 0',
+                paddingBottom: '0.75rem',
+                borderBottom: '1px solid #e2e8f0'
+              }}>
+                Compensation Rates
+              </h3>
+              
+              <CompensationTable>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Rate</th>
+                    <th>Multiplier</th>
+                    <th>Effective Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Weekday On-Call (non-office hours)</td>
+                    <td>€3.90/hour</td>
+                    <td>-</td>
+                    <td>€3.90/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekend On-Call</td>
+                    <td>€7.34/hour</td>
+                    <td>-</td>
+                    <td>€7.34/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekday Incident</td>
+                    <td>€33.50/hour</td>
+                    <td>1.8×</td>
+                    <td>€60.30/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekend Incident</td>
+                    <td>€33.50/hour</td>
+                    <td>2.0×</td>
+                    <td>€67.00/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Night Shift (additional)</td>
+                    <td>-</td>
+                    <td>1.4×</td>
+                    <td>+40% bonus</td>
+                  </tr>
+                </tbody>
+              </CompensationTable>
+            </div>
+          )}
+        </SidePanelBody>
+      </SidePanel>
+      
+      <Section>
+        <Title>Compensation Breakdown for {format(currentDate, 'MMMM yyyy')}</Title>
+        <MonthSelector>
+          <MonthButton onClick={() => onDateChange(months[0])}>
+            Previous Month
+          </MonthButton>
+          {months.map(month => (
+            <MonthButton
+              key={month.toISOString()}
+              onClick={() => onDateChange(month)}
+              disabled={month.getTime() === currentDate.getTime()}
+            >
+              {format(month, 'MMMM yyyy')}
+            </MonthButton>
+          ))}
+          <MonthButton onClick={() => onDateChange(months[2])}>
+            Next Month
+          </MonthButton>
+        </MonthSelector>
+        
+        <Breakdown>
+          <LoadingOverlay className={loading ? 'active' : ''}>
+            Loading compensation data...
+          </LoadingOverlay>
+          
+          {breakdown.length > 0 ? (
+            breakdown.map((item, index) => (
+              <BreakdownItem key={index}>
+                <h3>{item.description}</h3>
+                <p>Count: {item.count}</p>
+                <div className="amount">€{item.amount.toFixed(2)}</div>
+              </BreakdownItem>
+            ))
+          ) : (
+            <EmptyMessage>No compensation data available for this month</EmptyMessage>
+          )}
+        </Breakdown>
+        
+        {/* Add the compensation visualization bar */}
+        {breakdown.length > 0 && renderCompensationBar()}
+      </Section>
+    </>
   );
 };
 
