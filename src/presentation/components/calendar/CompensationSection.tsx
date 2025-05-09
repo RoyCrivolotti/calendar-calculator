@@ -546,6 +546,121 @@ const RatesSidePanel = styled(SidePanel)`
   }
 `;
 
+// New Delete Events Button
+const DeleteEventsContainer = styled.div`
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const DeleteEventsButton = styled.button`
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 400px;
+  
+  &:hover {
+    background-color: #dc2626;
+  }
+`;
+
+const DeleteWarningText = styled.p`
+  color: #64748b;
+  font-size: 0.75rem;
+  text-align: center;
+  margin: 0.5rem 0 0 0;
+  font-style: italic;
+`;
+
+// Delete Confirmation Modal
+const DeleteModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+`;
+
+const DeleteModalContent = styled.div`
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+  position: relative;
+`;
+
+const DeleteModalTitle = styled.h3`
+  color: #ef4444;
+  margin: 0 0 1rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+`;
+
+const DeleteModalMessage = styled.p`
+  color: #334155;
+  margin: 0 0 1.5rem 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+`;
+
+const DeleteModalButtons = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+`;
+
+const CancelDeleteButton = styled.button`
+  background: #f1f5f9;
+  color: #0f172a;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: #e2e8f0;
+  }
+`;
+
+const ConfirmDeleteButton = styled.button`
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: #dc2626;
+  }
+`;
+
 interface CompensationSectionProps {
   events: CalendarEvent[];
   currentDate: Date;
@@ -566,6 +681,14 @@ interface CompensationData {
   amount: number;
   color: string;
   percentage?: number;
+}
+
+// Add an interface for the custom event
+interface OpenPanelEvent extends CustomEvent {
+  detail: {
+    type: 'events' | 'rates';
+    date: Date;
+  }
 }
 
 const CompensationSection: React.FC<CompensationSectionProps> = ({
@@ -1285,6 +1408,91 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     );
   };
 
+  // Add new state for delete confirmation modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  
+  // Add handlers for delete confirmation
+  const handleOpenDeleteModal = () => {
+    setShowDeleteModal(true);
+  };
+  
+  const handleCloseDeleteModal = () => {
+    setShowDeleteModal(false);
+  };
+  
+  const handleDeleteAllEvents = async () => {
+    try {
+      // You'll need to implement this based on your application's data structure
+      // This is a placeholder assuming you have a service that can handle this
+      logger.info(`Deleting all events for ${format(currentDate, 'MMMM yyyy')}`);
+      
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      
+      // Calculate start of month and end of month
+      const startOfMonth = new Date(year, month, 1);
+      const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      
+      // Find all events that overlap with this month
+      const eventsToDelete = events.filter(event => {
+        const eventStart = new Date(event.start);
+        const eventEnd = new Date(event.end);
+        
+        // Check if event overlaps with month
+        return (
+          (eventStart >= startOfMonth && eventStart <= endOfMonth) ||
+          (eventEnd >= startOfMonth && eventEnd <= endOfMonth) ||
+          (eventStart <= startOfMonth && eventEnd >= endOfMonth)
+        );
+      });
+      
+      // If using a storage service like localStorage or a database, you'd delete events here
+      // For this example, I'll just log the number of events to delete
+      logger.info(`Found ${eventsToDelete.length} events to delete`);
+      
+      // Then update the UI (this would typically be handled by your state management)
+      // For example, you might dispatch an action to redux or use a context
+      // setBreakdown([]);
+      
+      // Close the modal
+      setShowDeleteModal(false);
+      
+      // Optional: Show success message
+      alert(`Successfully removed ${eventsToDelete.length} events for ${format(currentDate, 'MMMM yyyy')}`);
+      
+    } catch (error) {
+      logger.error('Error deleting events:', error);
+      alert('An error occurred while trying to delete events');
+    }
+  };
+
+  // Add event listener for opening panels from MonthlyCompensationSummary
+  useEffect(() => {
+    const handleOpenPanel = (e: CustomEvent) => {
+      const { type, date } = (e as OpenPanelEvent).detail;
+      
+      // If we need to change the date first
+      if (date && date.getTime() !== currentDate.getTime()) {
+        onDateChange(date);
+      }
+      
+      // Open the side panel with the requested content
+      setSidePanelContent(type as 'events' | 'rates');
+      setSidePanelOpen(true);
+      
+      // If events panel, reset to 'all' tab
+      if (type === 'events') {
+        setSidePanelTab('all');
+      }
+    };
+    
+    window.addEventListener('openCompensationPanel', handleOpenPanel as EventListener);
+    
+    return () => {
+      window.removeEventListener('openCompensationPanel', handleOpenPanel as EventListener);
+    };
+  }, [currentDate, onDateChange]);
+
   return (
     <>
       {/* Global tooltip */}
@@ -1299,6 +1507,28 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         <div>{globalTooltip.content.value}</div>
         <div>{globalTooltip.content.extra}</div>
       </GlobalTooltip>
+      
+      {/* Delete confirmation modal */}
+      {showDeleteModal && (
+        <DeleteModal onClick={handleCloseDeleteModal}>
+          <DeleteModalContent onClick={e => e.stopPropagation()}>
+            <DeleteModalTitle>Remove All Events for {format(currentDate, 'MMMM yyyy')}?</DeleteModalTitle>
+            <DeleteModalMessage>
+              This will permanently remove all events that overlap with {format(currentDate, 'MMMM yyyy')}. 
+              This includes events that start in previous months or end in future months.
+              This action cannot be undone.
+            </DeleteModalMessage>
+            <DeleteModalButtons>
+              <CancelDeleteButton onClick={handleCloseDeleteModal}>
+                Cancel
+              </CancelDeleteButton>
+              <ConfirmDeleteButton onClick={handleDeleteAllEvents}>
+                Remove Events
+              </ConfirmDeleteButton>
+            </DeleteModalButtons>
+          </DeleteModalContent>
+        </DeleteModal>
+      )}
       
       {/* Side panel for events and rates */}
       <SidePanelOverlay isOpen={sidePanelOpen} onClick={closeSidePanel} />
@@ -1448,6 +1678,16 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
             </SidePanelTabs>
             
             {renderEventsList()}
+            
+            {/* Add Delete Events button to the bottom of the panel */}
+            <DeleteEventsContainer>
+              <DeleteEventsButton onClick={handleOpenDeleteModal}>
+                Remove All Events for {format(currentDate, 'MMMM yyyy')}
+              </DeleteEventsButton>
+              <DeleteWarningText>
+                Warning: This will permanently delete all events for this month.
+              </DeleteWarningText>
+            </DeleteEventsContainer>
           </SidePanelBody>
         </SidePanel>
       )}

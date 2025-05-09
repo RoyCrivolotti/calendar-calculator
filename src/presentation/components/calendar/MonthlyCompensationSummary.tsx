@@ -1114,6 +1114,7 @@ const ActionButtonsContainer = styled.div`
   display: flex;
   gap: 1rem;
   margin: 1.5rem 0;
+  justify-content: center;
   
   @media (max-width: 640px) {
     flex-direction: column;
@@ -2494,6 +2495,21 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     }
   }, [tooltip]);
 
+  // Add new function for opening the side panels in CompensationSection
+  const openCompensationSectionPanel = (panelType: 'events' | 'rates') => {
+    // Create a custom event to communicate with CompensationSection
+    const event = new CustomEvent('openCompensationPanel', { 
+      detail: { 
+        type: panelType,
+        date: selectedMonth
+      } 
+    });
+    window.dispatchEvent(event);
+    
+    // Close the current modal
+    handleCloseModal();
+  };
+
   return (
     <Container>
       {/* Global tooltip rendered at the top level */}
@@ -2717,10 +2733,71 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               )}
             </ChartContainer>
             
-            {/* Add the events list before the delete section */}
-            <EventListSection>
-              {renderEventsList(false)}
-            </EventListSection>
+            {/* Add buttons to open the side panels */}
+            <ActionButtonsContainer>
+              <ActionButton onClick={() => openCompensationSectionPanel('events')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 5H7C5.89543 5 5 5.89543 5 7V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V7C19 5.89543 18.1046 5 17 5H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5C15 6.10457 14.1046 7 13 7H11C9.89543 7 9 6.10457 9 5Z" stroke="currentColor" strokeWidth="2"/>
+                  <path d="M9 12H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 16H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                View All Events
+              </ActionButton>
+              <ActionButton onClick={() => openCompensationSectionPanel('rates')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M12 18V22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M4.93 4.93L7.76 7.76" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M16.24 16.24L19.07 19.07" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2 12H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M18 12H22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M4.93 19.07L7.76 16.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M16.24 7.76L19.07 4.93" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                View Compensation Rates
+              </ActionButton>
+            </ActionButtonsContainer>
+            
+            {/* Simplified Events List - Show just a summary instead of details */}
+            <div style={{ margin: '1.5rem 0', textAlign: 'center' }}>
+              <h3 style={{ fontSize: '1rem', color: '#475569', marginBottom: '0.5rem' }}>
+                Events Summary
+              </h3>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem' }}>
+                <div style={{ 
+                  background: '#f1f5f9', 
+                  padding: '1rem', 
+                  borderRadius: '8px',
+                  minWidth: '120px'
+                }}>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>On-Call Events</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#334155' }}>
+                    {/* Use the existing events array from the filtered data */}
+                    {oncallData.length > 0 && oncallData[0].events ? oncallData[0].events.length : 0}
+                  </div>
+                </div>
+                <div style={{ 
+                  background: '#f1f5f9', 
+                  padding: '1rem', 
+                  borderRadius: '8px',
+                  minWidth: '120px'
+                }}>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Incidents</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#334155' }}>
+                    {incidentData.length > 0 && incidentData[0].events ? incidentData[0].events.length : 0}
+                  </div>
+                </div>
+              </div>
+              <p style={{ 
+                fontSize: '0.85rem', 
+                color: '#64748b', 
+                fontStyle: 'italic', 
+                marginTop: '0.75rem' 
+              }}>
+                Click "View All Events" for detailed event information
+              </p>
+            </div>
             
             {/* New Delete Month Section */}
             <DeleteMonthSection>
