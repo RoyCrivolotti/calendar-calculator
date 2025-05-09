@@ -287,7 +287,8 @@ const SidePanelCloseButton = styled.button`
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
-  color: #64748b;
+  color: #0f172a;
+  padding: 0;
   
   &:hover {
     background: #f8fafc;
@@ -295,8 +296,10 @@ const SidePanelCloseButton = styled.button`
   }
   
   svg {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 2px;
   }
 `;
 
@@ -369,21 +372,22 @@ const EventItem = styled.div`
 const EventTimeContainer = styled.div`
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
 `;
 
-const EventTime = styled.span`
+const EventTime = styled.div`
   color: #334155;
   font-size: 0.875rem;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
 const EventMetadata = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-top: 0.5rem;
-  flex-wrap: wrap;
 `;
 
 const HolidayIndicator = styled.span`
@@ -392,7 +396,7 @@ const HolidayIndicator = styled.span`
   font-size: 0.75rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  margin-right: auto;
+  margin-left: auto;
 `;
 
 const EventDuration = styled.span`
@@ -401,7 +405,6 @@ const EventDuration = styled.span`
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  margin-left: auto;
 `;
 
 const PaginationControls = styled.div`
@@ -483,24 +486,31 @@ const CompensationTable = styled.table`
   table-layout: fixed;
   
   th, td {
-    padding: 0.75rem 1rem;
+    padding: 0.75rem 0.5rem;
     text-align: left;
     border-bottom: 1px solid #e2e8f0;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    font-size: 0.875rem;
+    vertical-align: top;
   }
   
   th {
     color: #64748b;
     font-weight: 500;
-    font-size: 0.875rem;
     background: #f8fafc;
+    white-space: nowrap;
   }
   
   td {
     color: #334155;
-    font-size: 0.9rem;
   }
+  
+  /* Column widths */
+  th:nth-of-type(1), td:nth-of-type(1) { width: 40%; }
+  th:nth-of-type(2), td:nth-of-type(2) { width: 20%; }
+  th:nth-of-type(3), td:nth-of-type(3) { width: 15%; }
+  th:nth-of-type(4), td:nth-of-type(4) { width: 25%; }
   
   tr:last-child td {
     border-bottom: none;
@@ -513,8 +523,25 @@ const CompensationTable = styled.table`
   @media (max-width: 768px) {
     th, td {
       padding: 0.5rem;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
     }
+  }
+`;
+
+const MobileRatesContainer = styled.div`
+  display: none;
+  
+  @media (max-width: 480px) {
+    display: block;
+  }
+`;
+
+// Add a wider side panel for rates
+const RatesSidePanel = styled(SidePanel)`
+  width: 520px;
+  
+  @media (max-width: 768px) {
+    width: 100%;
   }
 `;
 
@@ -1051,13 +1078,13 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
             {paginatedOncallEvents.map(event => (
               <EventItem key={event.id}>
                 <EventTimeContainer>
-                  <CalendarIcon />
                   <EventTime>
+                    <CalendarIcon />
                     {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
                   </EventTime>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTimeContainer>
                 <EventMetadata>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                   <EventDuration>
                     <ClockIcon />
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
@@ -1104,13 +1131,13 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
             {paginatedIncidentEvents.map(event => (
               <EventItem key={event.id}>
                 <EventTimeContainer>
-                  <CalendarIcon />
                   <EventTime>
+                    <CalendarIcon />
                     {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
                   </EventTime>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTimeContainer>
                 <EventMetadata>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                   <EventDuration>
                     <ClockIcon />
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
@@ -1171,94 +1198,155 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       
       {/* Side panel for events and rates */}
       <SidePanelOverlay isOpen={sidePanelOpen} onClick={closeSidePanel} />
-      <SidePanel isOpen={sidePanelOpen}>
-        <SidePanelHeader>
-          <SidePanelTitle>
-            {sidePanelContent === 'events' 
-              ? `Events for ${format(currentDate, 'MMMM yyyy')}` 
-              : 'Compensation Rates'}
-          </SidePanelTitle>
-          <SidePanelCloseButton onClick={closeSidePanel}>
-            <XIcon />
-          </SidePanelCloseButton>
-        </SidePanelHeader>
-        
-        <SidePanelBody>
-          {sidePanelContent === 'events' && (
-            <>
-              <SidePanelTabs>
-                <SidePanelTab 
-                  isActive={sidePanelTab === 'all'} 
-                  onClick={() => setSidePanelTab('all')}
-                >
-                  All Events
-                </SidePanelTab>
-                <SidePanelTab 
-                  isActive={sidePanelTab === 'oncall'} 
-                  onClick={() => setSidePanelTab('oncall')}
-                >
-                  On-Call
-                </SidePanelTab>
-                <SidePanelTab 
-                  isActive={sidePanelTab === 'incident'} 
-                  onClick={() => setSidePanelTab('incident')}
-                >
-                  Incidents
-                </SidePanelTab>
-              </SidePanelTabs>
-              
-              {renderEventsList()}
-            </>
-          )}
+      
+      {sidePanelContent === 'rates' ? (
+        <RatesSidePanel isOpen={sidePanelOpen}>
+          <SidePanelHeader>
+            <SidePanelTitle>
+              Compensation Rates
+            </SidePanelTitle>
+            <SidePanelCloseButton onClick={closeSidePanel}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </SidePanelCloseButton>
+          </SidePanelHeader>
           
-          {sidePanelContent === 'rates' && (
+          <SidePanelBody>
             <div>
-              <CompensationTable>
-                <thead>
-                  <tr>
-                    <th>Type</th>
-                    <th>Rate</th>
-                    <th>Multiplier</th>
-                    <th>Effective Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Weekday On-Call (non-office hours)</td>
-                    <td>€3.90/hour</td>
-                    <td>-</td>
-                    <td>€3.90/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Weekend On-Call</td>
-                    <td>€7.34/hour</td>
-                    <td>-</td>
-                    <td>€7.34/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Weekday Incident</td>
-                    <td>€33.50/hour</td>
-                    <td>1.8×</td>
-                    <td>€60.30/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Weekend Incident</td>
-                    <td>€33.50/hour</td>
-                    <td>2.0×</td>
-                    <td>€67.00/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Night Shift (additional)</td>
-                    <td>-</td>
-                    <td>1.4×</td>
-                    <td>+40% bonus</td>
-                  </tr>
-                </tbody>
-              </CompensationTable>
+              <div className="desktop-table" style={{ display: 'block' }}>
+                <CompensationTable>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Rate</th>
+                      <th>Multiplier</th>
+                      <th>Effective</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Weekday On-Call (non-office hours)</td>
+                      <td>€3.90/hour</td>
+                      <td>-</td>
+                      <td>€3.90/hour</td>
+                    </tr>
+                    <tr>
+                      <td>Weekend On-Call</td>
+                      <td>€7.34/hour</td>
+                      <td>-</td>
+                      <td>€7.34/hour</td>
+                    </tr>
+                    <tr>
+                      <td>Weekday Incident</td>
+                      <td>€33.50/hour</td>
+                      <td>1.8×</td>
+                      <td>€60.30/hour</td>
+                    </tr>
+                    <tr>
+                      <td>Weekend Incident</td>
+                      <td>€33.50/hour</td>
+                      <td>2.0×</td>
+                      <td>€67.00/hour</td>
+                    </tr>
+                    <tr>
+                      <td>Night Shift (additional)</td>
+                      <td>-</td>
+                      <td>1.4×</td>
+                      <td>+40% bonus</td>
+                    </tr>
+                  </tbody>
+                </CompensationTable>
+              </div>
+              
+              {/* Mobile-friendly version that only shows on smaller screens */}
+              <MobileRatesContainer>
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekday On-Call (non-office hours)</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Rate: €3.90/hour</span>
+                    <span>Effective: €3.90/hour</span>
+                  </div>
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekend On-Call</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Rate: €7.34/hour</span>
+                    <span>Effective: €7.34/hour</span>
+                  </div>
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekday Incident</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Base: €33.50/hour</span>
+                    <span>Mult: 1.8×</span>
+                  </div>
+                  <div>Effective: €60.30/hour</div>
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekend Incident</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Base: €33.50/hour</span>
+                    <span>Mult: 2.0×</span>
+                  </div>
+                  <div>Effective: €67.00/hour</div>
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Night Shift (additional)</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Multiplier: 1.4×</span>
+                    <span>Effect: +40%</span>
+                  </div>
+                </div>
+              </MobileRatesContainer>
             </div>
-          )}
-        </SidePanelBody>
-      </SidePanel>
+          </SidePanelBody>
+        </RatesSidePanel>
+      ) : (
+        <SidePanel isOpen={sidePanelOpen}>
+          <SidePanelHeader>
+            <SidePanelTitle>
+              Events for {format(currentDate, 'MMMM yyyy')}
+            </SidePanelTitle>
+            <SidePanelCloseButton onClick={closeSidePanel}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </SidePanelCloseButton>
+          </SidePanelHeader>
+          
+          <SidePanelBody>
+            <SidePanelTabs>
+              <SidePanelTab 
+                isActive={sidePanelTab === 'all'} 
+                onClick={() => setSidePanelTab('all')}
+              >
+                All Events
+              </SidePanelTab>
+              <SidePanelTab 
+                isActive={sidePanelTab === 'oncall'} 
+                onClick={() => setSidePanelTab('oncall')}
+              >
+                On-Call
+              </SidePanelTab>
+              <SidePanelTab 
+                isActive={sidePanelTab === 'incident'} 
+                onClick={() => setSidePanelTab('incident')}
+              >
+                Incidents
+              </SidePanelTab>
+            </SidePanelTabs>
+            
+            {renderEventsList()}
+          </SidePanelBody>
+        </SidePanel>
+      )}
       
       <Section>
         <Title>Compensation Breakdown for {format(currentDate, 'MMMM yyyy')}</Title>
