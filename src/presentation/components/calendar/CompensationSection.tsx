@@ -388,15 +388,16 @@ const EventMetadata = styled.div`
   display: flex;
   align-items: center;
   margin-top: 0.5rem;
+  justify-content: space-between;
 `;
 
 const HolidayIndicator = styled.span`
   background: #fef3c7;
   color: #92400e;
   font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 4px;
-  margin-left: auto;
+  font-weight: 500;
 `;
 
 const EventDuration = styled.span`
@@ -587,6 +588,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   // Pagination states
   const [oncallPage, setOncallPage] = useState(1);
   const [incidentPage, setIncidentPage] = useState(1);
+  const [allEventsPage, setAllEventsPage] = useState(1);
   
   // Global tooltip state
   const [globalTooltip, setGlobalTooltip] = useState({
@@ -630,11 +632,26 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     // Reset pagination
     setOncallPage(1);
     setIncidentPage(1);
+    setAllEventsPage(1);
   }, []);
 
   const closeSidePanel = useCallback(() => {
     setSidePanelOpen(false);
   }, []);
+  
+  // Handle ESC key to close side panel
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && sidePanelOpen) {
+        closeSidePanel();
+      }
+    };
+    
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      window.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [sidePanelOpen, closeSidePanel]);
   
   // Tooltip handlers
   const showTooltip = useCallback((e: React.MouseEvent, title: string, value: string, extra: string) => {
@@ -665,20 +682,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       }
     };
   }, []);
-  
-  // Handle ESC key to close side panel
-  useEffect(() => {
-    const handleEscapeKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && sidePanelOpen) {
-        closeSidePanel();
-      }
-    };
-    
-    window.addEventListener('keydown', handleEscapeKey);
-    return () => {
-      window.removeEventListener('keydown', handleEscapeKey);
-    };
-  }, [sidePanelOpen, closeSidePanel]);
   
   // Effect to calculate compensation data
   useEffect(() => {
@@ -1035,10 +1038,17 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       })));
     }
     
+    // Sort all events chronologically by start date
+    const sortedEvents = [...events].sort((a, b) => {
+      const dateA = new Date(a.start).getTime();
+      const dateB = new Date(b.start).getTime();
+      return dateA - dateB;
+    });
+    
     // Group events by type
     const groupedEvents = {
-      oncall: events.filter(e => e.type === 'oncall'),
-      incident: events.filter(e => e.type === 'incident')
+      oncall: sortedEvents.filter(e => e.type === 'oncall'),
+      incident: sortedEvents.filter(e => e.type === 'incident')
     };
     
     // Filter events based on the active tab
@@ -1062,12 +1072,103 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     const incidentEndIndex = Math.min(incidentStartIndex + EVENTS_PER_PAGE, filteredIncidentEvents.length);
     const paginatedIncidentEvents = filteredIncidentEvents.slice(incidentStartIndex, incidentEndIndex);
     
+    // Determine which events to show based on the active tab
     const showTab = (tab: 'all' | 'oncall' | 'incident') => sidePanelTab === tab || sidePanelTab === 'all';
+    
+    // Combined sorted list for the "All" tab
+    const allEvents = sidePanelTab === 'all' 
+      ? [...filteredOncallEvents, ...filteredIncidentEvents].sort((a, b) => {
+          const dateA = new Date(a.start).getTime();
+          const dateB = new Date(b.start).getTime();
+          return dateA - dateB;
+        })
+      : [];
+    
+    // Pagination for all events
+    const totalAllEventsPages = Math.ceil(allEvents.length / EVENTS_PER_PAGE);
+    const allEventsStartIndex = (allEventsPage - 1) * EVENTS_PER_PAGE;
+    const allEventsEndIndex = Math.min(allEventsStartIndex + EVENTS_PER_PAGE, allEvents.length);
+    const paginatedAllEvents = allEvents.slice(allEventsStartIndex, allEventsEndIndex);
     
     return (
       <div>
-        {/* On-Call Shifts */}
-        {showTab('oncall') && filteredOncallEvents.length > 0 && (
+        {/* When 'all' tab is active, show combined sorted list */}
+        {sidePanelTab === 'all' && allEvents.length > 0 && (
+          <div>
+            {paginatedAllEvents.map(event => (
+              <EventItem key={event.id}>
+                <EventTimeContainer>
+                  <EventTime>
+                    <CalendarIcon />
+                    {format(new Date(event.start), 'MMM d, HH:mm')} - 
+                    {event.type === 'incident' 
+                      ? format(new Date(event.end), 'HH:mm')
+                      : format(new Date(event.end), 'MMM d, HH:mm')
+                    }
+                  </EventTime>
+                  {event.type === 'oncall' && (
+                    <span style={{ 
+                      fontSize: '0.75rem', 
+                      padding: '0.15rem 0.4rem', 
+                      background: '#e0f2fe', 
+                      color: '#0369a1',
+                      borderRadius: '4px',
+                      fontWeight: '500'
+                    }}>
+                      On-Call
+                    </span>
+                  )}
+                  {event.type === 'incident' && (
+                    <span style={{ 
+                      fontSize: '0.75rem', 
+                      padding: '0.15rem 0.4rem', 
+                      background: '#fee2e2', 
+                      color: '#b91c1c',
+                      borderRadius: '4px',
+                      fontWeight: '500'
+                    }}>
+                      Incident
+                    </span>
+                  )}
+                </EventTimeContainer>
+                <EventMetadata>
+                  <EventDuration>
+                    <ClockIcon />
+                    Duration: {formatDuration(new Date(event.start), new Date(event.end))}
+                  </EventDuration>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
+                </EventMetadata>
+              </EventItem>
+            ))}
+            
+            {/* Pagination controls for all events */}
+            {totalAllEventsPages > 1 && (
+              <PaginationControls>
+                <PageInfo>
+                  Showing {allEventsStartIndex + 1}-{allEventsEndIndex} of {allEvents.length}
+                </PageInfo>
+                <PageButtons>
+                  <PageButton 
+                    disabled={allEventsPage === 1}
+                    onClick={() => setAllEventsPage(prev => Math.max(prev - 1, 1))}
+                  >
+                    Previous
+                  </PageButton>
+                  <PageNumber>{allEventsPage} / {totalAllEventsPages}</PageNumber>
+                  <PageButton 
+                    disabled={allEventsPage === totalAllEventsPages}
+                    onClick={() => setAllEventsPage(prev => Math.min(prev + 1, totalAllEventsPages))}
+                  >
+                    Next
+                  </PageButton>
+                </PageButtons>
+              </PaginationControls>
+            )}
+          </div>
+        )}
+        
+        {/* On-Call Shifts (only shown when 'all' tab is not active) */}
+        {sidePanelTab !== 'all' && showTab('oncall') && filteredOncallEvents.length > 0 && (
           <EventSection>
             <EventTypeName>
               <PhoneIcon /> 
@@ -1082,13 +1183,13 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
                     <CalendarIcon />
                     {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
                   </EventTime>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTimeContainer>
                 <EventMetadata>
                   <EventDuration>
                     <ClockIcon />
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
                   </EventDuration>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventMetadata>
               </EventItem>
             ))}
@@ -1119,8 +1220,8 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           </EventSection>
         )}
         
-        {/* Incidents */}
-        {showTab('incident') && filteredIncidentEvents.length > 0 && (
+        {/* Incidents (only shown when 'all' tab is not active) */}
+        {sidePanelTab !== 'all' && showTab('incident') && filteredIncidentEvents.length > 0 && (
           <EventSection>
             <EventTypeName>
               <AlertIcon />
@@ -1135,13 +1236,13 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
                     <CalendarIcon />
                     {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
                   </EventTime>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventTimeContainer>
                 <EventMetadata>
                   <EventDuration>
                     <ClockIcon />
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
                   </EventDuration>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
                 </EventMetadata>
               </EventItem>
             ))}
@@ -1172,7 +1273,10 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           </EventSection>
         )}
         
-        {filteredOncallEvents.length === 0 && filteredIncidentEvents.length === 0 && (
+        {/* No events message */}
+        {((sidePanelTab === 'all' && allEvents.length === 0) ||
+          (sidePanelTab === 'oncall' && filteredOncallEvents.length === 0) ||
+          (sidePanelTab === 'incident' && filteredIncidentEvents.length === 0)) && (
           <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>
             No events found for this month
           </div>
