@@ -257,7 +257,7 @@ button:focus-visible {
 
 .fc-toolbar-title {
   font-size: 1.75rem !important;
-  font-weight: 600 !important;
+  font-weight: 500 !important;
   color: #1e293b !important;
   font-family: inherit !important;
   margin: 0 !important;
@@ -265,10 +265,9 @@ button:focus-visible {
 
 .fc-day-header {
   font-family: inherit !important;
-  font-size: 0.8rem !important;
-  text-transform: uppercase !important;
-  color: #64748b !important;
-  font-weight: 500 !important;
+  font-size: 0.75rem !important;
+  color: #6b7280 !important;
+  font-weight: 400 !important;
   padding: 0.75rem 0 !important;
   border-bottom: 1px solid #e2e8f0 !important;
 }
@@ -286,7 +285,7 @@ button:focus-visible {
 }
 
 .fc-day-today .fc-day-number {
-  background-color: #0f172a !important;
+  background-color: #ef4444 !important;
   color: white !important;
   border-radius: 50% !important;
   width: 24px !important;
