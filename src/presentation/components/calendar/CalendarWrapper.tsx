@@ -305,14 +305,30 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
     }, []);
 
     const formatEventColor = useCallback((event: CalendarEvent) => {
-      const isWeekend = event.start.getDay() === 0 || event.start.getDay() === 6;
       if (event.type === 'oncall') {
-        return isWeekend ? '#f59e0b' : '#3b82f6';
+        return '#f0f9ff'; // Very light blue background for on-call
       }
       if (event.type === 'incident') {
-        return isWeekend ? '#dc2626' : '#ef4444';
+        return '#ef4444'; // Always Red for incident
       }
-      return '#6b7280'; // Gray color for holidays
+      return '#f59e0b'; // Amber/Orange-Yellow for holidays
+    }, []);
+
+    const formatEventBorderColor = useCallback((event: CalendarEvent) => {
+      if (event.type === 'oncall') {
+        return '#bae6fd'; // Light sky blue border for on-call
+      }
+      if (event.type === 'incident') {
+        return '#ef4444'; // Match background for incident
+      }
+      return '#f59e0b'; // Match background for holidays
+    }, []);
+
+    const formatEventTextColor = useCallback((event: CalendarEvent) => {
+      if (event.type === 'oncall') {
+        return '#0369a1'; // Darker blue text for on-call against light background
+      }
+      return '#ffffff'; // White text for incident and holiday
     }, []);
 
     return (
@@ -339,8 +355,8 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
               start: event.start,
               end: event.end,
               backgroundColor: formatEventColor(event),
-              borderColor: formatEventColor(event),
-              textColor: '#ffffff'
+              borderColor: formatEventBorderColor(event),
+              textColor: formatEventTextColor(event)
             }))}
             eventClick={onEventClick}
             select={handleDateSelect}
