@@ -42,7 +42,12 @@ import {
   type SharedPanelEvent,
   RatesSidePanel,
   Tooltip,
-  SharedCompensationDisplay
+  SharedCompensationDisplay,
+  Modal,
+  ModalHeader,
+  ModalTitle,
+  ModalBody,
+  ModalFooter
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 import { useSidePanel, useTooltip } from '../../hooks';
@@ -226,82 +231,6 @@ const DeleteWarningText = styled.p`
   text-align: center;
   margin: 0.5rem 0 0 0;
   font-style: italic;
-`;
-
-// Delete Confirmation Modal
-const DeleteModal = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1100;
-`;
-
-const DeleteModalContent = styled.div`
-  background: white;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 500px;
-  padding: 1.5rem;
-  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-  position: relative;
-`;
-
-const DeleteModalTitle = styled.h3`
-  color: #ef4444;
-  margin: 0 0 1rem 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-`;
-
-const DeleteModalMessage = styled.p`
-  color: #334155;
-  margin: 0 0 1.5rem 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-`;
-
-const DeleteModalButtons = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-`;
-
-const CancelDeleteButton = styled.button`
-  background: #f1f5f9;
-  color: #0f172a;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: #e2e8f0;
-  }
-`;
-
-const ConfirmDeleteButton = styled.button`
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: #dc2626;
-  }
 `;
 
 interface CompensationSectionProps {
@@ -711,26 +640,29 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         extra={tooltipState.content.extra}
       />
       
-      {/* Delete confirmation modal */}
+      {/* Delete confirmation modal using shared Modal component */}
       {showDeleteModal && (
-        <DeleteModal onClick={handleCloseDeleteModal}>
-          <DeleteModalContent onClick={e => e.stopPropagation()}>
-            <DeleteModalTitle>Remove All Events for {format(currentDate, 'MMMM yyyy')}?</DeleteModalTitle>
-            <DeleteModalMessage>
-              This will permanently remove all events that overlap with {format(currentDate, 'MMMM yyyy')}. 
+        <Modal isOpen={showDeleteModal} onClose={handleCloseDeleteModal}>
+          <ModalHeader>
+            <ModalTitle>Remove All Events for {format(currentDate, 'MMMM yyyy' )}?</ModalTitle>
+            {/* Optional: Add a CloseButton here if needed, though Modal's onClose handles Esc/backdrop */}
+          </ModalHeader>
+          <ModalBody>
+            <p>
+              This will permanently remove all events that overlap with {format(currentDate, 'MMMM yyyy' )}. 
               This includes events that start in previous months or end in future months.
               This action cannot be undone.
-            </DeleteModalMessage>
-            <DeleteModalButtons>
-              <CancelDeleteButton onClick={handleCloseDeleteModal}>
-                Cancel
-              </CancelDeleteButton>
-              <ConfirmDeleteButton onClick={handleDeleteAllEvents}>
-                Remove Events
-              </ConfirmDeleteButton>
-            </DeleteModalButtons>
-          </DeleteModalContent>
-        </DeleteModal>
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <SharedButton variant="secondary" onClick={handleCloseDeleteModal}>
+              Cancel
+            </SharedButton>
+            <SharedButton variant="danger" onClick={handleDeleteAllEvents}>
+              Remove Events
+            </SharedButton>
+          </ModalFooter>
+        </Modal>
       )}
       
       {/* Side panel for events and rates */}
