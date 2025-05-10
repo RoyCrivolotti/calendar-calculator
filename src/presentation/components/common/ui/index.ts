@@ -33,6 +33,8 @@ import {
 } from './CompensationTable';
 import SharedEventsPanelContent, { Event as SharedPanelEvent } from '../SharedEventsPanelContent';
 import SharedCompensationDisplay from './SharedCompensationDisplay';
+import BarChart, { type BarChartItem } from '../charts/BarChart';
+import PieChart, { type PieChartItem } from '../charts/PieChart';
 
 export {
   Modal,
@@ -69,5 +71,9 @@ export {
   SharedMobileRatesContainer,
   SharedEventsPanelContent,
   type SharedPanelEvent,
-  SharedCompensationDisplay
+  SharedCompensationDisplay,
+  BarChart,
+  type BarChartItem,
+  PieChart,
+  type PieChartItem
 }; 

@@ -36,7 +36,11 @@ import {
   SidePanelTab,
   SharedEventsPanelContent,
   type SharedPanelEvent,
-  RatesSidePanel
+  RatesSidePanel,
+  BarChart,
+  type BarChartItem,
+  PieChart,
+  type PieChartItem
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 // Import custom hooks
@@ -189,60 +193,6 @@ const ChartGrid = styled.div`
       opacity: 1;
       transform: translateY(0);
     }
-  }
-`;
-
-const BarChartContainer = styled.div`
-  height: 200px;
-  display: flex;
-  align-items: flex-end;
-  gap: 1rem;
-  padding: 1rem 0;
-  margin-bottom: 40px;
-  flex: 1;
-  
-  @media (max-width: 768px) {
-    margin-bottom: 60px;
-    gap: 0.5rem;
-  }
-  
-  @media (max-width: 480px) {
-    gap: 0.25rem;
-  }
-`;
-
-const Bar = styled.div<{ height: string, color: string }>`
-  flex: 1;
-  height: 0;
-  background: ${props => props.color};
-  border-radius: 6px 6px 0 0;
-  position: relative;
-  min-width: 30px;
-  transition: height 0.5s ease;
-  
-  &.mounted {
-    height: ${props => props.height};
-  }
-  
-  &:hover {
-    opacity: 0.9;
-  }
-  
-  &:before {
-    content: attr(data-value);
-    position: absolute;
-    top: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: #334155;
-    font-weight: 600;
-    font-size: 0.8rem;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  
-  &.mounted:before {
-    opacity: 1;
   }
 `;
 
@@ -658,153 +608,103 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const oncallHours = oncallData.length > 0 ? extractHoursData(oncallData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
     const incidentHours = incidentData.length > 0 ? extractHoursData(incidentData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
     
-    const totalHours = (
-      oncallHours.weekday + 
-      oncallHours.weekend + 
-      incidentHours.weekday + 
-      incidentHours.weekend + 
-      incidentHours.nightShift + 
-      incidentHours.weekendNight
-    );
-    
-    const maxHours = Math.max(
+    const chartItems: BarChartItem[] = [];
+    const allHoursValues = [
       oncallHours.weekday,
       oncallHours.weekend,
       incidentHours.weekday,
       incidentHours.weekend,
       incidentHours.nightShift,
       incidentHours.weekendNight
-    );
-    
-    if (maxHours === 0) return null;
-    
-    const calculateHeight = (hours: number) => `${Math.max((hours / maxHours) * 180, 10)}px`;
-    
-    const bars = [];
-    
+    ];
+    const totalHoursForAllBars = allHoursValues.reduce((sum, h) => sum + h, 0);
+
+    if (totalHoursForAllBars === 0) return null;
+
     if (oncallHours.weekday > 0) {
-     bars.push(
-       <Bar 
-         key="weekday-oncall"
-         height={calculateHeight(oncallHours.weekday)} 
-         color="#3b82f6"
-         data-value={`${oncallHours.weekday}h`} 
-         data-label="Weekday On-Call"
-         className={isVisible ? 'mounted' : ''}
-         onMouseEnter={(e) => showTooltip(e, "Weekday On-Call", `${oncallHours.weekday} hours`, `${Math.round((oncallHours.weekday / totalHours) * 100)}% of total hours`)}
-         onMouseMove={updateTooltipPosition}
-         onMouseLeave={hideTooltip}
-       />
-     );
+      chartItems.push({
+        key: "weekday-oncall",
+        value: oncallHours.weekday,
+        label: "Weekday On-Call",
+        color: "#3b82f6",
+        totalForPercentage: totalHoursForAllBars
+      });
     }
-    
     if (oncallHours.weekend > 0) {
-     bars.push(
-       <Bar 
-         key="weekend-oncall"
-         height={calculateHeight(oncallHours.weekend)} 
-         color="#93c5fd"
-         data-value={`${oncallHours.weekend}h`} 
-         data-label="Weekend On-Call"
-         className={isVisible ? 'mounted' : ''}
-         onMouseEnter={(e) => showTooltip(e, "Weekend On-Call", `${oncallHours.weekend} hours`, `${Math.round((oncallHours.weekend / totalHours) * 100)}% of total hours`)}
-         onMouseMove={updateTooltipPosition}
-         onMouseLeave={hideTooltip}
-       />
-     );
+      chartItems.push({
+        key: "weekend-oncall",
+        value: oncallHours.weekend,
+        label: "Weekend On-Call",
+        color: "#93c5fd",
+        totalForPercentage: totalHoursForAllBars
+      });
     }
-    
     if (incidentHours.weekday > 0) {
-     bars.push(
-       <Bar 
-         key="weekday-incident"
-         height={calculateHeight(incidentHours.weekday)} 
-         color="#dc2626"
-         data-value={`${incidentHours.weekday}h`} 
-         data-label="Weekday Incident"
-         className={isVisible ? 'mounted' : ''}
-         onMouseEnter={(e) => showTooltip(e, "Weekday Incident", `${incidentHours.weekday} hours`, `${Math.round((incidentHours.weekday / totalHours) * 100)}% of total hours`)}
-         onMouseMove={updateTooltipPosition}
-         onMouseLeave={hideTooltip}
-       />
-     );
+      chartItems.push({
+        key: "weekday-incident",
+        value: incidentHours.weekday,
+        label: "Weekday Incident",
+        color: "#dc2626",
+        totalForPercentage: totalHoursForAllBars
+      });
     }
-    
     if (incidentHours.weekend > 0) {
-     bars.push(
-       <Bar 
-         key="weekend-incident"
-         height={calculateHeight(incidentHours.weekend)} 
-         color="#fca5a5"
-         data-value={`${incidentHours.weekend}h`} 
-         data-label="Weekend Incident"
-         className={isVisible ? 'mounted' : ''}
-         onMouseEnter={(e) => showTooltip(e, "Weekend Incident", `${incidentHours.weekend} hours`, `${Math.round((incidentHours.weekend / totalHours) * 100)}% of total hours`)}
-         onMouseMove={updateTooltipPosition}
-         onMouseLeave={hideTooltip}
-       />
-     );
+      chartItems.push({
+        key: "weekend-incident",
+        value: incidentHours.weekend,
+        label: "Weekend Incident",
+        color: "#fca5a5",
+        totalForPercentage: totalHoursForAllBars
+      });
     }
-    
     if (incidentHours.nightShift > 0) {
-     bars.push(
-       <Bar 
-         key="night-incident"
-         height={calculateHeight(incidentHours.nightShift)} 
-         color="#9f1239"
-         data-value={`${incidentHours.nightShift}h`} 
-         data-label="Night Shift Incident"
-         className={isVisible ? 'mounted' : ''}
-         onMouseEnter={(e) => showTooltip(e, "Night Shift Incident", `${incidentHours.nightShift} hours`, `${Math.round((incidentHours.nightShift / totalHours) * 100)}% of total hours`)}
-         onMouseMove={updateTooltipPosition}
-         onMouseLeave={hideTooltip}
-       />
-     );
+      chartItems.push({
+        key: "night-incident",
+        value: incidentHours.nightShift,
+        label: "Night Shift Incident",
+        color: "#9f1239",
+        totalForPercentage: totalHoursForAllBars
+      });
     }
-    
     if (incidentHours.weekendNight > 0) {
-     bars.push(
-       <Bar 
-         key="weekend-night"
-         height={calculateHeight(incidentHours.weekendNight)} 
-         color="#f43f5e"
-         data-value={`${incidentHours.weekendNight}h`} 
-         data-label="Weekend Night"
-         className={isVisible ? 'mounted' : ''}
-         onMouseEnter={(e) => showTooltip(e, "Weekend Night", `${incidentHours.weekendNight} hours`, `${Math.round((incidentHours.weekendNight / totalHours) * 100)}% of total hours`)}
-         onMouseMove={updateTooltipPosition}
-         onMouseLeave={hideTooltip}
-       />
-     );
+      chartItems.push({
+        key: "weekend-night",
+        value: incidentHours.weekendNight,
+        label: "Weekend Night",
+        color: "#f43f5e",
+        totalForPercentage: totalHoursForAllBars
+      });
     }
-    
-    if (bars.length === 0) return null;
+
+    if (chartItems.length === 0) return null;
     
     return (
-      <div className={isVisible ? 'visible' : ''}>
-        <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155', textAlign: 'center' }}>Hours Breakdown</h3>
-        <BarChartContainer>
-          {bars}
-        </BarChartContainer>
-      </div>
+      <BarChart 
+        data={chartItems}
+        isVisible={isVisible}
+        title="Hours Breakdown"
+        showTooltip={showTooltip}
+        hideTooltip={hideTooltip}
+        updateTooltipPosition={updateTooltipPosition}
+      />
     );
   };
 
-  const getCompensationData = () => {
-    const result = [];
+  const getCompensationData = (): PieChartItem[] => {
+    const result: PieChartItem[] = [];
     
     if (oncallData.length > 0) {
       const oncallHours = extractHoursData(oncallData[0].description);
       const totalOncallAmount = oncallData[0].amount;
-      
       const totalOncallHours = oncallHours.weekday + oncallHours.weekend;
       
       if (oncallHours.weekday > 0 && totalOncallHours > 0) {
         const weekdayProportion = oncallHours.weekday / totalOncallHours;
         const amount = totalOncallAmount * weekdayProportion;
         result.push({
-          type: 'Weekday On-Call',
-          amount,
+          key: 'weekday-oncall-pie',
+          label: 'Weekday On-Call',
+          value: amount,
           color: '#3b82f6'
         });
       }
@@ -813,8 +713,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         const weekendProportion = oncallHours.weekend / totalOncallHours;
         const amount = totalOncallAmount * weekendProportion;
         result.push({
-          type: 'Weekend On-Call',
-          amount,
+          key: 'weekend-oncall-pie',
+          label: 'Weekend On-Call',
+          value: amount,
           color: '#93c5fd'
         });
       }
@@ -823,7 +724,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     if (incidentData.length > 0) {
       const hours = extractHoursData(incidentData[0].description);
       const totalIncidentAmount = incidentData[0].amount;
-      
       const totalIncidentHours = 
         hours.weekday + 
         hours.weekend + 
@@ -835,38 +735,39 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           const proportion = hours.weekday / totalIncidentHours;
           const amount = totalIncidentAmount * proportion;
           result.push({
-            type: 'Weekday Incident',
-            amount,
+            key: 'weekday-incident-pie',
+            label: 'Weekday Incident',
+            value: amount,
             color: '#dc2626'
           });
         }
-        
         if (hours.weekend > 0) {
           const proportion = hours.weekend / totalIncidentHours;
           const amount = totalIncidentAmount * proportion;
           result.push({
-            type: 'Weekend Incident',
-            amount,
+            key: 'weekend-incident-pie',
+            label: 'Weekend Incident',
+            value: amount,
             color: '#fca5a5'
           });
         }
-        
         if (hours.nightShift > 0) {
           const proportion = hours.nightShift / totalIncidentHours;
           const amount = totalIncidentAmount * proportion;
           result.push({
-            type: 'Night Shift Incident',
-            amount,
+            key: 'night-shift-incident-pie',
+            label: 'Night Shift Incident',
+            value: amount,
             color: '#9f1239'
           });
         }
-        
         if (hours.weekendNight > 0) {
           const proportion = hours.weekendNight / totalIncidentHours;
           const amount = totalIncidentAmount * proportion;
           result.push({
-            type: 'Weekend Night',
-            amount,
+            key: 'weekend-night-pie',
+            label: 'Weekend Night',
+            value: amount,
             color: '#f43f5e'
           });
         }
@@ -877,91 +778,20 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   };
 
   const renderCompensationPieChart = () => {
-    const compensationData = getCompensationData();
+    const compensationPieData = getCompensationData();
     
-    if (compensationData.length === 0) return null;
-    
-    const totalAmount = compensationData.reduce((sum, item) => sum + item.amount, 0);
-    
-    let currentAngle = 0;
-    const svgSlices = compensationData.map((item, index) => {
-      const percentage = (item.amount / totalAmount) * 100;
-      const degrees = (percentage / 100) * 360;
-      
-      const startAngle = currentAngle;
-      const endAngle = currentAngle + degrees;
-      currentAngle = endAngle;
-      
-      const startRad = (startAngle * Math.PI) / 180;
-      const endRad = (endAngle * Math.PI) / 180;
-      
-      const x1 = 100 + 80 * Math.cos(startRad);
-      const y1 = 100 + 80 * Math.sin(startRad);
-      const x2 = 100 + 80 * Math.cos(endRad);
-      const y2 = 100 + 80 * Math.sin(endRad);
-      
-      const largeArcFlag = degrees > 180 ? 1 : 0;
-      
-      const path = [
-        `M 100 100`,
-        `L ${x1} ${y1}`,
-        `A 80 80 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-        `Z`
-      ].join(' ');
-      
-      return (
-        <path 
-          key={`slice-${index}`}
-          d={path}
-          fill={item.color}
-          stroke="white"
-          strokeWidth="1"
-          data-type={item.type}
-          data-amount={item.amount.toFixed(2)}
-          data-percentage={percentage.toFixed(0)}
-          onMouseEnter={handlePieSliceHover}
-          onMouseLeave={hideTooltip}
-          onMouseMove={handleTooltipMove}
-          style={{
-            transition: 'transform 0.3s ease, opacity 0.3s ease',
-            transformOrigin: 'center',
-            opacity: isVisible ? 1 : 0,
-            transform: `scale(${isVisible ? 1 : 0.8})`,
-            cursor: 'pointer'
-          }}
-        />
-      );
-    });
+    if (compensationPieData.length === 0) return null;
     
     return (
-      <div className={isVisible ? 'visible' : ''}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: '#334155', width: '220px', textAlign: 'center' }}>Compensation Breakdown</h3>
-          
-          <div style={{ width: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: '220px', height: '220px', position: 'relative' }}>
-              <svg width="200" height="200" viewBox="0 0 200 200" style={{ display: 'block', margin: '0 auto' }}>
-                <g transform="translate(0, 0)">
-                  {svgSlices}
-                </g>
-              </svg>
-            </div>
-            
-            <div style={{
-              width: '220px',
-              textAlign: 'center',
-              marginTop: '1rem',
-              fontSize: '1.25rem',
-              fontWeight: 600,
-              color: '#0f172a',
-              transition: 'opacity 0.3s ease',
-              opacity: isVisible ? 1 : 0
-            }}>
-              Total: €{totalAmount.toFixed(2)}
-            </div>
-          </div>
-        </div>
-      </div>
+      <PieChart
+        data={compensationPieData}
+        isVisible={isVisible}
+        title="Compensation Breakdown"
+        showTooltip={showTooltip}
+        hideTooltip={hideTooltip}
+        updateTooltipPosition={updateTooltipPosition}
+        size={220}
+      />
     );
   };
 
@@ -1072,21 +902,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     logger.info('User cancelled month deletion');
     setShowDeleteMonthModal(false);
   }, []);
-
-  const handlePieSliceHover = useCallback((e: React.MouseEvent<SVGPathElement>) => {
-    if (e.currentTarget) {
-      const target = e.currentTarget;
-      const type = target.getAttribute('data-type') || '';
-      const amount = target.getAttribute('data-amount') || '';
-      const percentage = target.getAttribute('data-percentage') || '';
-      
-      showTooltip(e, type, `€${amount}`, `${percentage}% of total`);
-    }
-  }, [showTooltip]);
-
-  const handleTooltipMove = useCallback((e: React.MouseEvent) => {
-    updateTooltipPosition(e);
-  }, [updateTooltipPosition]);
 
   return (
     <Container>
