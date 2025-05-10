@@ -47,6 +47,7 @@ import ChartLegend, { type LegendItemProps } from '../charts/ChartLegend';
 import SharedPageSection from './SharedPageSection';
 import SharedSectionTitle from './SharedSectionTitle';
 import SharedButtonRow from './SharedButtonRow';
+import SharedWarningText from './SharedWarningText';
 
 export {
   Modal,
@@ -99,5 +100,6 @@ export {
   type LegendItemProps,
   SharedPageSection,
   SharedSectionTitle,
-  SharedButtonRow
+  SharedButtonRow,
+  SharedWarningText
 }; 

@@ -47,7 +47,8 @@ import {
   type LegendItemProps,
   SharedPageSection,
   SharedSectionTitle,
-  SharedButtonRow
+  SharedButtonRow,
+  SharedWarningText
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 // Import custom hooks
@@ -198,12 +199,6 @@ const ClearDataSection = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-`;
-
-const ClearDataWarning = styled.p`
-  color: #d9534f;
-  font-size: 12px;
-  margin-top: 8px;
 `;
 
 const DeleteMonthSection = styled.div`
@@ -972,7 +967,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         <Button variant="danger" onClick={handleClearAllData}>
           Clear All Calendar Data
         </Button>
-        <ClearDataWarning>Warning: This will permanently delete all events and compensation data.</ClearDataWarning>
+        <SharedWarningText>Warning: This will permanently delete all events and compensation data.</SharedWarningText>
       </ClearDataSection>
     </SharedPageSection>
   );
