@@ -142,76 +142,6 @@ const ScrollButton = styled.button`
   }
 `;
 
-const EventTypeTabs = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
-`;
-
-const EventTypeTab = styled.button<{ isActive: boolean }>`
-  padding: 0.75rem 1.25rem;
-  border: none;
-  background: ${props => props.isActive ? '#e0f2fe' : 'transparent'};
-  color: ${props => props.isActive ? '#0369a1' : '#64748b'};
-  font-weight: ${props => props.isActive ? '600' : '500'};
-  font-size: 0.9rem;
-  border-radius: 8px 8px 0 0;
-  cursor: pointer;
-  transition: all 0.2s;
-  border-bottom: 2px solid ${props => props.isActive ? '#0369a1' : 'transparent'};
-  
-  &:hover {
-    color: ${props => props.isActive ? '#0f172a' : '#0f172a'};
-    background: ${props => props.isActive ? '#e0f2fe' : '#f8fafc'};
-  }
-`;
-
-const BreakdownCard = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1rem;
-  width: 100%;
-`;
-
-const StatCard = styled.div`
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  transition: all 0.2s;
-  cursor: pointer;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    border-color: #bae6fd;
-  }
-  
-  &.active {
-    border-color: #3b82f6;
-    background-color: #f0f9ff;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
-`;
-
-const StatLabel = styled.div`
-  color: #64748b;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-`;
-
-const StatValue = styled.div`
-  color: #0f172a;
-  font-size: 1.25rem;
-  font-weight: 600;
-`;
-
 const CompensationTable = styled.table`
   width: 100%;
   border-collapse: collapse;
@@ -284,39 +214,6 @@ const ChartGrid = styled.div`
       transform: translateY(0);
     }
   }
-`;
-
-const PieChartContainer = styled.div`
-  position: relative;
-  margin: 0 auto;
-  width: 220px;
-  height: 220px;
-`;
-
-const PieChartLabel = styled.div`
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
-  text-align: center;
-  
-  .amount {
-    font-size: 1rem;
-    color: #475569;
-    display: block;
-    margin-top: 0.25rem;
-  }
-`;
-
-const TotalLabel = styled.div`
-  margin-top: 1rem;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
-  text-align: center;
 `;
 
 const BarChartContainer = styled.div`
@@ -429,113 +326,6 @@ const LegendColor = styled.div<{ color: string }>`
   background: ${props => props.color};
 `;
 
-// const ComparisonSection = styled(DetailSection)`
-//   position: relative;
-//   padding-top: 0.5rem;
-//   padding-bottom: 0.5rem;
-// `;
-
-const ComparisonContainer = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0;
-  margin: 0.5rem 0;
-`;
-
-const ComparisonScrollButton = styled.button`
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: white;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s;
-  margin: 0 -6px;
-  padding: 0;
-  line-height: 1;
-  font-size: 1rem;
-  color: #64748b;
-  position: relative;
-  overflow: hidden;
-
-  svg {
-    width: 16px;
-    height: 16px;
-    fill: currentColor;
-    transition: transform 0.2s;
-  }
-
-  &:hover {
-    background: #f8fafc;
-    border-color: #3b82f6;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    color: #3b82f6;
-    
-    svg {
-      transform: scale(1.2);
-    }
-    
-    &::after {
-      transform: scaleX(1);
-    }
-  }
-  
-  &::after {
-    content: '';
-    position: absolute;
-    bottom: 4px;
-    left: 6px;
-    right: 6px;
-    height: 2px;
-    background-color: #3b82f6;
-    border-radius: 1px;
-    transform: scaleX(0);
-    transform-origin: center;
-    transition: transform 0.2s ease-out;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    &:hover {
-      background: white;
-      border-color: #e2e8f0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      color: #64748b;
-      
-      svg {
-        transform: none;
-      }
-      
-      &::after {
-        transform: scaleX(0);
-      }
-    }
-  }
-`;
-
-const CardsContainer = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow-x: auto;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  margin: 0;
-  padding: 0;
-  
-  &::-webkit-scrollbar {
-    display: none;
-  }
-`;
-
 const SectionTitle = styled.h2`
   color: #0f172a;
   font-size: 1.75rem;
@@ -543,14 +333,6 @@ const SectionTitle = styled.h2`
   margin: 0 0 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 2px solid #f1f5f9;
-`;
-
-const EventListSection = styled.div`
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
 `;
 
 const EventListTitle = styled.h3`
@@ -666,13 +448,6 @@ const EventCount = styled.span`
   margin-left: 0.5rem;
 `;
 
-const PageNumber = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-  padding: 0 0.25rem;
-`;
-
-// Additional styled components for compensation display
 const CompensationBreakdownSection = styled.div`
   display: flex;
   flex-wrap: wrap;
