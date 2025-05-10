@@ -40,9 +40,11 @@ import {
   SidePanelTab,
   SharedEventsPanelContent,
   type SharedPanelEvent,
-  RatesSidePanel
+  RatesSidePanel,
+  Tooltip
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
+import { useSidePanel, useTooltip } from '../../hooks';
 
 const Section = styled.div`
   background: white;
@@ -342,31 +344,6 @@ const ConfirmDeleteButton = styled.button`
   }
 `;
 
-// Restoring GlobalTooltip definition
-const GlobalTooltip = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: #ffffff;
-  border: 2px solid #3b82f6;
-  border-radius: 6px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-  font-size: 14px;
-  color: #000000;
-  z-index: 99999;
-  pointer-events: none;
-  max-width: 200px;
-  visibility: hidden; /* Start hidden */
-  opacity: 0;
-  transition: opacity 0.2s;
-  
-  &.visible {
-    visibility: visible;
-    opacity: 1;
-  }
-`;
-
 interface CompensationSectionProps {
   events: CalendarEvent[];
   currentDate: Date;
@@ -393,22 +370,25 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   const [loading, setLoading] = useState(false);
   const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
   
-  // New side panel states
-  const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [sidePanelContent, setSidePanelContent] = useState<'events' | 'rates'>('events');
-  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
+  // Use useSidePanel hook
+  const { 
+    isOpen: isSidePanelOpen,
+    contentType: sidePanelContentType, 
+    openPanel: openSidePanelHook,
+    closePanel: closeSidePanelHook,
+    setContent: setSidePanelContentForHook
+  } = useSidePanel({ defaultContent: 'events' });
   
-  // Global tooltip state
-  const [globalTooltip, setGlobalTooltip] = useState({
-    visible: false,
-    x: 0,
-    y: 0,
-    content: {
-      title: '',
-      value: '',
-      extra: ''
-    }
-  });
+  // Retain sidePanelTab state if it's specific to this component's tab implementation within the panel
+  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'incident' | 'oncall'>('all');
+  
+  // Use useTooltip hook
+  const {
+    tooltipState,
+    showTooltip: showTooltipHook,
+    hideTooltip: hideTooltipHook,
+    updateTooltipPosition
+  } = useTooltip();
   
   // Track calculations in progress
   const pendingCalculation = useRef<boolean>(false);
@@ -431,23 +411,11 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     }
   }, []);
   
-  // Side panel handlers
-  const openSidePanel = useCallback((content: 'events' | 'rates') => {
-    setSidePanelContent(content);
-    setSidePanelOpen(true);
-    // Reset the tab to 'all' when opening
-    setSidePanelTab('all');
-  }, []);
-
-  const closeSidePanel = useCallback(() => {
-    setSidePanelOpen(false);
-  }, []);
-  
   // Handle ESC key to close side panel
   useEffect(() => {
     const handleEscapeKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && sidePanelOpen) {
-        closeSidePanel();
+      if (e.key === 'Escape' && isSidePanelOpen) {
+        closeSidePanelHook();
       }
     };
     
@@ -455,37 +423,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     return () => {
       window.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [sidePanelOpen, closeSidePanel]);
-  
-  // Tooltip handlers
-  const showTooltip = useCallback((e: React.MouseEvent, title: string, value: string, extra: string) => {
-    setGlobalTooltip({
-      visible: true,
-      x: e.clientX + 15,
-      y: e.clientY + 15,
-      content: {
-        title,
-        value,
-        extra
-      }
-    });
-  }, []);
-  
-  const hideTooltip = useCallback(() => {
-    setGlobalTooltip(prev => ({
-      ...prev,
-      visible: false
-    }));
-  }, []);
-  
-  // Effect cleanup
-  useEffect(() => {
-    return () => {
-      if (loadingTimerRef.current) {
-        clearTimeout(loadingTimerRef.current);
-      }
-    };
-  }, []);
+  }, [isSidePanelOpen, closeSidePanelHook]);
   
   // Effect to calculate compensation data
   useEffect(() => {
@@ -690,18 +628,14 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
               key={`segment-${index}`}
               width={`${segment.percentage}%`}
               color={segment.color}
-              onMouseEnter={(e) => showTooltip(
+              onMouseEnter={(e) => showTooltipHook(
                 e, 
                 segment.type, 
                 `€${segment.amount.toFixed(2)}`, 
                 `${segment.percentage?.toFixed(1)}% of total`
               )}
-              onMouseMove={(e) => setGlobalTooltip(prev => ({ 
-                ...prev, 
-                x: e.clientX + 15, 
-                y: e.clientY + 15 
-              }))}
-              onMouseLeave={hideTooltip}
+              onMouseMove={updateTooltipPosition}
+              onMouseLeave={hideTooltipHook}
             />
           ))}
         </CompensationBar>
@@ -751,7 +685,11 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         <ActionButtonsContainer>
           <SharedButton 
             variant="secondary" 
-            onClick={() => openSidePanel('events')}
+            onClick={() => {
+              setSidePanelContentForHook('events');
+              setSidePanelTab('all');
+              openSidePanelHook();
+            }}
             fullWidth
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -762,7 +700,10 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           </SharedButton>
           <SharedButton 
             variant="secondary" 
-            onClick={() => openSidePanel('rates')}
+            onClick={() => {
+              setSidePanelContentForHook('rates');
+              openSidePanelHook();
+            }}
             fullWidth
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -836,11 +777,15 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 
   return (
     <>
-      <GlobalTooltip className={globalTooltip.visible ? 'visible' : ''} style={{ top: `${globalTooltip.y}px`, left: `${globalTooltip.x}px` }}>
-        <div style={{ fontWeight: 'bold' }}>{globalTooltip.content.title}</div>
-        <div>{globalTooltip.content.value}</div>
-        <div>{globalTooltip.content.extra}</div>
-      </GlobalTooltip>
+      {/* Use shared Tooltip component */}
+      <Tooltip
+        visible={tooltipState.visible}
+        x={tooltipState.x}
+        y={tooltipState.y}
+        title={tooltipState.content.title}
+        value={tooltipState.content.value}
+        extra={tooltipState.content.extra}
+      />
       
       {/* Delete confirmation modal */}
       {showDeleteModal && (
@@ -865,14 +810,14 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       )}
       
       {/* Side panel for events and rates */}
-      {sidePanelOpen && (
+      {isSidePanelOpen && (
         <>
-          <SidePanelOverlay isOpen={sidePanelOpen} onClick={closeSidePanel} />
-          {sidePanelContent === 'events' ? (
-            <SidePanel isOpen={sidePanelOpen}>
+          <SidePanelOverlay isOpen={isSidePanelOpen} onClick={closeSidePanelHook} />
+          {sidePanelContentType === 'events' ? (
+            <SidePanel isOpen={isSidePanelOpen}>
               <SidePanelHeader>
                 <SidePanelTitle>Events</SidePanelTitle>
-                <SidePanelCloseButton onClick={closeSidePanel}><XIcon /></SidePanelCloseButton>
+                <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
               </SidePanelHeader>
               <SidePanelBody>
                 <SidePanelTabs>
@@ -902,10 +847,10 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
               </SidePanelBody>
             </SidePanel>
           ) : (
-            <RatesSidePanel isOpen={sidePanelOpen}>
+            <RatesSidePanel isOpen={isSidePanelOpen}>
               <SidePanelHeader>
                 <SidePanelTitle>Compensation Rates</SidePanelTitle>
-                <SidePanelCloseButton onClick={closeSidePanel}><XIcon /></SidePanelCloseButton>
+                <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
               </SidePanelHeader>
               <SidePanelBody>
                 <SharedRatesPanelContent displayMode="full" />
