@@ -142,78 +142,6 @@ const ScrollButton = styled.button`
   }
 `;
 
-const SummarySection = styled.div`
-  display: flex;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-  }
-`;
-
-const SummaryCard = styled.div`
-  flex: 1;
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 1.25rem;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-`;
-
-const SummaryTitle = styled.h3`
-    color: #334155;
-    font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
-`;
-
-const SummaryRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const SummaryLabel = styled.span`
-  color: #64748b;
-  font-size: 0.9rem;
-`;
-
-const SummaryValue = styled.span`
-  color: #0f172a;
-  font-weight: 500;
-    font-size: 1rem;
-`;
-
-const TotalRow = styled(SummaryRow)`
-  font-weight: 600;
-  padding-top: 0.75rem;
-  margin-top: 0.5rem;
-  border-top: 1px dashed #e2e8f0;
-  
-  ${SummaryValue} {
-    font-size: 1.1rem;
-    color: #0369a1;
-  }
-`;
-
-const DetailSection = styled.div`
-  margin-top: 2rem;
-`;
-
-const DetailTitle = styled.h3`
-  color: #334155;
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin: 0 0 1rem 0;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid #f1f5f9;
-`;
-
 const EventTypeTabs = styled.div`
   display: flex;
   gap: 0.5rem;
@@ -501,11 +429,11 @@ const LegendColor = styled.div<{ color: string }>`
   background: ${props => props.color};
 `;
 
-const ComparisonSection = styled(DetailSection)`
-  position: relative;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-`;
+// const ComparisonSection = styled(DetailSection)`
+//   position: relative;
+//   padding-top: 0.5rem;
+//   padding-bottom: 0.5rem;
+// `;
 
 const ComparisonContainer = styled.div`
   display: flex;
