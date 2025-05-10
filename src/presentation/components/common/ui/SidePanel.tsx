@@ -1,10 +1,11 @@
 import React, { ReactNode } from 'react';
 import styled from '@emotion/styled';
 import { XIcon } from '../../../../assets/icons';
-import { CloseButton } from './Modal';
+// import { CloseButton } from './Modal'; // Will use its own SidePanelCloseButton
 
-// SidePanel Overlay
-const SidePanelOverlay = styled.div<{ isOpen: boolean }>`
+// Shared Side Panel Components
+
+export const SidePanelOverlay = styled.div<{ isOpen: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
@@ -17,12 +18,11 @@ const SidePanelOverlay = styled.div<{ isOpen: boolean }>`
   transition: opacity 0.3s ease, visibility 0.3s ease;
 `;
 
-// SidePanel Container
-const SidePanelContainer = styled.div<{ isOpen: boolean }>`
+export const SidePanel = styled.div<{ isOpen: boolean }>` // Renamed from SidePanelContainer
   position: fixed;
   top: 0;
   right: 0;
-  width: 400px;
+  width: 400px; // Default width, can be overridden by specific instances like RatesSidePanel
   max-width: 90vw;
   height: 100vh;
   background: white;
@@ -39,8 +39,7 @@ const SidePanelContainer = styled.div<{ isOpen: boolean }>`
   }
 `;
 
-// SidePanel Header
-const SidePanelHeader = styled.div`
+export const SidePanelHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -48,23 +47,47 @@ const SidePanelHeader = styled.div`
   border-bottom: 1px solid #e2e8f0;
 `;
 
-// SidePanel Title
-const SidePanelTitle = styled.h2`
+export const SidePanelTitle = styled.h2`
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
   color: #0f172a;
 `;
 
-// SidePanel Body
-const SidePanelBody = styled.div`
+export const SidePanelCloseButton = styled.button` // Added definition
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #0f172a;
+  padding: 0;
+  
+  &:hover {
+    background: #f8fafc;
+    color: #0f172a;
+  }
+  
+  svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 2px;
+  }
+`;
+
+export const SidePanelBody = styled.div`
   flex: 1;
   overflow-y: auto;
   padding: 1.25rem;
 `;
 
-// SidePanel Footer
-const SidePanelFooter = styled.div`
+export const SidePanelFooter = styled.div`
   display: flex;
   justify-content: flex-end;
   padding: 1rem;
@@ -72,8 +95,29 @@ const SidePanelFooter = styled.div`
   gap: 0.75rem;
 `;
 
+export const SidePanelTabs = styled.div` // Added definition
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1rem; // Matches CompensationSection use
+`;
+
+export const SidePanelTab = styled.button<{ isActive: boolean }>` // Added definition
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid ${props => props.isActive ? '#3b82f6' : 'transparent'};
+  color: ${props => props.isActive ? '#0f172a' : '#64748b'};
+  font-weight: ${props => props.isActive ? '600' : '500'};
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: ${props => props.isActive ? '#0f172a' : '#334155'};
+  }
+`;
+
 // SidePanel component props
-export interface SidePanelProps {
+export interface SidePanelFCProps { // Renamed interface
   isOpen: boolean;
   onClose: () => void;
   title: ReactNode;
@@ -83,9 +127,9 @@ export interface SidePanelProps {
 }
 
 /**
- * SidePanel component for displaying a sliding panel from the side of the screen
+ * SidePanelFC functional component for displaying a sliding panel from the side of the screen
  */
-const SidePanel: React.FC<SidePanelProps> = ({
+export const SidePanelFC: React.FC<SidePanelFCProps> = ({ // Renamed functional component and using its own SidePanelCloseButton
   isOpen,
   onClose,
   title,
@@ -93,7 +137,6 @@ const SidePanel: React.FC<SidePanelProps> = ({
   footer,
   preventBackdropClose = false
 }) => {
-  // Handler for overlay click to close panel
   const handleOverlayClick = () => {
     if (!preventBackdropClose) {
       onClose();
@@ -103,10 +146,12 @@ const SidePanel: React.FC<SidePanelProps> = ({
   return (
     <>
       <SidePanelOverlay isOpen={isOpen} onClick={handleOverlayClick} />
-      <SidePanelContainer isOpen={isOpen}>
+      <SidePanel isOpen={isOpen}> {/* Uses the exported styled component SidePanel */}
         <SidePanelHeader>
           <SidePanelTitle>{title}</SidePanelTitle>
-          <CloseButton onClose={onClose} />
+          <SidePanelCloseButton onClick={onClose}>
+            <XIcon /> { /* Using XIcon */ }
+          </SidePanelCloseButton>
         </SidePanelHeader>
         <SidePanelBody>
           {children}
@@ -116,10 +161,10 @@ const SidePanel: React.FC<SidePanelProps> = ({
             {footer}
           </SidePanelFooter>
         )}
-      </SidePanelContainer>
+      </SidePanel>
     </>
   );
 };
 
-export { SidePanelHeader, SidePanelTitle, SidePanelBody, SidePanelFooter };
-export default SidePanel; 
+// Removed default export, all exports are named now.
+// export { SidePanelHeader, SidePanelTitle, SidePanelBody, SidePanelFooter }; // These are already exported individually 
