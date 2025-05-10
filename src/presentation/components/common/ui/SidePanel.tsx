@@ -5,20 +5,20 @@ import { XIcon } from '../../../../assets/icons';
 
 // Shared Side Panel Components
 
-export const SidePanelOverlay = styled.div<{ isOpen: boolean }>`
+export const SidePanelOverlay = styled.div<{ isOpen: boolean; baseZIndex?: number }>`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 1005;
+  z-index: ${props => props.baseZIndex || 1005};
   opacity: ${props => props.isOpen ? 1 : 0};
   visibility: ${props => props.isOpen ? 'visible' : 'hidden'};
   transition: opacity 0.3s ease, visibility 0.3s ease;
 `;
 
-export const SidePanel = styled.div<{ isOpen: boolean }>` // Renamed from SidePanelContainer
+export const SidePanel = styled.div<{ isOpen: boolean; baseZIndex?: number }>` // Renamed from SidePanelContainer
   position: fixed;
   top: 0;
   right: 0;
@@ -29,7 +29,7 @@ export const SidePanel = styled.div<{ isOpen: boolean }>` // Renamed from SidePa
   box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
   transform: translateX(${props => props.isOpen ? '0' : '100%'});
   transition: transform 0.3s ease;
-  z-index: 1010;
+  z-index: ${props => (props.baseZIndex ? props.baseZIndex + 5 : 1010)}; // Ensure panel is above its overlay
   display: flex;
   flex-direction: column;
   
@@ -116,6 +116,15 @@ export const SidePanelTab = styled.button<{ isActive: boolean }>` // Added defin
   }
 `;
 
+// SidePanel component specifically for Rates, with a wider width
+export const RatesSidePanel = styled(SidePanel)`
+  width: 520px;
+  
+  @media (max-width: 768px) {
+    width: 100%; // Ensure it's responsive on smaller screens
+  }
+`;
+
 // SidePanel component props
 export interface SidePanelFCProps { // Renamed interface
   isOpen: boolean;
@@ -124,6 +133,7 @@ export interface SidePanelFCProps { // Renamed interface
   children: ReactNode;
   footer?: ReactNode;
   preventBackdropClose?: boolean;
+  baseZIndex?: number; // Added prop
 }
 
 /**
@@ -135,7 +145,8 @@ export const SidePanelFC: React.FC<SidePanelFCProps> = ({ // Renamed functional 
   title,
   children,
   footer,
-  preventBackdropClose = false
+  preventBackdropClose = false,
+  baseZIndex // Added prop
 }) => {
   const handleOverlayClick = () => {
     if (!preventBackdropClose) {
@@ -145,8 +156,8 @@ export const SidePanelFC: React.FC<SidePanelFCProps> = ({ // Renamed functional 
 
   return (
     <>
-      <SidePanelOverlay isOpen={isOpen} onClick={handleOverlayClick} />
-      <SidePanel isOpen={isOpen}> {/* Uses the exported styled component SidePanel */}
+      <SidePanelOverlay isOpen={isOpen} onClick={handleOverlayClick} baseZIndex={baseZIndex} />
+      <SidePanel isOpen={isOpen} baseZIndex={baseZIndex}> {/* Uses the exported styled component SidePanel */}
         <SidePanelHeader>
           <SidePanelTitle>{title}</SidePanelTitle>
           <SidePanelCloseButton onClick={onClose}>

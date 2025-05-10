@@ -35,7 +35,8 @@ import {
   SidePanelTabs,
   SidePanelTab,
   SharedEventsPanelContent,
-  type SharedPanelEvent
+  type SharedPanelEvent,
+  RatesSidePanel
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 // Import custom hooks
@@ -525,6 +526,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           setShowDeleteMonthModal(false);
         } else if (selectedMonth) {
           setSelectedMonth(null);
+          closeSidePanel();
         }
       }
     };
@@ -533,7 +535,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return () => {
       window.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [selectedMonth, showConfirmModal, showDeleteMonthModal]);
+  }, [selectedMonth, showConfirmModal, showDeleteMonthModal, closeSidePanel]);
 
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
@@ -599,7 +601,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   const handleCloseModal = useCallback(() => {
     setSelectedMonth(null);
-  }, []);
+    closeSidePanel();
+  }, [closeSidePanel]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -1133,58 +1136,67 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         extra={tooltipState.content.extra}
       />
       
-      <SidePanel isOpen={sidePanelOpen}>
-        <SidePanelHeader>
-          <SidePanelTitle>
-            {sidePanelContent === 'events' 
-              ? `Events for ${selectedMonth ? formatMonthYear(selectedMonth) : ''}` 
-              : 'Compensation Rates'}
-          </SidePanelTitle>
-          <SidePanelCloseButton onClick={closeSidePanel}>
-            <XIcon />
-          </SidePanelCloseButton>
-        </SidePanelHeader>
-        <SidePanelBody>
-          {sidePanelContent === 'events' ? (
-            <>
-              <SidePanelTabs>
-                <SidePanelTab isActive={sidePanelTab === 'all'} onClick={() => setSidePanelTab('all')}>All</SidePanelTab>
-                <SidePanelTab isActive={sidePanelTab === 'oncall'} onClick={() => setSidePanelTab('oncall')}>On-call</SidePanelTab>
-                <SidePanelTab isActive={sidePanelTab === 'incident'} onClick={() => setSidePanelTab('incident')}>Incidents</SidePanelTab>
-              </SidePanelTabs>
-              {(() => {
-                // Extract and prepare event data for SharedEventsPanelContent
-                const oncallSource = oncallData.length > 0 && oncallData[0].events ? oncallData[0].events : [];
-                const incidentSource = incidentData.length > 0 && incidentData[0].events ? incidentData[0].events : [];
-
-                const currentOncallEvents: SharedPanelEvent[] = oncallSource.map(e => ({ 
-                  ...e,
-                  type: 'oncall' as const, 
-                  start: new Date(e.start), 
-                  end: new Date(e.end) 
-                }));
-                const currentIncidentEvents: SharedPanelEvent[] = incidentSource.map(e => ({ 
-                  ...e,
-                  type: 'incident' as const, 
-                  start: new Date(e.start), 
-                  end: new Date(e.end) 
-                }));
-
-                return (
-                  <SharedEventsPanelContent 
-                    oncallEvents={currentOncallEvents}
-                    incidentEvents={currentIncidentEvents}
-                    activeTab={sidePanelTab}
-                    // eventsPerPage={10} // Example: if you want to override default
-                  />
-                );
-              })()}
-            </>
+      {sidePanelOpen && (
+        <>
+          {sidePanelContent === 'rates' ? (
+            <RatesSidePanel isOpen={sidePanelOpen} baseZIndex={10050}>
+              <SidePanelHeader>
+                <SidePanelTitle>Compensation Rates</SidePanelTitle>
+                <SidePanelCloseButton onClick={closeSidePanel}>
+                  <XIcon />
+                </SidePanelCloseButton>
+              </SidePanelHeader>
+              <SidePanelBody>
+                <SharedRatesPanelContent />
+              </SidePanelBody>
+            </RatesSidePanel>
           ) : (
-            <SharedRatesPanelContent />
+            <SidePanel isOpen={sidePanelOpen} baseZIndex={10050}>
+              <SidePanelHeader>
+                <SidePanelTitle>
+                  {`Events for ${selectedMonth ? formatMonthYear(selectedMonth) : ''}`} 
+                </SidePanelTitle>
+                <SidePanelCloseButton onClick={closeSidePanel}>
+                  <XIcon />
+                </SidePanelCloseButton>
+              </SidePanelHeader>
+              <SidePanelBody>
+                <SidePanelTabs>
+                  <SidePanelTab isActive={sidePanelTab === 'all'} onClick={() => setSidePanelTab('all')}>All</SidePanelTab>
+                  <SidePanelTab isActive={sidePanelTab === 'oncall'} onClick={() => setSidePanelTab('oncall')}>On-call</SidePanelTab>
+                  <SidePanelTab isActive={sidePanelTab === 'incident'} onClick={() => setSidePanelTab('incident')}>Incidents</SidePanelTab>
+                </SidePanelTabs>
+                {(() => {
+                  // Extract and prepare event data for SharedEventsPanelContent
+                  const oncallSource = oncallData.length > 0 && oncallData[0].events ? oncallData[0].events : [];
+                  const incidentSource = incidentData.length > 0 && incidentData[0].events ? incidentData[0].events : [];
+
+                  const currentOncallEvents: SharedPanelEvent[] = oncallSource.map(e => ({ 
+                    ...e,
+                    type: 'oncall' as const, 
+                    start: new Date(e.start), 
+                    end: new Date(e.end) 
+                  }));
+                  const currentIncidentEvents: SharedPanelEvent[] = incidentSource.map(e => ({ 
+                    ...e,
+                    type: 'incident' as const, 
+                    start: new Date(e.start), 
+                    end: new Date(e.end) 
+                  }));
+
+                  return (
+                    <SharedEventsPanelContent 
+                      oncallEvents={currentOncallEvents}
+                      incidentEvents={currentIncidentEvents}
+                      activeTab={sidePanelTab}
+                    />
+                  );
+                })()}
+              </SidePanelBody>
+            </SidePanel>
           )}
-        </SidePanelBody>
-      </SidePanel>
+        </>
+      )}
       
       <SectionTitle>Monthly Compensation Summary</SectionTitle>
       <ScrollButton className="left" onClick={scrollLeft}>

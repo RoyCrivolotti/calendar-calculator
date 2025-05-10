@@ -10,8 +10,12 @@ import {
   SidePanelTitle, 
   SidePanelCloseButton, 
   SidePanelBody, 
+  SidePanelFooter, 
   SidePanelTabs, 
-  SidePanelTab 
+  SidePanelTab, 
+  SidePanelFC, 
+  type SidePanelFCProps,
+  RatesSidePanel
 } from './SidePanel';
 import {
   SharedEventItem,
@@ -46,8 +50,12 @@ export {
   SidePanelTitle,
   SidePanelCloseButton,
   SidePanelBody,
+  SidePanelFooter,
   SidePanelTabs,
   SidePanelTab,
+  SidePanelFC,
+  type SidePanelFCProps,
+  RatesSidePanel,
   SharedEventItem,
   SharedEventTimeContainer,
   SharedEventTime,
