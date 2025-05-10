@@ -15,6 +15,9 @@ import {
   XIcon, 
   DollarIcon 
 } from '../../../assets/icons';
+import { extractHoursData } from '../../../utils/compensation/compensationUtils';
+import { formatDuration } from '../../../utils/formatting/formatters';
+import { PaginationControls as SharedPaginationControls, Button as SharedButton } from '../common/ui';
 
 const Section = styled.div`
   background: white;
@@ -196,32 +199,6 @@ const ActionButtonsContainer = styled.div`
   
   @media (max-width: 640px) {
     flex-direction: column;
-  }
-`;
-
-const ActionButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-  font-weight: 500;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  }
-  
-  svg {
-    color: #3b82f6;
   }
 `;
 
@@ -408,51 +385,28 @@ const EventDuration = styled.span`
   gap: 0.25rem;
 `;
 
-const PaginationControls = styled.div`
+// Update the EventBadge styled component to use soft colors
+const EventBadge = styled.span<{ color: string }>`
+  color: ${props => 
+    props.color === '#3b82f6' ? '#0369a1' :  // Blue (On-Call) -> Darker blue text
+    props.color === '#f43f5e' ? '#b91c1c' :  // Red (Incident) -> Darker red text
+    '#0f172a'};
+  background-color: ${props => 
+    props.color === '#3b82f6' ? '#e0f2fe' :  // Blue (On-Call) -> Soft blue background
+    props.color === '#f43f5e' ? '#fee2e2' :  // Red (Incident) -> Soft red background
+    '#f1f5f9'};
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-left: 0.5rem;
+`;
+
+const EventInfo = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #f1f5f9;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-`;
-
-const PageInfo = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-`;
-
-const PageButtons = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const PageButton = styled.button<{ disabled?: boolean }>`
-  padding: 0.25rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  background: ${props => props.disabled ? '#f8fafc' : 'white'};
-  color: ${props => props.disabled ? '#cbd5e1' : '#0f172a'};
-  font-size: 0.8rem;
-  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
-  transition: all 0.2s;
-  
-  &:hover {
-    background: ${props => props.disabled ? '#f8fafc' : '#f1f5f9'};
-    border-color: ${props => props.disabled ? '#e2e8f0' : '#cbd5e1'};
-  }
-`;
-
-const PageNumber = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-  padding: 0 0.25rem;
+  margin-top: 0.5rem;
 `;
 
 // Global tooltip
@@ -969,45 +923,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     }));
   }, [breakdown]);
   
-  // Helper function to extract hours from the description
-  const extractHoursData = (description: string): { weekday: number, weekend: number, nightShift: number, weekendNight: number } => {
-    try {
-      const match = description.match(/\((.+?)\)/);
-      if (!match) return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-      
-      const parts = match[1].split(',').map(s => s.trim());
-      
-      const result = { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-      
-      parts.forEach(part => {
-        const [hoursStr, ...typeParts] = part.split(' ');
-        const type = typeParts.join(' '); // Rejoin in case there are spaces in the type
-        const hours = parseFloat(hoursStr);
-        
-        if (type.includes('weekday') && !type.includes('night')) {
-          result.weekday = hours;
-        } else if (type.includes('weekend') && !type.includes('night')) {
-          result.weekend = hours;
-        } else if (type.includes('weekday') && type.includes('night')) {
-          result.nightShift = hours;
-        } else if (type.includes('weekend') && type.includes('night')) {
-          result.weekendNight = hours;
-        }
-      });
-      
-      return result;
-    } catch (error) {
-      logger.error('Error parsing hours:', error);
-      return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-    }
-  };
-  
-  // Function to format duration
-  const formatDuration = (start: Date, end: Date) => {
-    const hours = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60));
-    return `${hours} hour${hours !== 1 ? 's' : ''}`;
-  };
-
   // Generate month options for the selector
   const months = useMemo(() => {
     const result = [];
@@ -1107,16 +1022,28 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         </CompensationBreakdownSection>
         
         <ActionButtonsContainer>
-          <ActionButton onClick={() => openSidePanel('events')}>
-            <ListIcon />
-            View all events
-            <ChevronRightIcon />
-          </ActionButton>
-          <ActionButton onClick={() => openSidePanel('rates')}>
-            <DollarIcon />
-            View compensation rates
-            <ChevronRightIcon />
-          </ActionButton>
+          <SharedButton 
+            variant="secondary" 
+            onClick={() => openSidePanel('events')}
+            fullWidth
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ListIcon />
+              View all events
+              <ChevronRightIcon />
+            </div>
+          </SharedButton>
+          <SharedButton 
+            variant="secondary" 
+            onClick={() => openSidePanel('rates')}
+            fullWidth
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <DollarIcon />
+              View compensation rates
+              <ChevronRightIcon />
+            </div>
+          </SharedButton>
         </ActionButtonsContainer>
       </div>
     );
@@ -1264,136 +1191,87 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
               </EventItem>
             ))}
             
-            {/* Pagination controls for all events */}
+            {/* Use the shared pagination controls component */}
             {totalAllEventsPages > 1 && (
-              <PaginationControls>
-                <PageInfo>
-                  Showing {allEventsStartIndex + 1}-{allEventsEndIndex} of {allEvents.length}
-                </PageInfo>
-                <PageButtons>
-                  <PageButton 
-                    disabled={allEventsPage === 1}
-                    onClick={() => setAllEventsPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </PageButton>
-                  <PageNumber>{allEventsPage} / {totalAllEventsPages}</PageNumber>
-                  <PageButton 
-                    disabled={allEventsPage === totalAllEventsPages}
-                    onClick={() => setAllEventsPage(prev => Math.min(prev + 1, totalAllEventsPages))}
-                  >
-                    Next
-                  </PageButton>
-                </PageButtons>
-              </PaginationControls>
+              <SharedPaginationControls
+                currentPage={allEventsPage}
+                totalPages={totalAllEventsPages}
+                totalItems={allEvents.length}
+                itemsPerPage={EVENTS_PER_PAGE}
+                onPageChange={setAllEventsPage}
+              />
             )}
           </div>
         )}
         
-        {/* On-Call Shifts (only shown when 'all' tab is not active) */}
-        {sidePanelTab !== 'all' && showTab('oncall') && filteredOncallEvents.length > 0 && (
-          <EventSection>
-            <EventTypeName>
-              <PhoneIcon /> 
-              On-Call Shifts
-              <EventCount>{filteredOncallEvents.length} events</EventCount>
-            </EventTypeName>
-            
+        {/* When 'oncall' tab is active, show oncall events */}
+        {showTab('oncall') && paginatedOncallEvents.length > 0 && (
+          <div>
             {paginatedOncallEvents.map(event => (
               <EventItem key={event.id}>
                 <EventTimeContainer>
                   <EventTime>
                     <CalendarIcon />
-                    {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
+                    {format(new Date(event.start), 'MMM d, HH:mm')} - 
+                    {format(new Date(event.end), 'MMM d, HH:mm')}
                   </EventTime>
+                  <EventBadge color="#3b82f6">On-Call</EventBadge>
                 </EventTimeContainer>
-                <EventMetadata>
+                <EventInfo>
                   <EventDuration>
                     <ClockIcon />
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
                   </EventDuration>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
-                </EventMetadata>
+                </EventInfo>
               </EventItem>
             ))}
             
-            {/* Pagination controls for on-call events */}
-            {totalOncallPages > 1 && (
-              <PaginationControls>
-                <PageInfo>
-                  Showing {oncallStartIndex + 1}-{oncallEndIndex} of {filteredOncallEvents.length}
-                </PageInfo>
-                <PageButtons>
-                  <PageButton 
-                    disabled={oncallPage === 1}
-                    onClick={() => setOncallPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </PageButton>
-                  <PageNumber>{oncallPage} / {totalOncallPages}</PageNumber>
-                  <PageButton 
-                    disabled={oncallPage === totalOncallPages}
-                    onClick={() => setOncallPage(prev => Math.min(prev + 1, totalOncallPages))}
-                  >
-                    Next
-                  </PageButton>
-                </PageButtons>
-              </PaginationControls>
+            {/* Use shared pagination controls for oncall events */}
+            {filteredOncallEvents.length > EVENTS_PER_PAGE && (
+              <SharedPaginationControls
+                currentPage={oncallPage}
+                totalPages={totalOncallPages}
+                totalItems={filteredOncallEvents.length}
+                itemsPerPage={EVENTS_PER_PAGE}
+                onPageChange={setOncallPage}
+              />
             )}
-          </EventSection>
+          </div>
         )}
         
-        {/* Incidents (only shown when 'all' tab is not active) */}
-        {sidePanelTab !== 'all' && showTab('incident') && filteredIncidentEvents.length > 0 && (
-          <EventSection>
-            <EventTypeName>
-              <AlertIcon />
-              Incidents
-              <EventCount>{filteredIncidentEvents.length} events</EventCount>
-            </EventTypeName>
-            
+        {/* When 'incident' tab is active, show incident events */}
+        {showTab('incident') && paginatedIncidentEvents.length > 0 && (
+          <div>
             {paginatedIncidentEvents.map(event => (
               <EventItem key={event.id}>
                 <EventTimeContainer>
                   <EventTime>
                     <CalendarIcon />
-                    {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
+                    {format(new Date(event.start), 'MMM d, HH:mm')} - 
+                    {format(new Date(event.end), 'HH:mm')}
                   </EventTime>
+                  <EventBadge color="#f43f5e">Incident</EventBadge>
                 </EventTimeContainer>
-                <EventMetadata>
+                <EventInfo>
                   <EventDuration>
                     <ClockIcon />
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
                   </EventDuration>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
-                </EventMetadata>
+                </EventInfo>
               </EventItem>
             ))}
             
-            {/* Pagination controls for incident events */}
-            {totalIncidentPages > 1 && (
-              <PaginationControls>
-                <PageInfo>
-                  Showing {incidentStartIndex + 1}-{incidentEndIndex} of {filteredIncidentEvents.length}
-                </PageInfo>
-                <PageButtons>
-                  <PageButton 
-                    disabled={incidentPage === 1}
-                    onClick={() => setIncidentPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </PageButton>
-                  <PageNumber>{incidentPage} / {totalIncidentPages}</PageNumber>
-                  <PageButton 
-                    disabled={incidentPage === totalIncidentPages}
-                    onClick={() => setIncidentPage(prev => Math.min(prev + 1, totalIncidentPages))}
-                  >
-                    Next
-                  </PageButton>
-                </PageButtons>
-              </PaginationControls>
+            {/* Use shared pagination controls for incident events */}
+            {filteredIncidentEvents.length > EVENTS_PER_PAGE && (
+              <SharedPaginationControls
+                currentPage={incidentPage}
+                totalPages={totalIncidentPages}
+                totalItems={filteredIncidentEvents.length}
+                itemsPerPage={EVENTS_PER_PAGE}
+                onPageChange={setIncidentPage}
+              />
             )}
-          </EventSection>
+          </div>
         )}
         
         {/* No events message */}

@@ -16,6 +16,20 @@ import {
   XIcon, 
   DollarIcon 
 } from '../../../assets/icons';
+import { extractHoursData, getIncidentBillableWeekdayHours, getIncidentWeekendHours } from '../../../utils/compensation/compensationUtils';
+import { formatDuration, formatMonthYear } from '../../../utils/formatting/formatters';
+// Import UI components with different names to avoid conflicts
+import { 
+  PaginationControls as SharedPaginationControls, 
+  Button as SharedButton, 
+  Modal as SharedModal, 
+  ModalHeader as SharedModalHeader, 
+  ModalTitle as SharedModalTitle, 
+  ModalBody as SharedModalBody, 
+  ModalFooter as SharedModalFooter, 
+  CloseButton as SharedCloseButton,
+  PageButton as SharedPageButton 
+} from '../common/ui';
 
 const Container = styled.div`
   width: 93%;
@@ -125,97 +139,25 @@ const ScrollButton = styled.button`
   }
 `;
 
-const Modal = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-`;
+// Replace this local Modal component with the shared one
+// const Modal = styled.div`
+//   position: fixed;
+//   top: 0;
+//   left: 0;
+//   right: 0;
+//   bottom: 0;
+//   background: rgba(0, 0, 0, 0.5);
+//   display: flex;
+//   align-items: center;
+//   justify-content: center;
+//   z-index: 1000;
+// `;
 
-const ModalContent = styled.div`
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  width: 90%;
-  max-width: 800px;
-  max-height: 85vh;
-  overflow-y: auto;
-  position: relative;
-  color: #1e293b;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-`;
-
-const ModalHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f1f5f9;
-`;
-
-const ModalTitle = styled.h2`
-    color: #0f172a;
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 0;
-`;
-
-const MonthAmount = styled.div`
-    font-size: 1.5rem;
-    font-weight: 600;
-  color: #0f172a;
-  background: #f0f9ff;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  border: 1px solid #bae6fd;
-`;
-
-const CloseButton = styled.button`
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  border: 1px solid #e2e8f0;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #64748b;
-  z-index: 1001;
-  padding: 0;
-  
-  &:hover {
-    background: #f8fafc;
-    color: #0f172a;
-    transform: scale(1.05);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-  
-  &:active {
-    transform: scale(0.98);
-  }
-  
-  svg {
-    width: 14px;
-    height: 14px;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    pointer-events: none;
-  }
-`;
+// Replace these local components with the shared ones
+// const ModalContent = styled.div`...`;
+// const ModalHeader = styled.div`...`;
+// const ModalTitle = styled.h2`...`;
+// const CloseButton = styled.button`...`;
 
 const SummarySection = styled.div`
   display: flex;
@@ -309,7 +251,7 @@ const EventTypeTab = styled.button<{ isActive: boolean }>`
   border-bottom: 2px solid ${props => props.isActive ? '#0369a1' : 'transparent'};
   
   &:hover {
-    color: ${props => props.isActive ? '#0369a1' : '#0f172a'};
+    color: ${props => props.isActive ? '#0f172a' : '#0f172a'};
     background: ${props => props.isActive ? '#e0f2fe' : '#f8fafc'};
   }
 `;
@@ -573,7 +515,7 @@ const ClearDataWarning = styled.p`
 `;
 
 // Updated modal content for confirmation dialog
-const ConfirmModalContent = styled(ModalContent)`
+const ConfirmModalContent = styled(SharedModalBody)`
   max-width: 450px;
   text-align: center;
   display: flex;
@@ -581,26 +523,26 @@ const ConfirmModalContent = styled(ModalContent)`
   align-items: center;
 `;
 
-const ConfirmTitle = styled.h3`
+const ConfirmTitle = styled(SharedModalTitle)`
   color: #d9534f;
   font-size: 1.5rem;
   margin-bottom: 1rem;
   font-weight: bold;
 `;
 
-const ConfirmMessage = styled.p`
+const ConfirmMessage = styled(SharedModalBody)`
   margin-bottom: 2rem;
   font-size: 1rem;
   line-height: 1.5;
 `;
 
-const ConfirmButtonContainer = styled.div`
+const ConfirmButtonContainer = styled(SharedModalFooter)`
   display: flex;
   gap: 1rem;
   margin-top: 1rem;
 `;
 
-const CancelButton = styled.button`
+const CancelButton = styled(SharedButton)`
   background-color: #6c757d;
   color: white;
   border: none;
@@ -614,7 +556,7 @@ const CancelButton = styled.button`
   }
 `;
 
-const ConfirmButton = styled.button`
+const ConfirmButton = styled(SharedButton)`
   background-color: #d9534f;
   color: white;
   border: none;
@@ -1121,32 +1063,6 @@ const ActionButtonsContainer = styled.div`
   }
 `;
 
-const ActionButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-  font-weight: 500;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  }
-  
-  svg {
-    color: #3b82f6;
-  }
-`;
-
 // Side panel styled components
 const SidePanel = styled.div<{ isOpen: boolean }>`
   position: fixed;
@@ -1197,6 +1113,8 @@ const SidePanelTitle = styled.h2`
   color: #0f172a;
 `;
 
+// Replace with our shared CloseButton
+/*
 const SidePanelCloseButton = styled.button`
   width: 32px;
   height: 32px;
@@ -1214,7 +1132,7 @@ const SidePanelCloseButton = styled.button`
     background: #f8fafc;
     color: #0f172a;
   }
-`;
+`;*/
 
 const SidePanelBody = styled.div`
   flex: 1;
@@ -1633,53 +1551,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     selectedMonthData.filter(item => item.type === 'total'), 
     [selectedMonthData]
   );
-
-  // Extract hours from description for visualization
-  const extractHoursData = (description: string): { weekday: number, weekend: number, nightShift: number, weekendNight: number } => {
-    try {
-      const match = description.match(/\((.+?)\)/);
-      if (!match) return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-      
-      const parts = match[1].split(',').map(s => s.trim());
-      
-      const result = { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-      
-      parts.forEach(part => {
-        const [hoursStr, ...typeParts] = part.split(' ');
-        const type = typeParts.join(' '); // Rejoin in case there are spaces in the type
-        const hours = parseFloat(hoursStr);
-        
-        if (type.includes('weekday') && !type.includes('night')) {
-          result.weekday = hours;
-        } else if (type.includes('weekend') && !type.includes('night')) {
-          result.weekend = hours;
-        } else if (type.includes('weekday') && type.includes('night')) {
-          result.nightShift = hours;
-        } else if (type.includes('weekend') && type.includes('night')) {
-          result.weekendNight = hours;
-        }
-      });
-      
-      return result;
-    } catch (error) {
-      logger.error('Error parsing hours:', error);
-      return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-    }
-  };
-  
-  // Helper function to get combined billable hours for incidents
-  const getIncidentBillableWeekdayHours = (description: string): number => {
-    const hours = extractHoursData(description);
-    // For incident charts, weekday hours should include both regular weekday and night shift hours
-    return hours.weekday + hours.nightShift;
-  };
-
-  // Helper function to get combined weekend hours for incidents
-  const getIncidentWeekendHours = (description: string): number => {
-    const hours = extractHoursData(description);
-    // Combine regular weekend hours and weekend night hours
-    return hours.weekend + hours.weekendNight;
-  };
 
   // Get the total amount for the selected month
   const monthTotal = totalData.length > 0 ? totalData[0].amount : 0;
@@ -2162,19 +2033,19 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                   Showing {oncallStartIndex + 1}-{oncallEndIndex} of {filteredOncallEvents.length}
                 </PageInfoText>
                 <ButtonsContainer>
-                  <PaginationButton 
+                  <SharedPageButton 
                     disabled={oncallPage === 1}
                     onClick={() => setOncallPage(prev => Math.max(prev - 1, 1))}
                   >
                     Previous
-                  </PaginationButton>
+                  </SharedPageButton>
                   <PageText>{oncallPage} / {totalOncallPages}</PageText>
-                  <PaginationButton 
+                  <SharedPageButton 
                     disabled={oncallPage === totalOncallPages}
                     onClick={() => setOncallPage(prev => Math.min(prev + 1, totalOncallPages))}
                   >
                     Next
-                  </PaginationButton>
+                  </SharedPageButton>
                 </ButtonsContainer>
               </PaginationWrapper>
             )}
@@ -2215,19 +2086,19 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                   Showing {incidentStartIndex + 1}-{incidentEndIndex} of {filteredIncidentEvents.length}
                 </PageInfoText>
                 <ButtonsContainer>
-                  <PaginationButton 
+                  <SharedPageButton 
                     disabled={incidentPage === 1}
                     onClick={() => setIncidentPage(prev => Math.max(prev - 1, 1))}
                   >
                     Previous
-                  </PaginationButton>
+                  </SharedPageButton>
                   <PageText>{incidentPage} / {totalIncidentPages}</PageText>
-                  <PaginationButton 
+                  <SharedPageButton 
                     disabled={incidentPage === totalIncidentPages}
                     onClick={() => setIncidentPage(prev => Math.min(prev + 1, totalIncidentPages))}
                   >
                     Next
-                  </PaginationButton>
+                  </SharedPageButton>
                 </ButtonsContainer>
               </PaginationWrapper>
             )}
@@ -2523,9 +2394,24 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               ? `Events for ${selectedMonth ? format(selectedMonth, 'MMMM yyyy') : ''}` 
               : 'Compensation Rates'}
           </SidePanelTitle>
-          <SidePanelCloseButton onClick={closeSidePanel}>
+          <button 
+            onClick={closeSidePanel}
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              border: '1px solid #e2e8f0',
+              background: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              color: '#64748b'
+            }}
+          >
             <XIcon />
-          </SidePanelCloseButton>
+          </button>
         </SidePanelHeader>
         
         <SidePanelBody>
@@ -2643,20 +2529,23 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       </ScrollButton>
 
       {selectedMonth && (
-        <Modal onClick={handleCloseModal}>
-          <ModalContent onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
-            <CloseButton onClick={handleCloseModal} aria-label="Close modal">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </CloseButton>
-            
-            <ModalHeader>
-              <ModalTitle>{format(selectedMonth, 'MMMM yyyy')}</ModalTitle>
-              <MonthAmount>€{monthTotal.toFixed(2)}</MonthAmount>
-            </ModalHeader>
-            
+        <SharedModal isOpen={!!selectedMonth} onClose={handleCloseModal}>
+          <SharedModalHeader>
+            <SharedModalTitle>{format(selectedMonth, 'MMMM yyyy')}</SharedModalTitle>
+            <div style={{ 
+              fontSize: '1.5rem', 
+              fontWeight: 600,
+              color: '#0f172a',
+              background: '#f0f9ff',
+              padding: '0.5rem 1rem',
+              borderRadius: '8px',
+              border: '1px solid #bae6fd'
+            }}>
+              €{monthTotal.toFixed(2)}
+            </div>
+          </SharedModalHeader>
+          
+          <SharedModalBody>
             {/* Compensation Bar */}
             {renderCompensationBar()}
             
@@ -2715,7 +2604,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             
             {/* NEW ORDER: 2. Action buttons below Events Summary */}
             <ActionButtonsContainer>
-              <ActionButton onClick={() => openCompensationSectionPanel('events')}>
+              <SharedButton 
+                variant="secondary" 
+                onClick={() => openCompensationSectionPanel('events')}
+              >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M9 5H7C5.89543 5 5 5.89543 5 7V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V7C19 5.89543 18.1046 5 17 5H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5C15 6.10457 14.1046 7 13 7H11C9.89543 7 9 6.10457 9 5Z" stroke="currentColor" strokeWidth="2"/>
@@ -2723,12 +2615,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                   <path d="M9 16H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 View All Events
-              </ActionButton>
-              <ActionButton onClick={() => openCompensationSectionPanel('rates')}>
+              </SharedButton>
+              <SharedButton 
+                variant="secondary" 
+                onClick={() => openCompensationSectionPanel('rates')}
+              >
                 <DollarIcon />
                 View Compensation Rates
                 <ChevronRightIcon />
-              </ActionButton>
+              </SharedButton>
             </ActionButtonsContainer>
             
             {/* NEW ORDER: 3. Hours and Compensation charts */}
@@ -2800,52 +2695,50 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 Remove All Events for {format(selectedMonth, 'MMMM yyyy')}
               </DeleteMonthButton>
             </DeleteMonthSection>
-          </ModalContent>
-        </Modal>
+          </SharedModalBody>
+        </SharedModal>
       )}
 
       {showConfirmModal && (
-        <Modal onClick={handleCancelClear}>
-          <ConfirmModalContent onClick={e => e.stopPropagation()}>
-            <CloseButton onClick={handleCancelClear} aria-label="Close modal">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </CloseButton>
-            <ConfirmTitle>Clear All Data</ConfirmTitle>
-            <ConfirmMessage>
+        <SharedModal isOpen={showConfirmModal} onClose={handleCancelClear}>
+          <SharedModalHeader>
+            <SharedModalTitle>Clear All Data</SharedModalTitle>
+          </SharedModalHeader>
+          <SharedModalBody>
+            <p>
               Are you sure you want to clear all calendar data? <br />
               This action cannot be undone and will remove all events and compensation data.
-            </ConfirmMessage>
-            <ConfirmButtonContainer>
-              <CancelButton onClick={handleCancelClear}>Cancel</CancelButton>
-              <ConfirmButton onClick={handleConfirmClear}>Delete All Data</ConfirmButton>
-            </ConfirmButtonContainer>
-          </ConfirmModalContent>
-        </Modal>
+            </p>
+          </SharedModalBody>
+          <SharedModalFooter>
+            <SharedButton variant="secondary" onClick={handleCancelClear}>Cancel</SharedButton>
+            <SharedButton variant="danger" onClick={handleConfirmClear}>Delete All Data</SharedButton>
+          </SharedModalFooter>
+        </SharedModal>
       )}
 
       {/* Add Delete Month Confirmation Modal */}
       {showDeleteMonthModal && selectedMonth && (
-        <DeleteMonthModal onClick={handleCloseDeleteMonthModal}>
-          <DeleteMonthContent onClick={e => e.stopPropagation()}>
-            <DeleteMonthTitle>Remove All Events for {format(selectedMonth, 'MMMM yyyy')}?</DeleteMonthTitle>
-            <DeleteSectionText>
+        <SharedModal isOpen={showDeleteMonthModal} onClose={handleCloseDeleteMonthModal}>
+          <SharedModalHeader>
+            <SharedModalTitle>Remove All Events for {format(selectedMonth, 'MMMM yyyy')}?</SharedModalTitle>
+          </SharedModalHeader>
+          <SharedModalBody>
+            <p>
               This will permanently remove all events that overlap with {format(selectedMonth, 'MMMM yyyy')}. 
               This includes events that start in previous months or end in future months.
               This action cannot be undone.
-            </DeleteSectionText>
-            <DeleteMonthButtons>
-              <DeleteCancelButton onClick={handleCloseDeleteMonthModal}>
-                Cancel
-              </DeleteCancelButton>
-              <DeleteConfirmButton onClick={handleDeleteMonth}>
-                Remove Events
-              </DeleteConfirmButton>
-            </DeleteMonthButtons>
-          </DeleteMonthContent>
-        </DeleteMonthModal>
+            </p>
+          </SharedModalBody>
+          <SharedModalFooter>
+            <SharedButton variant="secondary" onClick={handleCloseDeleteMonthModal}>
+              Cancel
+            </SharedButton>
+            <SharedButton variant="danger" onClick={handleDeleteMonth}>
+              Remove Events
+            </SharedButton>
+          </SharedModalFooter>
+        </SharedModal>
       )}
 
       <ClearDataSection>

@@ -6,48 +6,8 @@ import { CompensationSummary } from '../../../domain/calendar/types/Compensation
 import CompensationSummarySection from './CompensationSummarySection';
 import { logger } from '../../../utils/logger';
 import { trackOperation } from '../../../utils/errorHandler';
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 9998;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const ModalContent = styled.div`
-  background: white;
-  padding: 2rem;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 650px;
-  max-height: 85vh;
-  overflow-y: auto;
-  position: relative;
-  color: #1e293b;
-`;
-
-const ModalHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f1f5f9;
-`;
-
-const ModalTitle = styled.h2`
-  color: #0f172a;
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0;
-`;
+import { formatDuration } from '../../../utils/formatting/formatters';
+import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, CloseButton, Button } from '../common/ui';
 
 const EventTypeIndicator = styled.div<{ eventType: string }>`
   font-size: 1rem;
@@ -75,46 +35,6 @@ const EventTypeIndicator = styled.div<{ eventType: string }>`
       default: return '#16a34a';
     }
   }};
-`;
-
-const CloseButton = styled.button`
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  border: 1px solid #e2e8f0;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #64748b;
-  z-index: 1001;
-  padding: 0;
-  
-  &:hover {
-    background: #f8fafc;
-    color: #0f172a;
-    transform: scale(1.05);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-  
-  &:active {
-    transform: scale(0.98);
-  }
-  
-  svg {
-    width: 14px;
-    height: 14px;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    pointer-events: none;
-  }
 `;
 
 const ContentSection = styled.div`
@@ -201,51 +121,11 @@ const ValidationError = styled.p`
   font-size: 0.875rem;
 `;
 
-const ButtonGroup = styled.div`
+const ActionButtonContainer = styled.div`
   display: flex;
+  justify-content: space-between;
+  margin-top: 2rem;
   gap: 1rem;
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 2px solid #f1f5f9;
-`;
-
-const ActionButton = styled.button<{ variant: 'primary' | 'delete' }>`
-  padding: 0.875rem 1.5rem;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border: none;
-  
-  background: ${props => props.variant === 'primary' ? '#3b82f6' : '#fff'};
-  color: ${props => props.variant === 'primary' ? '#fff' : '#dc2626'};
-  box-shadow: ${props => props.variant === 'primary' 
-    ? '0 4px 6px rgba(59, 130, 246, 0.2)' 
-    : '0 0 0 1px #fecaca'};
-  
-  &:hover {
-    background: ${props => props.variant === 'primary' ? '#2563eb' : '#fef2f2'};
-    transform: translateY(-1px);
-    box-shadow: ${props => props.variant === 'primary' 
-      ? '0 6px 8px rgba(59, 130, 246, 0.25)' 
-      : '0 0 0 1px #fca5a5'};
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
-  
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-  }
 `;
 
 const LoadingIndicator = styled.div`
@@ -351,13 +231,6 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     calculatePreview();
   }, [startTime, endTime, isTimeValid, event, calculatorFacade]);
 
-  const formatDuration = useCallback((start: Date, end: Date): string => {
-    const durationMs = end.getTime() - start.getTime();
-    const hours = Math.floor(durationMs / (1000 * 60 * 60));
-    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`;
-  }, []);
-
   const validateTimes = useCallback((start: string, end: string): boolean => {
     const startDate = new Date(start);
     const endDate = new Date(end);
@@ -439,95 +312,79 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   }, [onClose]);
 
   return (
-    <ModalOverlay onClick={handleOverlayClick}>
-      <ModalContent>
-        <CloseButton onClick={onClose} aria-label="Close modal">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </CloseButton>
-        
-        <ModalHeader>
-          <ModalTitle>{getEventTypeLabel()}</ModalTitle>
-          <EventTypeIndicator eventType={event.type}>
-            {getEventTypeLabel()}
-          </EventTypeIndicator>
-        </ModalHeader>
+    <Modal isOpen={true} onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle>{event.id.startsWith('temp-') ? 'Add Event' : 'Edit Event'}</ModalTitle>
+        <CloseButton onClose={onClose} />
+      </ModalHeader>
+      
+      <ModalBody>
+        <EventTypeIndicator eventType={event.type}>
+          {event.type === 'oncall' ? 'On-Call Shift' : 'Incident Response'}
+        </EventTypeIndicator>
         
         <ContentSection>
-          <SectionTitle>Event Details</SectionTitle>
+          <SectionTitle>Date & Time</SectionTitle>
           <TimeInputGrid>
             <TimeInputGroup>
-              <InputLabel htmlFor="startTime">Start Time</InputLabel>
-              <TimeInput
-                id="startTime"
-                type="datetime-local"
+              <InputLabel htmlFor="start-time">Start Time</InputLabel>
+              <TimeInput 
+                id="start-time"
+                type="datetime-local" 
                 value={startTime}
                 onChange={handleStartTimeChange}
+                required
               />
             </TimeInputGroup>
             <TimeInputGroup>
-              <InputLabel htmlFor="endTime">End Time</InputLabel>
-              <TimeInput
-                id="endTime"
-                type="datetime-local"
+              <InputLabel htmlFor="end-time">End Time</InputLabel>
+              <TimeInput 
+                id="end-time"
+                type="datetime-local" 
                 value={endTime}
                 onChange={handleEndTimeChange}
+                required
               />
             </TimeInputGroup>
           </TimeInputGrid>
           
-          {validationError && (
-            <ValidationError>{validationError}</ValidationError>
+          {!isTimeValid && (
+            <ValidationError>
+              End time must be after start time
+            </ValidationError>
           )}
-          
-          <EventInfoGrid>
-            <InfoLabel>Type:</InfoLabel>
-            <InfoValue>{getEventTypeLabel()}</InfoValue>
-            
-            <InfoLabel>Duration:</InfoLabel>
-            <InfoValue>{durationHours} hours</InfoValue>
-            
-            {event.type === 'holiday' && (
-              <>
-                <InfoLabel>Note:</InfoLabel>
-                <InfoValue style={{ gridColumn: '2', color: '#64748b', fontStyle: 'italic' }}>
-                  Holiday events span the entire day and cannot be modified
-                </InfoValue>
-              </>
-            )}
-          </EventInfoGrid>
         </ContentSection>
         
-        {/* Compensation Details Section */}
         {isCalculating ? (
-          <LoadingIndicator>
-            Calculating compensation...
-          </LoadingIndicator>
-        ) : (
-          compensationSummary && <CompensationSummarySection summary={compensationSummary} />
+          <ContentSection>
+            <p>Calculating compensation preview...</p>
+          </ContentSection>
+        ) : compensationSummary && (
+          <ContentSection>
+            <SectionTitle>Compensation Preview</SectionTitle>
+            <CompensationSummarySection summary={compensationSummary} />
+          </ContentSection>
         )}
         
-        <ButtonGroup>
-          <ActionButton 
+        <ActionButtonContainer>
+          <Button 
             variant="primary" 
             onClick={handleSave}
             disabled={!isTimeValid}
           >
             Save Changes
-          </ActionButton>
+          </Button>
           {!event.id.startsWith('temp-') && (
-            <ActionButton 
-              variant="delete" 
+            <Button 
+              variant="danger" 
               onClick={handleDelete}
             >
               Delete Event
-            </ActionButton>
+            </Button>
           )}
-        </ButtonGroup>
-      </ModalContent>
-    </ModalOverlay>
+        </ActionButtonContainer>
+      </ModalBody>
+    </Modal>
   );
 };
 
