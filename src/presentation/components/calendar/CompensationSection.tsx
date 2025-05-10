@@ -41,7 +41,8 @@ import {
   SharedEventsPanelContent,
   type SharedPanelEvent,
   RatesSidePanel,
-  Tooltip
+  Tooltip,
+  SharedCompensationDisplay
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 import { useSidePanel, useTooltip } from '../../hooks';
@@ -176,47 +177,6 @@ const CompensationBarSegment = styled.div<{ width: string; color: string }>`
   &:hover {
     opacity: 0.9;
   }
-`;
-
-const CompensationBreakdownSection = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin: 1rem 0;
-`;
-
-const CompensationCategory = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border-radius: 6px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  flex: 1;
-  min-width: 180px;
-`;
-
-// Fix to remove title from props interface
-const CategoryColor = styled.div<{ color: string }>`
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  background: ${props => props.color};
-  flex-shrink: 0;
-  margin-right: 0.25rem;
-  position: relative;
-`;
-
-const CategoryAmount = styled.div`
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 1rem;
-`;
-
-const CategoryPercentage = styled.div`
-  font-size: 0.75rem;
-  color: #64748b;
 `;
 
 const ActionButtonsContainer = styled.div`
@@ -640,47 +600,11 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           ))}
         </CompensationBar>
         
-        <div style={{ marginTop: '0.75rem', marginBottom: '0.5rem', fontWeight: 500, color: '#64748b', fontSize: '0.9rem' }}>
-          Compensation Breakdown by Category:
-        </div>
-        
-        <CompensationBreakdownSection>
-          {compensationData.map((segment, index) => (
-            <CompensationCategory key={`category-${index}`}>
-              <CategoryColor 
-                color={segment.color}
-                title={`Color indicator for ${segment.type}`}
-              />
-              <div>
-                <div>
-                  <span style={{ 
-                    verticalAlign: 'middle', 
-                    color: '#0f172a',
-                    fontWeight: 500
-                  }}>
-                    {segment.type}
-                  </span>
-                  <span style={{ 
-                    fontSize: '0.75rem', 
-                    marginLeft: '0.5rem', 
-                    padding: '0.1rem 0.3rem', 
-                    background: segment.color, 
-                    color: '#fff', 
-                    borderRadius: '3px', 
-                    display: 'inline-block',
-                    verticalAlign: 'middle',
-                    fontWeight: 'bold'
-                  }}>
-                    {segment.type.includes('Weekend') ? 'WEEKEND' : 
-                     segment.type.includes('Night') ? 'NIGHT SHIFT' : 'STANDARD'}
-                  </span>
-                </div>
-                <CategoryAmount>€{segment.amount.toFixed(2)}</CategoryAmount>
-                <CategoryPercentage>{segment.percentage?.toFixed(1)}% of total</CategoryPercentage>
-              </div>
-            </CompensationCategory>
-          ))}
-        </CompensationBreakdownSection>
+        {/* Use SharedCompensationDisplay component */}
+        <SharedCompensationDisplay 
+          title="Compensation Breakdown by Category:"
+          data={compensationData} 
+        />
         
         <ActionButtonsContainer>
           <SharedButton 

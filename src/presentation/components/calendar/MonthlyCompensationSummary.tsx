@@ -424,43 +424,6 @@ const EventCount = styled.span`
   margin-left: 0.5rem;
 `;
 
-const CompensationBreakdownSection = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin: 1rem 0;
-`;
-
-const CompensationCategory = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border-radius: 6px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  flex: 1;
-  min-width: 180px;
-`;
-
-const CategoryColor = styled.div<{ color: string }>`
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  background: ${props => props.color};
-`;
-
-const CategoryAmount = styled.div`
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 1rem;
-`;
-
-const CategoryPercentage = styled.div`
-  font-size: 0.75rem;
-  color: #64748b;
-`;
-
 const ActionButtonsContainer = styled.div`
   display: flex;
   gap: 1rem;

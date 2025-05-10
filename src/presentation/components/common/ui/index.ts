@@ -32,6 +32,7 @@ import {
   SharedMobileRatesContainer
 } from './CompensationTable';
 import SharedEventsPanelContent, { Event as SharedPanelEvent } from '../SharedEventsPanelContent';
+import SharedCompensationDisplay from './SharedCompensationDisplay';
 
 export {
   Modal,
@@ -67,5 +68,6 @@ export {
   SharedCompensationTable,
   SharedMobileRatesContainer,
   SharedEventsPanelContent,
-  type SharedPanelEvent
+  type SharedPanelEvent,
+  SharedCompensationDisplay
 }; 
