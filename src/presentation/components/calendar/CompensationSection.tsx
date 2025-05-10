@@ -908,7 +908,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
                 <SidePanelCloseButton onClick={closeSidePanel}><XIcon /></SidePanelCloseButton>
               </SidePanelHeader>
               <SidePanelBody>
-                <SharedRatesPanelContent />
+                <SharedRatesPanelContent displayMode="full" />
               </SidePanelBody>
             </RatesSidePanel>
           )}

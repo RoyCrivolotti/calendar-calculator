@@ -4,35 +4,36 @@ export const SharedCompensationTable = styled.table`
   width: 100%;
   border-collapse: collapse;
   margin-top: 1rem;
-  table-layout: fixed; // From CompensationSection for better control
+  table-layout: fixed;
   
   th, td {
-    padding: 0.75rem 1rem; // A common padding, can be adjusted
+    padding: 0.6rem 0.8rem; // Reduced padding
     text-align: left;
     border-bottom: 1px solid #e2e8f0;
-    word-wrap: break-word; // From CompensationSection
-    overflow-wrap: break-word; // From CompensationSection
-    vertical-align: top; // From CompensationSection
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    vertical-align: top;
   }
   
   th {
     color: #64748b;
     font-weight: 500;
-    font-size: 0.875rem;
+    font-size: 0.8rem; // Slightly reduced th font size for consistency
     background: #f8fafc;
-    white-space: nowrap; // From CompensationSection
+    white-space: nowrap; // Added back to prevent header text wrapping
   }
   
   td {
     color: #334155;
-    font-size: 0.9rem; // Slightly larger default from MonthlyCompSummary
+    font-size: 0.85rem;
   }
   
-  // Column widths from CompensationSection - can be fine-tuned or made props if variability is needed
-  // th:nth-of-type(1), td:nth-of-type(1) { width: 40%; }
-  // th:nth-of-type(2), td:nth-of-type(2) { width: 20%; }
-  // th:nth-of-type(3), td:nth-of-type(3) { width: 15%; }
-  // th:nth-of-type(4), td:nth-of-type(4) { width: 25%; }
+  // Adjusted column widths and Multiplier header alignment
+  th:nth-of-type(1), td:nth-of-type(1) { width: 35%; } // Type
+  th:nth-of-type(2), td:nth-of-type(2) { width: 25%; } // Rate
+  th:nth-of-type(3) { width: 18%; text-align: center; } // Multiplier header (centered)
+  td:nth-of-type(3) { width: 18%; }                      // Multiplier data cells
+  th:nth-of-type(4), td:nth-of-type(4) { width: 22%; } // Effective
   
   tr:last-child td {
     border-bottom: none;
@@ -42,34 +43,41 @@ export const SharedCompensationTable = styled.table`
     background: #f8fafc;
   }
   
-  @media (max-width: 768px) { // From CompensationSection for mobile adjustments
-    th, td {
-      padding: 0.5rem;
-      font-size: 0.75rem;
-    }
+  // Keep existing media query for very small screens, though it might be less critical now
+  @media (max-width: 768px) { 
+    // This media query might conflict or be redundant if the defaults are small enough.
+    // For now, let's keep it but be aware its effect might change.
+    // Consider if these specific mobile styles are still desired on top of new defaults.
+    // th, td {
+    //   padding: 0.5rem; // This is smaller than new default
+    //   font-size: 0.75rem; // This is smaller than new default
+    // }
   }
 `;
 
 export const SharedMobileRatesContainer = styled.div`
-  display: none; // Default to hidden, consuming component logic will show it
+  color: #333; // Added default dark text color for visibility
+  // Styles for a compact, vertical layout of rates.
+  // display: none; // REMOVED - visibility will be controlled by parent component logic.
   
-  // Styles from CompensationSection, for when it is made visible
-  @media (max-width: 480px) {
-    // display: block; // Consuming component will control this via className or style prop
-    div[style*="font-weight: 600"] { // Target title-like divs
-      margin-bottom: 0.25rem;
-    }
-    div[style*="display: flex"] { // Target rows
-      justify-content: space-between;
-    }
-    & > div { // Target each rate entry block
-       margin-bottom: 1rem;
-       padding-bottom: 0.5rem;
-       border-bottom: 1px solid #e9ecef;
-       &:last-child {
-        border-bottom: none;
-        margin-bottom: 0;
-       }
-    }
+  // @media (max-width: 480px) { // REMOVED - no longer viewport dependent for display:block
+    // display: block;
+  // }
+
+  // Retain styling for children when this container IS displayed
+  div[style*="font-weight: 600"] { // Target title-like divs
+    margin-bottom: 0.25rem;
+  }
+  div[style*="display: flex"] { // Target rows
+    justify-content: space-between;
+  }
+  & > div { // Target each rate entry block
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e9ecef;
+      &:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      }
   }
 `; 
