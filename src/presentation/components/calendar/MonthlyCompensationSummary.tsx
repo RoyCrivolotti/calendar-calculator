@@ -44,23 +44,14 @@ import {
   MonthScroller,
   type MonthScrollerItem,
   ChartLegend,
-  type LegendItemProps
+  type LegendItemProps,
+  SharedPageSection,
+  SharedSectionTitle,
+  SharedButtonRow
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 // Import custom hooks
 import { useTooltip, useSidePanel } from '../../hooks';
-
-const Container = styled.div`
-  width: 93%;
-  margin: 2rem auto;
-  position: relative;
-  min-height: 120px;
-  background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  padding: 1rem;
-  border: 2px solid #e2e8f0;
-`;
 
 const ScrollContainer = styled.div`
   display: flex;
@@ -209,68 +200,10 @@ const ClearDataSection = styled.div`
   align-items: center;
 `;
 
-const ClearDataButton = styled.button`
-  background-color: #d9534f;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: bold;
-  
-  &:hover {
-    background-color: #c9302c;
-  }
-`;
-
 const ClearDataWarning = styled.p`
   color: #d9534f;
   font-size: 12px;
   margin-top: 8px;
-`;
-
-const SectionTitle = styled.h2`
-  color: #0f172a;
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 0 0 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f1f5f9;
-`;
-
-const ActionButtonsContainer = styled.div`
-  display: flex;
-  gap: 1rem;
-  margin: 1.5rem 0;
-  justify-content: center;
-  
-  @media (max-width: 640px) {
-    flex-direction: column;
-  }
-`;
-
-const DeleteMonthButton = styled.button`
-  background-color: #ef4444;
-  color: white;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-left: auto;
-
-  &:hover {
-    background-color: #dc2626;
-  }
-
-  &:focus {
-    outline: none;
-    ring: 2px;
-    ring-color: #ef4444;
-    ring-offset: 2px;
-  }
 `;
 
 const DeleteMonthSection = styled.div`
@@ -813,7 +746,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   };
 
   return (
-    <Container>
+    <SharedPageSection>
       <Tooltip
         visible={tooltipState.visible}
         x={tooltipState.x}
@@ -874,7 +807,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         </SidePanelBody>
       </SidePanel>
       
-      <SectionTitle>Monthly Compensation Summary</SectionTitle>
+      <SharedSectionTitle>Monthly Compensation Summary</SharedSectionTitle>
       
       <MonthScroller 
         items={monthScrollerItems}
@@ -950,7 +883,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               </div>
             </div>
             
-            <ActionButtonsContainer>
+            <SharedButtonRow>
               <Button 
                 variant="secondary" 
                 onClick={() => openCompensationSectionPanel('events')}
@@ -971,7 +904,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 View Compensation Rates
                 <ChevronRightIcon />
               </Button>
-            </ActionButtonsContainer>
+            </SharedButtonRow>
             
             <ChartContainer>
               <ChartGrid>
@@ -986,9 +919,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <p style={{ color: '#64748b', margin: '0 0 1rem 0', fontSize: '0.875rem' }}>
                 Remove all events for this month, including events that overlap with other months.
               </p>
-              <DeleteMonthButton onClick={handleOpenDeleteMonthModal}>
+              <Button variant="danger" onClick={handleOpenDeleteMonthModal}>
                 Remove All Events for {formatMonthYear(selectedMonth)}
-              </DeleteMonthButton>
+              </Button>
             </DeleteMonthSection>
           </ModalBody>
         </Modal>
@@ -1036,12 +969,12 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       )}
 
       <ClearDataSection>
-        <ClearDataButton onClick={handleClearAllData}>
+        <Button variant="danger" onClick={handleClearAllData}>
           Clear All Calendar Data
-        </ClearDataButton>
+        </Button>
         <ClearDataWarning>Warning: This will permanently delete all events and compensation data.</ClearDataWarning>
       </ClearDataSection>
-    </Container>
+    </SharedPageSection>
   );
 };
 

@@ -44,6 +44,9 @@ import MonthScroller, {
   ScrollButton as SharedScrollButton
 } from './MonthScroller';
 import ChartLegend, { type LegendItemProps } from '../charts/ChartLegend';
+import SharedPageSection from './SharedPageSection';
+import SharedSectionTitle from './SharedSectionTitle';
+import SharedButtonRow from './SharedButtonRow';
 
 export {
   Modal,
@@ -93,5 +96,8 @@ export {
   SharedMonthValueDisplay,
   SharedScrollButton,
   ChartLegend,
-  type LegendItemProps
+  type LegendItemProps,
+  SharedPageSection,
+  SharedSectionTitle,
+  SharedButtonRow
 }; 
