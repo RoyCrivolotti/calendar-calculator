@@ -365,8 +365,8 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
 
         const commonStyles = `
           padding: 2px 4px;
-          border-radius: 4px; /* Changed from 3px */
-          font-size: 0.75em;
+          border-radius: 4px;
+          font-size: 0.85em;
           margin: 1px 0;
           overflow: hidden;
           text-overflow: ellipsis;
