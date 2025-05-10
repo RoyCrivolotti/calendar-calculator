@@ -331,7 +331,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const handleCloseModal = useCallback(() => {
     setSelectedMonth(null);
     closeSidePanel();
-  }, [closeSidePanel]);
+    hideTooltip();
+  }, [closeSidePanel, hideTooltip]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {

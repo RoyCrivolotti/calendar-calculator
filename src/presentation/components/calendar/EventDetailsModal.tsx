@@ -9,15 +9,19 @@ import { trackOperation } from '../../../utils/errorHandler';
 import { formatDuration } from '../../../utils/formatting/formatters';
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, CloseButton, Button } from '../common/ui';
 
-const EventTypeIndicator = styled.div<{ eventType: string }>`
-  font-size: 1rem;
+const EventTypeBadge = styled.span<{ eventType: string }>`
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
+  border-radius: 9999px; // Pill shape
+  margin-left: 0.75rem;
+  line-height: 1.2; // Adjust for better vertical alignment if needed
   border: 1px solid ${props => {
     switch(props.eventType) {
       case 'oncall': return '#bae6fd';
       case 'incident': return '#fecaca';
+      case 'holiday': return '#fcd34d';
       default: return '#d1fae5';
     }
   }};
@@ -25,6 +29,7 @@ const EventTypeIndicator = styled.div<{ eventType: string }>`
     switch(props.eventType) {
       case 'oncall': return '#f0f9ff';
       case 'incident': return '#fef2f2';
+      case 'holiday': return '#fef3c7';
       default: return '#f0fdf4';
     }
   }};
@@ -32,6 +37,7 @@ const EventTypeIndicator = styled.div<{ eventType: string }>`
     switch(props.eventType) {
       case 'oncall': return '#0369a1';
       case 'incident': return '#dc2626';
+      case 'holiday': return '#b45309';
       default: return '#16a34a';
     }
   }};
@@ -292,14 +298,6 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     }
   }, [event, onDelete]);
 
-  const getEventTypeLabel = useCallback(() => {
-    switch(event.type) {
-      case 'oncall': return 'On-Call Shift';
-      case 'incident': return 'Incident';
-      default: return 'Holiday';
-    }
-  }, [event.type]);
-
   // Calculate simple duration in hours
   const durationHours = ((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1);
 
@@ -314,15 +312,18 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   return (
     <Modal isOpen={true} onClose={onClose}>
       <ModalHeader>
-        <ModalTitle>{event.id.startsWith('temp-') ? 'Add Event' : 'Edit Event'}</ModalTitle>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <ModalTitle>{event.id.startsWith('temp-') ? 'Add Event' : 'Edit Event'}</ModalTitle>
+          <EventTypeBadge eventType={event.type}>
+            {event.type === 'oncall' ? 'On-Call Shift' : 
+             event.type === 'incident' ? 'Incident Response' :
+             event.type === 'holiday' ? 'Holiday' : event.title}
+          </EventTypeBadge>
+        </div>
         <CloseButton onClose={onClose} />
       </ModalHeader>
       
       <ModalBody>
-        <EventTypeIndicator eventType={event.type}>
-          {event.type === 'oncall' ? 'On-Call Shift' : 'Incident Response'}
-        </EventTypeIndicator>
-        
         <ContentSection>
           <SectionTitle>Date & Time</SectionTitle>
           <TimeInputGrid>
