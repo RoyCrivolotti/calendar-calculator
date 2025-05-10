@@ -108,14 +108,31 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
   
   const { hours, details, total, monthlyBreakdown } = summary;
   
-  // Determine if this is an incident event based on the first detail
   const isIncident = details.length > 0 && details[0].description.toLowerCase().includes('incident');
+
+  let compensatedWeekdayOnCallHours = 0;
+  let calculatedNonBillableWeekdayHours = 0;
+
+  if (!isIncident) {
+    const weekdayOnCallDetails = details.filter(
+      d => d.description.toLowerCase() === 'weekday on-call'
+    );
+    compensatedWeekdayOnCallHours = weekdayOnCallDetails.reduce((sum, d) => sum + d.hours, 0);
+
+    // Ensure hours.weekday is a valid number before subtraction
+    const totalWeekdayHours = typeof hours.weekday === 'number' ? hours.weekday : 0;
+    calculatedNonBillableWeekdayHours = totalWeekdayHours - compensatedWeekdayOnCallHours;
+  } else {
+    // For incidents, we don't explicitly show "Office Hours (Non-billable)" in the top summary,
+    // and "Weekday Hours" shows total weekday hours. 
+    // So, we can stick to the original hours.officeHours if needed elsewhere, or set to 0 if not applicable here.
+    // For now, this specific calculation is only for the non-incident path.
+  }
   
   return (
     <SummaryContainer>
       {/* <SummaryTitle>Compensation Details</SummaryTitle> */}
       
-      {/* Hours summary */}
       <SummarySection>
         <DetailTitle>Hours Breakdown</DetailTitle>
         <SummaryRow>
@@ -123,45 +140,45 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
           <Value>{hours.total.toFixed(1)}h</Value>
         </SummaryRow>
         
-        {/* For on-call events: billable weekday hours */}
-        {!isIncident && hours.weekday > 0 && (
+        {/* For ON-CALL events (i.e., !isIncident) */}
+        {!isIncident && compensatedWeekdayOnCallHours > 0 && (
           <SummaryRow>
             <Label>Billable Weekday Hours</Label>
-            <Value>{(hours.weekday - hours.officeHours).toFixed(1)}h</Value>
+            <Value>{compensatedWeekdayOnCallHours.toFixed(1)}h</Value>
           </SummaryRow>
         )}
         
-        {/* For incident events: weekday hours with NS badge if applicable */}
-        {isIncident && hours.weekday > 0 && (
+        {/* For INCIDENT events */}
+        {isIncident && typeof hours.weekday === 'number' && hours.weekday > 0 && (
           <SummaryRow>
             <Label>Weekday Hours</Label>
             <Value>
               {hours.weekday.toFixed(1)}h
-              {hours.nightShift > 0 && hours.weekday === hours.nightShift && (
+              {typeof hours.nightShift === 'number' && hours.nightShift > 0 && hours.weekday === hours.nightShift && (
                 <NightShiftBadge>NS</NightShiftBadge>
               )}
             </Value>
           </SummaryRow>
         )}
         
-        {/* Weekend hours for all events */}
-        {hours.weekend > 0 && (
+        {/* Weekend hours for ALL event types */}
+        {typeof hours.weekend === 'number' && hours.weekend > 0 && (
           <SummaryRow>
             <Label>Weekend/Holiday Hours</Label>
             <Value>
               {hours.weekend.toFixed(1)}h
-              {isIncident && hours.nightShift > 0 && hours.nightShift > hours.weekday && (
+              {isIncident && typeof hours.nightShift === 'number' && hours.nightShift > 0 && hours.nightShift > (typeof hours.weekday === 'number' ? hours.weekday : 0) && (
                 <NightShiftBadge>NS</NightShiftBadge>
               )}
             </Value>
           </SummaryRow>
         )}
         
-        {/* Office hours for on-call events only */}
-        {!isIncident && hours.officeHours > 0 && (
+        {/* Office hours for ON-CALL events only, derived from the remainder */}
+        {!isIncident && calculatedNonBillableWeekdayHours > 0 && (
           <SummaryRow>
             <Label>Office Hours (Non-billable)</Label>
-            <Value>{hours.officeHours.toFixed(1)}h</Value>
+            <Value>{calculatedNonBillableWeekdayHours.toFixed(1)}h</Value>
           </SummaryRow>
         )}
       </SummarySection>
@@ -202,7 +219,7 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
         </SummarySection>
       )}
       
-      {/* Monthly breakdown for cross-month events */}
+      {/* Monthly breakdown */}
       {monthlyBreakdown && monthlyBreakdown.length > 1 && (
         <SummarySection>
           <DetailTitle>Monthly Breakdown</DetailTitle>
@@ -224,7 +241,6 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
         </SummarySection>
       )}
       
-      {/* Total compensation */}
       <TotalRow>
         <span>Total Compensation</span>
         <span>€{total.toFixed(2)}</span>
