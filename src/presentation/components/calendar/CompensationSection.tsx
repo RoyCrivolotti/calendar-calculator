@@ -665,56 +665,55 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         </Modal>
       )}
       
-      {/* Side panel for events and rates */}
-      {isSidePanelOpen && (
-        <>
-          <SidePanelOverlay isOpen={isSidePanelOpen} onClick={closeSidePanelHook} />
-          {sidePanelContentType === 'events' ? (
-            <SidePanel isOpen={isSidePanelOpen}>
-              <SidePanelHeader>
-                <SidePanelTitle>Events</SidePanelTitle>
-                <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
-              </SidePanelHeader>
-              <SidePanelBody>
-                <SidePanelTabs>
-                  <SidePanelTab isActive={sidePanelTab === 'all'} onClick={() => setSidePanelTab('all')}>All Events</SidePanelTab>
-                  <SidePanelTab isActive={sidePanelTab === 'oncall'} onClick={() => setSidePanelTab('oncall')}>On-Call</SidePanelTab>
-                  <SidePanelTab isActive={sidePanelTab === 'incident'} onClick={() => setSidePanelTab('incident')}>Incidents</SidePanelTab>
-                </SidePanelTabs>
-                {(() => {
-                  const oncallDataForPanel = breakdown.find(item => item.type === 'oncall');
-                  const incidentDataForPanel = breakdown.find(item => item.type === 'incident');
+      {/* Side panel for events and rates - Restructured for persistent panel instances */}
+      <>
+        <SidePanelOverlay isOpen={isSidePanelOpen} onClick={closeSidePanelHook} />
 
-                  const oncallEventsForPanel: SharedPanelEvent[] = (oncallDataForPanel?.events || []).map(e => ({ ...e, type: 'oncall', start: new Date(e.start), end: new Date(e.end) }));
-                  const incidentEventsForPanel: SharedPanelEvent[] = (incidentDataForPanel?.events || []).map(e => ({ ...e, type: 'incident', start: new Date(e.start), end: new Date(e.end) }));
-                  
-                  return (
-                    <SharedEventsPanelContent 
-                      oncallEvents={oncallEventsForPanel}
-                      incidentEvents={incidentEventsForPanel}
-                      activeTab={sidePanelTab}
-                    />
-                  );
-                })()}
-                <DeleteEventsContainer>
-                  <DeleteEventsButton onClick={handleOpenDeleteModal}>Remove All Events for {format(currentDate, 'MMMM yyyy')}</DeleteEventsButton>
-                  <DeleteWarningText>Warning: This will permanently delete all events for this month.</DeleteWarningText>
-                </DeleteEventsContainer>
-              </SidePanelBody>
-            </SidePanel>
-          ) : (
-            <RatesSidePanel isOpen={isSidePanelOpen}>
-              <SidePanelHeader>
-                <SidePanelTitle>Compensation Rates</SidePanelTitle>
-                <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
-              </SidePanelHeader>
-              <SidePanelBody>
-                <SharedRatesPanelContent displayMode="full" />
-              </SidePanelBody>
-            </RatesSidePanel>
-          )}
-        </>
-      )}
+        {/* Events Panel */}
+        <SidePanel isOpen={isSidePanelOpen && sidePanelContentType === 'events'}>
+          <SidePanelHeader>
+            <SidePanelTitle>Events</SidePanelTitle>
+            <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
+          </SidePanelHeader>
+          <SidePanelBody>
+            <SidePanelTabs>
+              <SidePanelTab isActive={sidePanelTab === 'all'} onClick={() => setSidePanelTab('all')}>All Events</SidePanelTab>
+              <SidePanelTab isActive={sidePanelTab === 'oncall'} onClick={() => setSidePanelTab('oncall')}>On-Call</SidePanelTab>
+              <SidePanelTab isActive={sidePanelTab === 'incident'} onClick={() => setSidePanelTab('incident')}>Incidents</SidePanelTab>
+            </SidePanelTabs>
+            {(() => {
+              const oncallDataForPanel = breakdown.find(item => item.type === 'oncall');
+              const incidentDataForPanel = breakdown.find(item => item.type === 'incident');
+
+              const oncallEventsForPanel: SharedPanelEvent[] = (oncallDataForPanel?.events || []).map(e => ({ ...e, type: 'oncall' as const, start: new Date(e.start), end: new Date(e.end) }));
+              const incidentEventsForPanel: SharedPanelEvent[] = (incidentDataForPanel?.events || []).map(e => ({ ...e, type: 'incident' as const, start: new Date(e.start), end: new Date(e.end) }));
+              
+              return (
+                <SharedEventsPanelContent 
+                  oncallEvents={oncallEventsForPanel}
+                  incidentEvents={incidentEventsForPanel}
+                  activeTab={sidePanelTab}
+                />
+              );
+            })()}
+            <DeleteEventsContainer>
+              <DeleteEventsButton onClick={handleOpenDeleteModal}>Remove All Events for {format(currentDate, 'MMMM yyyy')}</DeleteEventsButton>
+              <DeleteWarningText>Warning: This will permanently delete all events for this month.</DeleteWarningText>
+            </DeleteEventsContainer>
+          </SidePanelBody>
+        </SidePanel>
+
+        {/* Rates Panel */}
+        <RatesSidePanel isOpen={isSidePanelOpen && sidePanelContentType === 'rates'}>
+          <SidePanelHeader>
+            <SidePanelTitle>Compensation Rates</SidePanelTitle>
+            <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
+          </SidePanelHeader>
+          <SidePanelBody>
+            <SharedRatesPanelContent displayMode="full" />
+          </SidePanelBody>
+        </RatesSidePanel>
+      </>
       
       <Section>
         <Title>Compensation Breakdown for {format(currentDate, 'MMMM yyyy')}</Title>
