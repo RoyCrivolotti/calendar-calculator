@@ -4,7 +4,6 @@ import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import { storageService } from '../../services/storage';
 import { logger } from '../../../utils/logger';
-import { createMonthDate } from '../../../utils/calendarUtils';
 import { trackOperation } from '../../../utils/errorHandler';
 import { 
   PhoneIcon, 
@@ -12,23 +11,21 @@ import {
   ClockIcon, 
   CalendarIcon, 
   ChevronRightIcon, 
-  ListIcon, 
   XIcon, 
   DollarIcon 
 } from '../../../assets/icons';
-import { extractHoursData, getIncidentBillableWeekdayHours, getIncidentWeekendHours } from '../../../utils/compensation/compensationUtils';
+import { extractHoursData } from '../../../utils/compensation/compensationUtils';
 import { formatDuration, formatMonthYear } from '../../../utils/formatting/formatters';
 // Import UI components with different names to avoid conflicts
 import { 
-  PaginationControls as SharedPaginationControls, 
-  Button as SharedButton, 
-  Modal as SharedModal, 
-  ModalHeader as SharedModalHeader, 
-  ModalTitle as SharedModalTitle, 
-  ModalBody as SharedModalBody, 
-  ModalFooter as SharedModalFooter, 
-  CloseButton as SharedCloseButton,
-  PageButton as SharedPageButton 
+  PaginationControls, 
+  Button, 
+  Modal, 
+  ModalHeader, 
+  ModalTitle, 
+  ModalBody, 
+  ModalFooter, 
+  CloseButton
 } from '../common/ui';
 
 const Container = styled.div`
@@ -138,26 +135,6 @@ const ScrollButton = styled.button`
     right: -16px;
   }
 `;
-
-// Replace this local Modal component with the shared one
-// const Modal = styled.div`
-//   position: fixed;
-//   top: 0;
-//   left: 0;
-//   right: 0;
-//   bottom: 0;
-//   background: rgba(0, 0, 0, 0.5);
-//   display: flex;
-//   align-items: center;
-//   justify-content: center;
-//   z-index: 1000;
-// `;
-
-// Replace these local components with the shared ones
-// const ModalContent = styled.div`...`;
-// const ModalHeader = styled.div`...`;
-// const ModalTitle = styled.h2`...`;
-// const CloseButton = styled.button`...`;
 
 const SummarySection = styled.div`
   display: flex;
@@ -514,62 +491,6 @@ const ClearDataWarning = styled.p`
   margin-top: 8px;
 `;
 
-// Updated modal content for confirmation dialog
-const ConfirmModalContent = styled(SharedModalBody)`
-  max-width: 450px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`;
-
-const ConfirmTitle = styled(SharedModalTitle)`
-  color: #d9534f;
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  font-weight: bold;
-`;
-
-const ConfirmMessage = styled(SharedModalBody)`
-  margin-bottom: 2rem;
-  font-size: 1rem;
-  line-height: 1.5;
-`;
-
-const ConfirmButtonContainer = styled(SharedModalFooter)`
-  display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
-`;
-
-const CancelButton = styled(SharedButton)`
-  background-color: #6c757d;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: bold;
-  
-  &:hover {
-    background-color: #5a6268;
-  }
-`;
-
-const ConfirmButton = styled(SharedButton)`
-  background-color: #d9534f;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: bold;
-  
-  &:hover {
-    background-color: #c9302c;
-  }
-`;
-
 const Legend = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -704,7 +625,6 @@ const CardsContainer = styled.div`
   }
 `;
 
-// Add new styled component for the title
 const SectionTitle = styled.h2`
   color: #0f172a;
   font-size: 1.75rem;
@@ -816,79 +736,6 @@ const DeleteMonthButton = styled.button`
   }
 `;
 
-const DeleteMonthModal = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-`;
-
-const DeleteMonthContent = styled.div`
-  background: white;
-  padding: 2rem;
-  border-radius: 12px;
-  max-width: 500px;
-  width: 90%;
-  text-align: center;
-`;
-
-const DeleteMonthTitle = styled.h3`
-  color: #ef4444;
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0 0 1rem 0;
-`;
-
-const DeleteSectionText = styled.p`
-  color: #64748b;
-  margin: 0 0 1rem 0;
-  font-size: 0.875rem;
-`;
-
-const DeleteMonthButtons = styled.div`
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-`;
-
-const DeleteConfirmButton = styled.button`
-  background-color: #ef4444;
-  color: white;
-  padding: 0.5rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background-color: #dc2626;
-  }
-`;
-
-const DeleteCancelButton = styled.button`
-  background-color: #e5e7eb;
-  color: #374151;
-  padding: 0.5rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background-color: #d1d5db;
-  }
-`;
-
 const DeleteMonthSection = styled.div`
   margin: 2rem 0;
   padding: 1.5rem;
@@ -902,47 +749,6 @@ const EventCount = styled.span`
   font-weight: 400;
   color: #64748b;
   margin-left: 0.5rem;
-`;
-
-const PaginationControls = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #f1f5f9;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-`;
-
-const PageInfo = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-`;
-
-const PageButtons = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const PageButton = styled.button<{ disabled?: boolean }>`
-  padding: 0.25rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  background: ${props => props.disabled ? '#f8fafc' : 'white'};
-  color: ${props => props.disabled ? '#cbd5e1' : '#0f172a'};
-  font-size: 0.8rem;
-  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
-  transition: all 0.2s;
-  
-  &:hover {
-    background: ${props => props.disabled ? '#f8fafc' : '#f1f5f9'};
-    border-color: ${props => props.disabled ? '#e2e8f0' : '#cbd5e1'};
-  }
 `;
 
 const PageNumber = styled.div`
@@ -1113,27 +919,6 @@ const SidePanelTitle = styled.h2`
   color: #0f172a;
 `;
 
-// Replace with our shared CloseButton
-/*
-const SidePanelCloseButton = styled.button`
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #64748b;
-  
-  &:hover {
-    background: #f8fafc;
-    color: #0f172a;
-  }
-`;*/
-
 const SidePanelBody = styled.div`
   flex: 1;
   overflow-y: auto;
@@ -1233,53 +1018,6 @@ const SidePanelHolidayIndicator = styled.span`
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   margin-left: 0.5rem;
-`;
-
-const SidePanelPaginationControls = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #f1f5f9;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-`;
-
-const SidePanelPageInfo = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-`;
-
-const SidePanelPageButtons = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const SidePanelPageButton = styled.button<{ disabled?: boolean }>`
-  padding: 0.25rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  background: ${props => props.disabled ? '#f8fafc' : 'white'};
-  color: ${props => props.disabled ? '#cbd5e1' : '#0f172a'};
-  font-size: 0.8rem;
-  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
-  transition: all 0.2s;
-  
-  &:hover {
-    background: ${props => props.disabled ? '#f8fafc' : '#f1f5f9'};
-    border-color: ${props => props.disabled ? '#e2e8f0' : '#cbd5e1'};
-  }
-`;
-
-const SidePanelPageNumber = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-  padding: 0 0.25rem;
 `;
 
 // ... rest of the existing code ...
@@ -1985,12 +1723,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const MetadataWrapper = isSidePanel ? SidePanelEventMetadata : EventMetadata;
     const DurationText = isSidePanel ? SidePanelEventDuration : EventDuration;
     const HolidayBadge = isSidePanel ? SidePanelHolidayIndicator : HolidayIndicator;
-    const PaginationWrapper = isSidePanel ? SidePanelPaginationControls : PaginationControls;
-    const PageInfoText = isSidePanel ? SidePanelPageInfo : PageInfo;
-    const ButtonsContainer = isSidePanel ? SidePanelPageButtons : PageButtons;
-    const PaginationButton = isSidePanel ? SidePanelPageButton : PageButton;
-    const PageText = isSidePanel ? SidePanelPageNumber : PageNumber;
-
+    
+    // Use the shared pagination controls directly
     const showTab = isSidePanel 
       ? (tab: 'all' | 'oncall' | 'incident') => sidePanelTab === tab || sidePanelTab === 'all'
       : (tab: 'all' | 'oncall' | 'incident') => activeTab === tab || activeTab === 'all';
@@ -2028,26 +1762,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             
             {/* Pagination controls for on-call events */}
             {totalOncallPages > 1 && (
-              <PaginationWrapper>
-                <PageInfoText>
-                  Showing {oncallStartIndex + 1}-{oncallEndIndex} of {filteredOncallEvents.length}
-                </PageInfoText>
-                <ButtonsContainer>
-                  <SharedPageButton 
-                    disabled={oncallPage === 1}
-                    onClick={() => setOncallPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </SharedPageButton>
-                  <PageText>{oncallPage} / {totalOncallPages}</PageText>
-                  <SharedPageButton 
-                    disabled={oncallPage === totalOncallPages}
-                    onClick={() => setOncallPage(prev => Math.min(prev + 1, totalOncallPages))}
-                  >
-                    Next
-                  </SharedPageButton>
-                </ButtonsContainer>
-              </PaginationWrapper>
+              <PaginationControls
+                currentPage={oncallPage}
+                totalPages={totalOncallPages}
+                totalItems={filteredOncallEvents.length}
+                itemsPerPage={EVENTS_PER_PAGE}
+                onPageChange={setOncallPage}
+              />
             )}
           </EventSection>
         )}
@@ -2081,26 +1802,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             
             {/* Pagination controls for incident events */}
             {totalIncidentPages > 1 && (
-              <PaginationWrapper>
-                <PageInfoText>
-                  Showing {incidentStartIndex + 1}-{incidentEndIndex} of {filteredIncidentEvents.length}
-                </PageInfoText>
-                <ButtonsContainer>
-                  <SharedPageButton 
-                    disabled={incidentPage === 1}
-                    onClick={() => setIncidentPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </SharedPageButton>
-                  <PageText>{incidentPage} / {totalIncidentPages}</PageText>
-                  <SharedPageButton 
-                    disabled={incidentPage === totalIncidentPages}
-                    onClick={() => setIncidentPage(prev => Math.min(prev + 1, totalIncidentPages))}
-                  >
-                    Next
-                  </SharedPageButton>
-                </ButtonsContainer>
-              </PaginationWrapper>
+              <PaginationControls
+                currentPage={incidentPage}
+                totalPages={totalIncidentPages}
+                totalItems={filteredIncidentEvents.length}
+                itemsPerPage={EVENTS_PER_PAGE}
+                onPageChange={setIncidentPage}
+              />
             )}
           </EventSection>
         )}
@@ -2166,7 +1874,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const handleDeleteMonth = useCallback(async () => {
     if (!selectedMonth) return;
     
-    const monthName = format(selectedMonth, 'MMMM yyyy');
+    const monthName = formatMonthYear(selectedMonth);
     logger.info(`Attempting to delete all events for month: ${monthName}`);
     
     try {
@@ -2235,7 +1943,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   // Add handlers for delete month modal
   const handleOpenDeleteMonthModal = useCallback(() => {
     if (!selectedMonth) return;
-    logger.info(`Opening delete confirmation modal for month: ${format(selectedMonth, 'MMMM yyyy')}`);
+    logger.info(`Opening delete confirmation modal for month: ${formatMonthYear(selectedMonth)}`);
     setShowDeleteMonthModal(true);
   }, [selectedMonth]);
 
@@ -2391,27 +2099,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         <SidePanelHeader>
           <SidePanelTitle>
             {sidePanelContent === 'events' 
-              ? `Events for ${selectedMonth ? format(selectedMonth, 'MMMM yyyy') : ''}` 
+              ? `Events for ${selectedMonth ? formatMonthYear(selectedMonth) : ''}` 
               : 'Compensation Rates'}
           </SidePanelTitle>
-          <button 
-            onClick={closeSidePanel}
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '6px',
-              border: '1px solid #e2e8f0',
-              background: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              color: '#64748b'
-            }}
-          >
-            <XIcon />
-          </button>
+          <CloseButton onClick={closeSidePanel} />
         </SidePanelHeader>
         
         <SidePanelBody>
@@ -2515,7 +2206,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             isSelected={selectedMonth?.getTime() === date.getTime()}
             onClick={() => handleMonthClick(date)}
           >
-            <MonthTitle>{format(date, 'MMMM yyyy')}</MonthTitle>
+            <MonthTitle>{formatMonthYear(date)}</MonthTitle>
             <MonthValue>
               {data.find(d => d.type === 'total')?.amount.toFixed(2)}€
             </MonthValue>
@@ -2529,9 +2220,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       </ScrollButton>
 
       {selectedMonth && (
-        <SharedModal isOpen={!!selectedMonth} onClose={handleCloseModal}>
-          <SharedModalHeader>
-            <SharedModalTitle>{format(selectedMonth, 'MMMM yyyy')}</SharedModalTitle>
+        <Modal isOpen={!!selectedMonth} onClose={handleCloseModal}>
+          <ModalHeader>
+            <ModalTitle>{formatMonthYear(selectedMonth)}</ModalTitle>
             <div style={{ 
               fontSize: '1.5rem', 
               fontWeight: 600,
@@ -2543,9 +2234,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             }}>
               €{monthTotal.toFixed(2)}
             </div>
-          </SharedModalHeader>
+          </ModalHeader>
           
-          <SharedModalBody>
+          <ModalBody>
             {/* Compensation Bar */}
             {renderCompensationBar()}
             
@@ -2604,7 +2295,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             
             {/* NEW ORDER: 2. Action buttons below Events Summary */}
             <ActionButtonsContainer>
-              <SharedButton 
+              <Button 
                 variant="secondary" 
                 onClick={() => openCompensationSectionPanel('events')}
               >
@@ -2615,15 +2306,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                   <path d="M9 16H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 View All Events
-              </SharedButton>
-              <SharedButton 
+              </Button>
+              <Button 
                 variant="secondary" 
                 onClick={() => openCompensationSectionPanel('rates')}
               >
                 <DollarIcon />
                 View Compensation Rates
                 <ChevronRightIcon />
-              </SharedButton>
+              </Button>
             </ActionButtonsContainer>
             
             {/* NEW ORDER: 3. Hours and Compensation charts */}
@@ -2688,57 +2379,57 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             
             {/* Delete Month Section - KEEP AT THE BOTTOM */}
             <DeleteMonthSection>
-              <DeleteSectionText>
+              <p style={{ color: '#64748b', margin: '0 0 1rem 0', fontSize: '0.875rem' }}>
                 Remove all events for this month, including events that overlap with other months.
-              </DeleteSectionText>
+              </p>
               <DeleteMonthButton onClick={handleOpenDeleteMonthModal}>
-                Remove All Events for {format(selectedMonth, 'MMMM yyyy')}
+                Remove All Events for {formatMonthYear(selectedMonth)}
               </DeleteMonthButton>
             </DeleteMonthSection>
-          </SharedModalBody>
-        </SharedModal>
+          </ModalBody>
+        </Modal>
       )}
 
       {showConfirmModal && (
-        <SharedModal isOpen={showConfirmModal} onClose={handleCancelClear}>
-          <SharedModalHeader>
-            <SharedModalTitle>Clear All Data</SharedModalTitle>
-          </SharedModalHeader>
-          <SharedModalBody>
+        <Modal isOpen={showConfirmModal} onClose={handleCancelClear}>
+          <ModalHeader>
+            <ModalTitle>Clear All Data</ModalTitle>
+          </ModalHeader>
+          <ModalBody>
             <p>
               Are you sure you want to clear all calendar data? <br />
               This action cannot be undone and will remove all events and compensation data.
             </p>
-          </SharedModalBody>
-          <SharedModalFooter>
-            <SharedButton variant="secondary" onClick={handleCancelClear}>Cancel</SharedButton>
-            <SharedButton variant="danger" onClick={handleConfirmClear}>Delete All Data</SharedButton>
-          </SharedModalFooter>
-        </SharedModal>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="secondary" onClick={handleCancelClear}>Cancel</Button>
+            <Button variant="danger" onClick={handleConfirmClear}>Delete All Data</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* Add Delete Month Confirmation Modal */}
       {showDeleteMonthModal && selectedMonth && (
-        <SharedModal isOpen={showDeleteMonthModal} onClose={handleCloseDeleteMonthModal}>
-          <SharedModalHeader>
-            <SharedModalTitle>Remove All Events for {format(selectedMonth, 'MMMM yyyy')}?</SharedModalTitle>
-          </SharedModalHeader>
-          <SharedModalBody>
+        <Modal isOpen={showDeleteMonthModal} onClose={handleCloseDeleteMonthModal}>
+          <ModalHeader>
+            <ModalTitle>Remove All Events for {formatMonthYear(selectedMonth)}?</ModalTitle>
+          </ModalHeader>
+          <ModalBody>
             <p>
-              This will permanently remove all events that overlap with {format(selectedMonth, 'MMMM yyyy')}. 
+              This will permanently remove all events that overlap with {formatMonthYear(selectedMonth)}. 
               This includes events that start in previous months or end in future months.
               This action cannot be undone.
             </p>
-          </SharedModalBody>
-          <SharedModalFooter>
-            <SharedButton variant="secondary" onClick={handleCloseDeleteMonthModal}>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="secondary" onClick={handleCloseDeleteMonthModal}>
               Cancel
-            </SharedButton>
-            <SharedButton variant="danger" onClick={handleDeleteMonth}>
+            </Button>
+            <Button variant="danger" onClick={handleDeleteMonth}>
               Remove Events
-            </SharedButton>
-          </SharedModalFooter>
-        </SharedModal>
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       <ClearDataSection>
