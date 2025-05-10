@@ -256,6 +256,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         } else if (selectedMonth) {
           setSelectedMonth(null);
           closeSidePanel();
+          hideTooltip();
         }
       }
     };
@@ -264,7 +265,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return () => {
       window.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [selectedMonth, showConfirmModal, showDeleteMonthModal, closeSidePanel]);
+  }, [selectedMonth, showConfirmModal, showDeleteMonthModal, closeSidePanel, hideTooltip]);
 
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
