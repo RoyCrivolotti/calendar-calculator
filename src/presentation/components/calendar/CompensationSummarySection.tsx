@@ -3,9 +3,9 @@ import styled from '@emotion/styled';
 import { CompensationSummary, CompensationDetail, HoursSummary, MonthlyCompensation } from '../../../domain/calendar/types/CompensationSummary';
 
 const SummaryContainer = styled.div`
-  margin-top: 1.5rem;
+  /* margin-top: 1.5rem; */
   /* border-top: 1px solid #e2e8f0; */
-  padding-top: 1rem;
+  /* padding-top: 1rem; */
 `;
 
 const SummaryTitle = styled.h4`

@@ -13,7 +13,8 @@ import {
   AlertIcon, 
   ClockIcon, 
   CalendarIcon, 
-  DollarIcon 
+  DollarIcon,
+  ClipboardListIcon
 } from '../../../assets/icons';
 
 const EventTypeBadge = styled.span<{ eventType: string }>`
@@ -380,6 +381,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
         ) : compensationSummary && (
           <ContentSection>
             <SectionTitle>
+              <ClipboardListIcon />
               Details
             </SectionTitle>
             <CompensationSummarySection summary={compensationSummary} />
