@@ -2,6 +2,8 @@ import Modal, { ModalHeader, ModalTitle, ModalBody, ModalFooter, CloseButton } f
 import Button from './Button';
 import PageButton from './PageButton';
 import PaginationControls from './PaginationControls';
+import Tooltip from './Tooltip';
+import SidePanel, { SidePanelHeader, SidePanelTitle, SidePanelBody, SidePanelFooter } from './SidePanel';
 
 export {
   Modal,
@@ -12,5 +14,11 @@ export {
   CloseButton,
   Button,
   PageButton,
-  PaginationControls
+  PaginationControls,
+  Tooltip,
+  SidePanel,
+  SidePanelHeader,
+  SidePanelTitle,
+  SidePanelBody,
+  SidePanelFooter
 }; 

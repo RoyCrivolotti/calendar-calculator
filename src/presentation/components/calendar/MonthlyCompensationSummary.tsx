@@ -11,12 +11,11 @@ import {
   ClockIcon, 
   CalendarIcon, 
   ChevronRightIcon, 
-  XIcon, 
   DollarIcon 
 } from '../../../assets/icons';
 import { extractHoursData } from '../../../utils/compensation/compensationUtils';
 import { formatDuration, formatMonthYear } from '../../../utils/formatting/formatters';
-// Import UI components with different names to avoid conflicts
+// Import UI components
 import { 
   PaginationControls, 
   Button, 
@@ -25,8 +24,15 @@ import {
   ModalTitle, 
   ModalBody, 
   ModalFooter, 
-  CloseButton
+  CloseButton,
+  Tooltip,
+  SidePanel,
+  SidePanelHeader,
+  SidePanelTitle,
+  SidePanelBody
 } from '../common/ui';
+// Import custom hooks
+import { useTooltip, useSidePanel } from '../../hooks';
 
 const Container = styled.div`
   width: 93%;
@@ -385,29 +391,6 @@ const TotalLabel = styled.div`
   text-align: center;
 `;
 
-const PieChartTooltip = styled.div`
-  position: absolute;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  font-size: 0.875rem;
-  color: #334155;
-  z-index: 10;
-  pointer-events: none;
-  transition: opacity 0.2s;
-  
-  .type {
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-  }
-  
-  .amount, .percentage {
-    display: block;
-  }
-`;
-
 const BarChartContainer = styled.div`
   height: 200px;
   display: flex;
@@ -664,6 +647,9 @@ const EventTypeName = styled.h4`
   font-size: 1rem;
   font-weight: 500;
   margin: 0 0 0.75rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
 const EventItem = styled.div`
@@ -672,9 +658,6 @@ const EventItem = styled.div`
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   margin-bottom: 0.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   
   &:last-child {
     margin-bottom: 0;
@@ -695,12 +678,16 @@ const EventTime = styled.span`
 const EventMetadata = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: space-between;
+  margin-top: 0.5rem;
 `;
 
 const EventDuration = styled.span`
   color: #64748b;
   font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 `;
 
 const HolidayIndicator = styled.span`
@@ -757,70 +744,7 @@ const PageNumber = styled.div`
   padding: 0 0.25rem;
 `;
 
-interface MonthData {
-  date: Date;
-  data: CompensationBreakdown[];
-}
-
-interface MonthlyCompensationSummaryProps {
-  data: CompensationBreakdown[];
-}
-
-interface Event {
-  id: string;
-  type: 'oncall' | 'incident';
-  start: Date;
-  end: Date;
-  isHoliday?: boolean;
-}
-
-// Simple global tooltip
-const GlobalTooltip = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: #ffffff;
-  border: 2px solid #3b82f6;
-  border-radius: 6px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-  font-size: 14px;
-  color: #000000;
-  z-index: 99999;
-  pointer-events: none;
-  max-width: 200px;
-  visibility: hidden; /* Start hidden */
-  opacity: 0;
-  transition: opacity 0.2s;
-  
-  &.visible {
-    visibility: visible;
-    opacity: 1;
-  }
-`;
-
-// New styled components for the horizontal compensation bar
-const CompensationBar = styled.div`
-  width: 100%;
-  margin: 1.5rem 0;
-  border-radius: 8px;
-  overflow: hidden;
-  height: 24px;
-  display: flex;
-`;
-
-const CompensationBarSegment = styled.div<{ width: string; color: string }>`
-  height: 100%;
-  width: ${props => props.width};
-  background-color: ${props => props.color};
-  transition: width 0.3s ease;
-  position: relative;
-  
-  &:hover {
-    opacity: 0.9;
-  }
-`;
-
+// Additional styled components for compensation display
 const CompensationBreakdownSection = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -869,158 +793,22 @@ const ActionButtonsContainer = styled.div`
   }
 `;
 
-// Side panel styled components
-const SidePanel = styled.div<{ isOpen: boolean }>`
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 400px;
-  max-width: 90vw;
-  height: 100vh;
-  background: white;
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
-  transform: translateX(${props => props.isOpen ? '0' : '100%'});
-  transition: transform 0.3s ease;
-  z-index: 1010;
-  display: flex;
-  flex-direction: column;
-  
-  @media (max-width: 768px) {
-    width: 100%;
-    max-width: 100%;
-  }
-`;
+interface MonthData {
+  date: Date;
+  data: CompensationBreakdown[];
+}
 
-const SidePanelOverlay = styled.div<{ isOpen: boolean }>`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 1005;
-  opacity: ${props => props.isOpen ? 1 : 0};
-  visibility: ${props => props.isOpen ? 'visible' : 'hidden'};
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-`;
+interface MonthlyCompensationSummaryProps {
+  data: CompensationBreakdown[];
+}
 
-const SidePanelHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
-`;
-
-const SidePanelTitle = styled.h2`
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
-`;
-
-const SidePanelBody = styled.div`
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.25rem;
-`;
-
-const SidePanelTabs = styled.div`
-  display: flex;
-  border-bottom: 1px solid #e2e8f0;
-  margin-bottom: 1rem;
-`;
-
-const SidePanelTab = styled.button<{ isActive: boolean }>`
-  padding: 0.75rem 1rem;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid ${props => props.isActive ? '#3b82f6' : 'transparent'};
-  color: ${props => props.isActive ? '#0f172a' : '#64748b'};
-  font-weight: ${props => props.isActive ? '600' : '500'};
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    color: ${props => props.isActive ? '#0f172a' : '#334155'};
-  }
-`;
-
-// Event list styled components for side panel
-const SidePanelEventSection = styled.div`
-  margin-bottom: 1.5rem;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const SidePanelEventTypeName = styled.h4`
-  color: #475569;
-  font-size: 1rem;
-  font-weight: 500;
-  margin: 0 0 0.75rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const SidePanelEventCount = styled.span`
-  font-size: 0.8rem;
-  font-weight: 400;
-  color: #64748b;
-  margin-left: 0.5rem;
-`;
-
-const SidePanelEventItem = styled.div`
-  padding: 0.75rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const SidePanelEventTimeContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-`;
-
-const SidePanelEventTime = styled.span`
-  color: #334155;
-  font-size: 0.875rem;
-  display: block;
-`;
-
-const SidePanelEventMetadata = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.5rem;
-`;
-
-const SidePanelEventDuration = styled.span`
-  color: #64748b;
-  font-size: 0.875rem;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-`;
-
-const SidePanelHolidayIndicator = styled.span`
-  background: #fef3c7;
-  color: #92400e;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  margin-left: 0.5rem;
-`;
-
-// ... rest of the existing code ...
+interface Event {
+  id: string;
+  type: 'oncall' | 'incident';
+  start: Date;
+  end: Date;
+  isHoliday?: boolean;
+}
 
 // After the component declaration, add logging to trace data flow
 const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
@@ -1039,32 +827,22 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
   const [isVisible, setIsVisible] = useState(false);
   
-  // Side panel states
-  const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [sidePanelContent, setSidePanelContent] = useState<'events' | 'rates'>('events');
-  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
+  // Use the custom hook for tooltip state management
+  const { tooltipState, showTooltip, hideTooltip, updateTooltipPosition } = useTooltip();
   
-  // Global tooltip state
-  const [globalTooltip, setGlobalTooltip] = useState({
-    visible: false,
-    x: 0,
-    y: 0,
-    content: {
-      title: '',
-      value: '',
-      extra: ''
-    }
+  // Use the custom hook for side panel management
+  const { 
+    isOpen: sidePanelOpen, 
+    contentType: sidePanelContent, 
+    openPanel: openSidePanel, 
+    closePanel: closeSidePanel,
+    setContent: setSidePanelContent
+  } = useSidePanel({
+    defaultContent: 'events'
   });
-  
-  // Keep tooltip state for pie chart
-  const [tooltip, setTooltip] = useState<{
-    visible: boolean;
-    x: number;
-    y: number;
-    type: string;
-    amount: string;
-    percentage: string;
-  } | null>(null);
+
+  // Side panel tab state (not included in the hook as it's specific to this component)
+  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
   
   // Pagination settings for event lists
   const EVENTS_PER_PAGE = 10;
@@ -1077,48 +855,11 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     setIncidentPage(1);
   }, [selectedMonth]);
   
-  // Function to update global tooltip
-  const showTooltip = (e: React.MouseEvent, title: string, value: string, extra: string) => {
-    setGlobalTooltip({
-      visible: true,
-      x: e.clientX + 15,
-      y: e.clientY + 15,
-      content: {
-        title,
-        value,
-        extra
-      }
-    });
-  };
-  
-  const hideTooltip = () => {
-    setGlobalTooltip(prev => ({
-      ...prev,
-      visible: false
-    }));
-  };
-
-  // Side panel handlers
-  const openSidePanel = useCallback((content: 'events' | 'rates') => {
-    setSidePanelContent(content);
-    setSidePanelOpen(true);
-    // Reset the tab to 'all' when opening
-    setSidePanelTab('all');
-  }, []);
-
-  const closeSidePanel = useCallback(() => {
-    setSidePanelOpen(false);
-  }, []);
-
-  // ... rest of the existing code ...
-  
-  // Handle ESC key for closing side panel as well
+  // Handle ESC key for closing modals
   useEffect(() => {
     const handleEscapeKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (sidePanelOpen) {
-          setSidePanelOpen(false);
-        } else if (showConfirmModal) {
+        if (showConfirmModal) {
           setShowConfirmModal(false);
         } else if (showDeleteMonthModal) {
           setShowDeleteMonthModal(false);
@@ -1132,7 +873,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return () => {
       window.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [selectedMonth, showConfirmModal, showDeleteMonthModal, sidePanelOpen]);
+  }, [selectedMonth, showConfirmModal, showDeleteMonthModal]);
 
   // Generate list of months (last 12 months)
   const monthsWithData = useMemo(() => {
@@ -1340,7 +1081,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
          data-label="Weekday On-Call"
          className={isVisible ? 'mounted' : ''}
          onMouseEnter={(e) => showTooltip(e, "Weekday On-Call", `${oncallHours.weekday} hours`, `${Math.round((oncallHours.weekday / totalHours) * 100)}% of total hours`)}
-         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseMove={updateTooltipPosition}
          onMouseLeave={hideTooltip}
        />
      );
@@ -1356,7 +1097,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
          data-label="Weekend On-Call"
          className={isVisible ? 'mounted' : ''}
          onMouseEnter={(e) => showTooltip(e, "Weekend On-Call", `${oncallHours.weekend} hours`, `${Math.round((oncallHours.weekend / totalHours) * 100)}% of total hours`)}
-         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseMove={updateTooltipPosition}
          onMouseLeave={hideTooltip}
        />
      );
@@ -1372,7 +1113,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
          data-label="Weekday Incident"
          className={isVisible ? 'mounted' : ''}
          onMouseEnter={(e) => showTooltip(e, "Weekday Incident", `${incidentHours.weekday} hours`, `${Math.round((incidentHours.weekday / totalHours) * 100)}% of total hours`)}
-         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseMove={updateTooltipPosition}
          onMouseLeave={hideTooltip}
        />
      );
@@ -1388,7 +1129,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
          data-label="Weekend Incident"
          className={isVisible ? 'mounted' : ''}
          onMouseEnter={(e) => showTooltip(e, "Weekend Incident", `${incidentHours.weekend} hours`, `${Math.round((incidentHours.weekend / totalHours) * 100)}% of total hours`)}
-         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseMove={updateTooltipPosition}
          onMouseLeave={hideTooltip}
        />
      );
@@ -1404,7 +1145,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
          data-label="Night Shift Incident"
          className={isVisible ? 'mounted' : ''}
          onMouseEnter={(e) => showTooltip(e, "Night Shift Incident", `${incidentHours.nightShift} hours`, `${Math.round((incidentHours.nightShift / totalHours) * 100)}% of total hours`)}
-         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseMove={updateTooltipPosition}
          onMouseLeave={hideTooltip}
        />
      );
@@ -1420,7 +1161,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
          data-label="Weekend Night"
          className={isVisible ? 'mounted' : ''}
          onMouseEnter={(e) => showTooltip(e, "Weekend Night", `${incidentHours.weekendNight} hours`, `${Math.round((incidentHours.weekendNight / totalHours) * 100)}% of total hours`)}
-         onMouseMove={(e) => setGlobalTooltip(prev => ({ ...prev, x: e.clientX + 15, y: e.clientY + 15 }))}
+         onMouseMove={updateTooltipPosition}
          onMouseLeave={hideTooltip}
        />
      );
@@ -1616,19 +1357,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                   {svgSlices}
                 </g>
               </svg>
-              {tooltip && tooltip.visible && (
-                <PieChartTooltip
-                  style={{
-                    left: `${tooltip.x + 10}px`,
-                    top: `${tooltip.y + 10}px`,
-                    position: 'fixed'
-                  }}
-                >
-                  <div className="type">{tooltip.type}</div>
-                  <div className="amount">€{tooltip.amount}</div>
-                  <div className="percentage">{tooltip.percentage}% of total</div>
-                </PieChartTooltip>
-              )}
             </div>
             
             {/* Total label (same exact width as chart container) */}
@@ -1713,18 +1441,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const incidentEndIndex = Math.min(incidentStartIndex + EVENTS_PER_PAGE, filteredIncidentEvents.length);
     const paginatedIncidentEvents = filteredIncidentEvents.slice(incidentStartIndex, incidentEndIndex);
 
-    // Choose the appropriate styled components based on whether this is for the side panel or modal
-    const EventSection = isSidePanel ? SidePanelEventSection : EventTypeSection;
-    const EventName = isSidePanel ? SidePanelEventTypeName : EventTypeName;
-    const CountBadge = isSidePanel ? SidePanelEventCount : EventCount;
-    const EventRow = isSidePanel ? SidePanelEventItem : EventItem;
-    const EventTimeWrapper = isSidePanel ? SidePanelEventTimeContainer : EventTimeContainer;
-    const TimeText = isSidePanel ? SidePanelEventTime : EventTime;
-    const MetadataWrapper = isSidePanel ? SidePanelEventMetadata : EventMetadata;
-    const DurationText = isSidePanel ? SidePanelEventDuration : EventDuration;
-    const HolidayBadge = isSidePanel ? SidePanelHolidayIndicator : HolidayIndicator;
-    
-    // Use the shared pagination controls directly
     const showTab = isSidePanel 
       ? (tab: 'all' | 'oncall' | 'incident') => sidePanelTab === tab || sidePanelTab === 'all'
       : (tab: 'all' | 'oncall' | 'incident') => activeTab === tab || activeTab === 'all';
@@ -1735,29 +1451,29 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         
         {/* On-Call Shifts */}
         {showTab('oncall') && filteredOncallEvents.length > 0 && (
-          <EventSection>
-            <EventName>
+          <EventTypeSection>
+            <EventTypeName>
               {isSidePanel && <PhoneIcon />} 
               On-Call Shifts
-              <CountBadge>{filteredOncallEvents.length} events</CountBadge>
-            </EventName>
+              <EventCount>{filteredOncallEvents.length} events</EventCount>
+            </EventTypeName>
             
             {paginatedOncallEvents.map(event => (
-              <EventRow key={event.id}>
-                <EventTimeWrapper>
+              <EventItem key={event.id}>
+                <EventTimeContainer>
                   {isSidePanel && <CalendarIcon />}
-                  <TimeText>
+                  <EventTime>
                     {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
-                  </TimeText>
-                </EventTimeWrapper>
-                <MetadataWrapper>
-                  {event.isHoliday && <HolidayBadge>Holiday</HolidayBadge>}
-                  <DurationText>
+                  </EventTime>
+                </EventTimeContainer>
+                <EventMetadata>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
+                  <EventDuration>
                     {isSidePanel && <ClockIcon />}
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                  </DurationText>
-                </MetadataWrapper>
-              </EventRow>
+                  </EventDuration>
+                </EventMetadata>
+              </EventItem>
             ))}
             
             {/* Pagination controls for on-call events */}
@@ -1770,34 +1486,34 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 onPageChange={setOncallPage}
               />
             )}
-          </EventSection>
+          </EventTypeSection>
         )}
         
         {/* Incidents */}
         {showTab('incident') && filteredIncidentEvents.length > 0 && (
-          <EventSection>
-            <EventName>
+          <EventTypeSection>
+            <EventTypeName>
               {isSidePanel && <AlertIcon />}
               Incidents
-              <CountBadge>{filteredIncidentEvents.length} events</CountBadge>
-            </EventName>
+              <EventCount>{filteredIncidentEvents.length} events</EventCount>
+            </EventTypeName>
             
             {paginatedIncidentEvents.map(event => (
-              <EventRow key={event.id}>
-                <EventTimeWrapper>
+              <EventItem key={event.id}>
+                <EventTimeContainer>
                   {isSidePanel && <CalendarIcon />}
-                  <TimeText>
+                  <EventTime>
                     {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
-                  </TimeText>
-                </EventTimeWrapper>
-                <MetadataWrapper>
-                  {event.isHoliday && <HolidayBadge>Holiday</HolidayBadge>}
-                  <DurationText>
+                  </EventTime>
+                </EventTimeContainer>
+                <EventMetadata>
+                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
+                  <EventDuration>
                     {isSidePanel && <ClockIcon />}
                     Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                  </DurationText>
-                </MetadataWrapper>
-              </EventRow>
+                  </EventDuration>
+                </EventMetadata>
+              </EventItem>
             ))}
             
             {/* Pagination controls for incident events */}
@@ -1810,7 +1526,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 onPageChange={setIncidentPage}
               />
             )}
-          </EventSection>
+          </EventTypeSection>
         )}
         
         {filteredOncallEvents.length === 0 && filteredIncidentEvents.length === 0 && (
@@ -1952,22 +1668,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     setShowDeleteMonthModal(false);
   }, []);
 
-  // Hide tooltip when selectedMonth changes or component unmounts
-  useEffect(() => {
-    return () => {
-      // Hide tooltip when unmounting
-      setGlobalTooltip(prev => ({
-        ...prev,
-        visible: false
-      }));
-      setTooltip(null);
-    };
-  }, [selectedMonth]);
-
-  // Modify the renderCompensationBar function to not include the ActionButtons
-  const renderCompensationBar = () => {
-    const compensationData = getCompensationData();
-    
+  // Define the renderCompensationBar function to fix missing styled component errors
+  const renderCompensationBar = (compensationData: any[] = []) => {
     if (compensationData.length === 0) return null;
     
     const totalAmount = compensationData.reduce((sum, item) => sum + item.amount, 0);
@@ -1980,27 +1682,35 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     
     return (
       <div>
-        <CompensationBar>
+        <div className="compensation-bar" style={{
+          width: '100%',
+          margin: '1.5rem 0',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          height: '24px',
+          display: 'flex'
+        }}>
           {segments.map((segment, index) => (
-            <CompensationBarSegment
+            <div
               key={`segment-${index}`}
-              width={`${segment.percentage}%`}
-              color={segment.color}
+              style={{
+                height: '100%',
+                width: `${segment.percentage}%`,
+                backgroundColor: segment.color,
+                transition: 'width 0.3s ease',
+                position: 'relative'
+              }}
               onMouseEnter={(e) => showTooltip(
                 e, 
                 segment.type, 
                 `€${segment.amount.toFixed(2)}`, 
                 `${segment.percentage.toFixed(1)}% of total`
               )}
-              onMouseMove={(e) => setGlobalTooltip(prev => ({ 
-                ...prev, 
-                x: e.clientX + 15, 
-                y: e.clientY + 15 
-              }))}
+              onMouseMove={updateTooltipPosition}
               onMouseLeave={hideTooltip}
             />
           ))}
-        </CompensationBar>
+        </div>
         
         <CompensationBreakdownSection>
           {segments.map((segment, index) => (
@@ -2018,9 +1728,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     );
   };
 
-  // Update the tooltip handlers that were accidentally removed
-  
-  // Original tooltip handlers can remain for backward compatibility
+  // Function to handle pie slice hover using shared tooltip
   const handlePieSliceHover = useCallback((e: React.MouseEvent<SVGPathElement>) => {
     if (e.currentTarget) {
       const target = e.currentTarget;
@@ -2028,38 +1736,14 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       const amount = target.getAttribute('data-amount') || '';
       const percentage = target.getAttribute('data-percentage') || '';
       
-      // Update global tooltip instead
       showTooltip(e, type, `€${amount}`, `${percentage}% of total`);
-      
-      // Original code can stay for backward compatibility
-      setTooltip({
-        visible: true,
-        x: e.clientX,
-        y: e.clientY,
-        type,
-        amount,
-        percentage
-      });
     }
-  }, []);
-  
+  }, [showTooltip]);
+
   const handleTooltipMove = useCallback((e: React.MouseEvent) => {
-    // Update global tooltip position
-    setGlobalTooltip(prev => ({
-      ...prev,
-      x: e.clientX + 15,
-      y: e.clientY + 15
-    }));
-    
-    // Original code can stay for backward compatibility
-    if (tooltip) {
-      setTooltip({
-        ...tooltip,
-        x: e.clientX,
-        y: e.clientY
-      });
-    }
-  }, [tooltip]);
+    // Update global tooltip position using the event
+    updateTooltipPosition(e);
+  }, [updateTooltipPosition]);
 
   // Add new function for opening the side panels in CompensationSection
   const openCompensationSectionPanel = (panelType: 'events' | 'rates') => {
@@ -2078,119 +1762,134 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   return (
     <Container>
-      {/* Global tooltip rendered at the top level */}
-      <GlobalTooltip 
-        className={globalTooltip.visible ? 'visible' : ''}
-        style={{ 
-          left: `${globalTooltip.x}px`, 
-          top: `${globalTooltip.y}px`
-        }}
-      >
-        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-          {globalTooltip.content.title}
-        </div>
-        <div>{globalTooltip.content.value}</div>
-        <div>{globalTooltip.content.extra}</div>
-      </GlobalTooltip>
+      {/* Shared Tooltip */}
+      <Tooltip
+        visible={tooltipState.visible}
+        x={tooltipState.x}
+        y={tooltipState.y}
+        title={tooltipState.content.title}
+        value={tooltipState.content.value}
+        extra={tooltipState.content.extra}
+      />
       
-      {/* Side panel for events and rates */}
-      <SidePanelOverlay isOpen={sidePanelOpen} onClick={closeSidePanel} />
-      <SidePanel isOpen={sidePanelOpen}>
-        <SidePanelHeader>
-          <SidePanelTitle>
-            {sidePanelContent === 'events' 
-              ? `Events for ${selectedMonth ? formatMonthYear(selectedMonth) : ''}` 
-              : 'Compensation Rates'}
-          </SidePanelTitle>
-          <CloseButton onClick={closeSidePanel} />
-        </SidePanelHeader>
-        
-        <SidePanelBody>
-          {sidePanelContent === 'events' && (
-            <>
-              <SidePanelTabs>
-                <SidePanelTab 
-                  isActive={sidePanelTab === 'all'} 
-                  onClick={() => setSidePanelTab('all')}
-                >
-                  All Events
-                </SidePanelTab>
-                <SidePanelTab 
-                  isActive={sidePanelTab === 'oncall'} 
-                  onClick={() => setSidePanelTab('oncall')}
-                >
-                  On-Call
-                </SidePanelTab>
-                <SidePanelTab 
-                  isActive={sidePanelTab === 'incident'} 
-                  onClick={() => setSidePanelTab('incident')}
-                >
-                  Incidents
-                </SidePanelTab>
-              </SidePanelTabs>
-              
-              {renderEventsList(true)}
-            </>
-          )}
-          
-          {sidePanelContent === 'rates' && (
-            <div>
-              <h3 style={{ 
-                color: '#334155', 
-                fontSize: '1.1rem', 
-                fontWeight: 600, 
-                margin: '0 0 1rem 0',
-                paddingBottom: '0.75rem',
-                borderBottom: '1px solid #e2e8f0'
-              }}>
-                Compensation Rates
-              </h3>
-              
-              <CompensationTable>
-                <thead>
-                  <tr>
-                    <th>Type</th>
-                    <th>Rate</th>
-                    <th>Multiplier</th>
-                    <th>Effective Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Weekday On-Call (non-office hours)</td>
-                    <td>€3.90/hour</td>
-                    <td>-</td>
-                    <td>€3.90/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Weekend On-Call</td>
-                    <td>€7.34/hour</td>
-                    <td>-</td>
-                    <td>€7.34/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Weekday Incident</td>
-                    <td>€33.50/hour</td>
-                    <td>1.8×</td>
-                    <td>€60.30/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Weekend Incident</td>
-                    <td>€33.50/hour</td>
-                    <td>2.0×</td>
-                    <td>€67.00/hour</td>
-                  </tr>
-                  <tr>
-                    <td>Night Shift (additional)</td>
-                    <td>-</td>
-                    <td>1.4×</td>
-                    <td>+40% bonus</td>
-                  </tr>
-                </tbody>
-              </CompensationTable>
+      {/* Shared SidePanel */}
+      <SidePanel
+        isOpen={sidePanelOpen}
+        onClose={closeSidePanel}
+        title={
+          sidePanelContent === 'events' 
+            ? `Events for ${selectedMonth ? formatMonthYear(selectedMonth) : ''}` 
+            : 'Compensation Rates'
+        }
+      >
+        {sidePanelContent === 'events' && (
+          <>
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+              <button
+                onClick={() => setSidePanelTab('all')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: `2px solid ${sidePanelTab === 'all' ? '#3b82f6' : 'transparent'}`,
+                  color: sidePanelTab === 'all' ? '#0f172a' : '#64748b',
+                  fontWeight: sidePanelTab === 'all' ? 600 : 500,
+                  cursor: 'pointer'
+                }}
+              >
+                All Events
+              </button>
+              <button
+                onClick={() => setSidePanelTab('oncall')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: `2px solid ${sidePanelTab === 'oncall' ? '#3b82f6' : 'transparent'}`,
+                  color: sidePanelTab === 'oncall' ? '#0f172a' : '#64748b',
+                  fontWeight: sidePanelTab === 'oncall' ? 600 : 500,
+                  cursor: 'pointer'
+                }}
+              >
+                On-Call
+              </button>
+              <button
+                onClick={() => setSidePanelTab('incident')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: `2px solid ${sidePanelTab === 'incident' ? '#3b82f6' : 'transparent'}`,
+                  color: sidePanelTab === 'incident' ? '#0f172a' : '#64748b',
+                  fontWeight: sidePanelTab === 'incident' ? 600 : 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Incidents
+              </button>
             </div>
-          )}
-        </SidePanelBody>
+            
+            {renderEventsList(true)}
+          </>
+        )}
+        
+        {sidePanelContent === 'rates' && (
+          <div>
+            <h3 style={{ 
+              color: '#334155', 
+              fontSize: '1.1rem', 
+              fontWeight: 600, 
+              margin: '0 0 1rem 0',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid #e2e8f0'
+            }}>
+              Compensation Rates
+            </h3>
+            
+            <CompensationTable>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Rate</th>
+                  <th>Multiplier</th>
+                  <th>Effective Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Weekday On-Call (non-office hours)</td>
+                  <td>€3.90/hour</td>
+                  <td>-</td>
+                  <td>€3.90/hour</td>
+                </tr>
+                <tr>
+                  <td>Weekend On-Call</td>
+                  <td>€7.34/hour</td>
+                  <td>-</td>
+                  <td>€7.34/hour</td>
+                </tr>
+                <tr>
+                  <td>Weekday Incident</td>
+                  <td>€33.50/hour</td>
+                  <td>1.8×</td>
+                  <td>€60.30/hour</td>
+                </tr>
+                <tr>
+                  <td>Weekend Incident</td>
+                  <td>€33.50/hour</td>
+                  <td>2.0×</td>
+                  <td>€67.00/hour</td>
+                </tr>
+                <tr>
+                  <td>Night Shift (additional)</td>
+                  <td>-</td>
+                  <td>1.4×</td>
+                  <td>+40% bonus</td>
+                </tr>
+              </tbody>
+            </CompensationTable>
+          </div>
+        )}
       </SidePanel>
       
       <SectionTitle>Monthly Compensation Summary</SectionTitle>
@@ -2238,7 +1937,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           
           <ModalBody>
             {/* Compensation Bar */}
-            {renderCompensationBar()}
+            {renderCompensationBar(getCompensationData())}
             
             {/* NEW ORDER: 1. Events Summary first */}
             <div style={{ margin: '2rem 0 1.5rem 0', textAlign: 'center' }}>
