@@ -4,7 +4,7 @@ import { CompensationSummary, CompensationDetail, HoursSummary, MonthlyCompensat
 
 const SummaryContainer = styled.div`
   margin-top: 1.5rem;
-  border-top: 1px solid #e2e8f0;
+  /* border-top: 1px solid #e2e8f0; */
   padding-top: 1rem;
 `;
 
@@ -113,7 +113,7 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
   
   return (
     <SummaryContainer>
-      <SummaryTitle>Compensation Details</SummaryTitle>
+      {/* <SummaryTitle>Compensation Details</SummaryTitle> */}
       
       {/* Hours summary */}
       <SummarySection>
@@ -127,7 +127,7 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
         {!isIncident && hours.weekday > 0 && (
           <SummaryRow>
             <Label>Billable Weekday Hours</Label>
-            <Value>{hours.weekday.toFixed(1)}h</Value>
+            <Value>{(hours.weekday - hours.officeHours).toFixed(1)}h</Value>
           </SummaryRow>
         )}
         
@@ -167,38 +167,40 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
       </SummarySection>
       
       {/* Compensation breakdown */}
-      <SummarySection>
-        <DetailTitle>Compensation Breakdown</DetailTitle>
-        {details.map((detail, index) => (
-          <DetailSection key={index}>
-            <DetailTitle>{detail.description}</DetailTitle>
-            <SummaryRow>
-              <Label>Hours</Label>
-              <Value>{detail.hours.toFixed(1)}h</Value>
-            </SummaryRow>
-            <SummaryRow>
-              <Label>Base Rate</Label>
-              <Value>€{detail.rate.toFixed(2)}/h</Value>
-            </SummaryRow>
-            {detail.multiplier && (
+      {details && details.length > 0 && (
+        <SummarySection>
+          <DetailTitle>Compensation Breakdown</DetailTitle>
+          {details.map((detail, index) => (
+            <DetailSection key={index}>
+              <DetailTitle>{detail.description}</DetailTitle>
               <SummaryRow>
-                <Label>Multiplier</Label>
-                <Value>×{detail.multiplier.toFixed(1)}</Value>
+                <Label>Hours</Label>
+                <Value>{detail.hours.toFixed(1)}h</Value>
               </SummaryRow>
-            )}
-            {detail.nightShiftMultiplier && (
               <SummaryRow>
-                <Label>Night Shift Bonus</Label>
-                <Value>×{detail.nightShiftMultiplier.toFixed(1)}</Value>
+                <Label>Base Rate</Label>
+                <Value>€{detail.rate.toFixed(2)}/h</Value>
               </SummaryRow>
-            )}
-            <TotalRow>
-              <span>Subtotal</span>
-              <span>€{detail.amount.toFixed(2)}</span>
-            </TotalRow>
-          </DetailSection>
-        ))}
-      </SummarySection>
+              {detail.multiplier && (
+                <SummaryRow>
+                  <Label>Multiplier</Label>
+                  <Value>×{detail.multiplier.toFixed(1)}</Value>
+                </SummaryRow>
+              )}
+              {detail.nightShiftMultiplier && (
+                <SummaryRow>
+                  <Label>Night Shift Bonus</Label>
+                  <Value>×{detail.nightShiftMultiplier.toFixed(1)}</Value>
+                </SummaryRow>
+              )}
+              <TotalRow>
+                <span>Subtotal</span>
+                <span>€{detail.amount.toFixed(2)}</span>
+              </TotalRow>
+            </DetailSection>
+          ))}
+        </SummarySection>
+      )}
       
       {/* Monthly breakdown for cross-month events */}
       {monthlyBreakdown && monthlyBreakdown.length > 1 && (

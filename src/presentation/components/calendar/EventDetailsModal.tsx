@@ -8,15 +8,24 @@ import { logger } from '../../../utils/logger';
 import { trackOperation } from '../../../utils/errorHandler';
 import { formatDuration } from '../../../utils/formatting/formatters';
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, CloseButton, Button } from '../common/ui';
+import { 
+  PhoneIcon, 
+  AlertIcon, 
+  ClockIcon, 
+  CalendarIcon, 
+  DollarIcon 
+} from '../../../assets/icons';
 
 const EventTypeBadge = styled.span<{ eventType: string }>`
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.25rem 0.75rem;
   font-size: 0.875rem;
   font-weight: 600;
-  border-radius: 9999px; // Pill shape
+  border-radius: 9999px;
   margin-left: 0.75rem;
-  line-height: 1.2; // Adjust for better vertical alignment if needed
+  line-height: 1.2;
   border: 1px solid ${props => {
     switch(props.eventType) {
       case 'oncall': return '#bae6fd';
@@ -52,12 +61,14 @@ const ContentSection = styled.div`
 `;
 
 const SectionTitle = styled.h3`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   color: #334155;
   font-size: 1.1rem;
   font-weight: 600;
   margin: 0 0 1rem 0;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
 `;
 
 const TimeInputGrid = styled.div`
@@ -313,8 +324,11 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     <Modal isOpen={true} onClose={onClose}>
       <ModalHeader>
         <div style={{ display: 'flex', alignItems: 'center' }}>
+          <span style={{ marginRight: '0.5rem', color: '#64748b', display: 'inline-flex', alignItems: 'center' }}><CalendarIcon /></span>
           <ModalTitle>{event.id.startsWith('temp-') ? 'Add Event' : 'Edit Event'}</ModalTitle>
           <EventTypeBadge eventType={event.type}>
+            {event.type === 'oncall' && <PhoneIcon />}
+            {event.type === 'incident' && <AlertIcon />}
             {event.type === 'oncall' ? 'On-Call Shift' : 
              event.type === 'incident' ? 'Incident Response' :
              event.type === 'holiday' ? 'Holiday' : event.title}
@@ -325,7 +339,10 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
       
       <ModalBody>
         <ContentSection>
-          <SectionTitle>Date & Time</SectionTitle>
+          <SectionTitle>
+            <ClockIcon /> 
+            Date & Time
+          </SectionTitle>
           <TimeInputGrid>
             <TimeInputGroup>
               <InputLabel htmlFor="start-time">Start Time</InputLabel>
@@ -362,7 +379,9 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           </ContentSection>
         ) : compensationSummary && (
           <ContentSection>
-            <SectionTitle>Compensation Preview</SectionTitle>
+            <SectionTitle>
+              Details
+            </SectionTitle>
             <CompensationSummarySection summary={compensationSummary} />
           </ContentSection>
         )}
