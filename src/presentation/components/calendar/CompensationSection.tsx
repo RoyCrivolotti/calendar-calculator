@@ -308,32 +308,6 @@ const SidePanelTab = styled.button<{ isActive: boolean }>`
   }
 `;
 
-// Event list styled components for side panel
-const EventSection = styled.div`
-  margin-bottom: 1.5rem;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const EventTypeName = styled.h4`
-  color: #475569;
-  font-size: 1rem;
-  font-weight: 500;
-  margin: 0 0 0.75rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const EventCount = styled.span`
-  font-size: 0.8rem;
-  font-weight: 400;
-  color: #64748b;
-  margin-left: 0.5rem;
-`;
-
 const EventItem = styled.div`
   padding: 0.75rem;
   background: #f8fafc;
@@ -491,7 +465,6 @@ const MobileRatesContainer = styled.div`
   }
 `;
 
-// Add a wider side panel for rates
 const RatesSidePanel = styled(SidePanel)`
   width: 520px;
   
