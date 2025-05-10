@@ -315,7 +315,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     const formatEventColor = useCallback((event: CalendarEvent) => {
       if (event.type === 'oncall') {
-        return '#f0f9ff'; // Very light blue background for on-call
+        return '#e0f2fe';
       }
       if (event.type === 'incident') {
         return '#ef4444'; // Always Red for incident
@@ -325,7 +325,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     const formatEventBorderColor = useCallback((event: CalendarEvent) => {
       if (event.type === 'oncall') {
-        return '#bae6fd'; // Light sky blue border for on-call
+        return '#7dd3fc';
       }
       if (event.type === 'incident') {
         return '#ef4444'; // Match background for incident
@@ -335,7 +335,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     const formatEventTextColor = useCallback((event: CalendarEvent) => {
       if (event.type === 'oncall') {
-        return '#0369a1'; // Darker blue text for on-call against light background
+        return '#0369a1'; // sky-700
       }
       return '#ffffff'; // White text for incident and holiday
     }, []);
