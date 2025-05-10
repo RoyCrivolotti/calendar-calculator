@@ -11,7 +11,6 @@ import {
   SharedHolidayIndicator,
   SharedEventDuration,
   SharedEventBadge,
-  SharedEventInfo,
   PaginationControls as SharedPaginationControls,
 } from './ui'; // Assuming this path is correct and ui/index.ts exports these
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from '@emotion/styled';
-import { CompensationSummary, CompensationDetail, HoursSummary, MonthlyCompensation } from '../../../domain/calendar/types/CompensationSummary';
+import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
 
 const SummaryContainer = styled.div`
   /* margin-top: 1.5rem; */
@@ -8,12 +8,6 @@ const SummaryContainer = styled.div`
   /* padding-top: 1rem; */
 `;
 
-const SummaryTitle = styled.h4`
-  margin: 0 0 0.75rem 0;
-  color: #0f172a;
-  font-size: 1rem;
-  font-weight: 600;
-`;
 
 const SummarySection = styled.div`
   margin-bottom: 1.25rem;
@@ -84,12 +78,6 @@ const DetailTitle = styled.div`
   font-size: 0.875rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #f1f5f9;
-`;
-
-const MonthlySection = styled.div`
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #e2e8f0;
 `;
 
 const MonthTitle = styled.div`

@@ -6,30 +6,14 @@ import { CompensationBreakdown } from '../../../domain/calendar/types/Compensati
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { logger } from '../../../utils/logger';
 import { 
-  PhoneIcon, 
-  AlertIcon, 
-  ClockIcon, 
-  CalendarIcon, 
   ChevronRightIcon, 
   ListIcon, 
   XIcon, 
   DollarIcon 
 } from '../../../assets/icons';
 import { extractHoursData } from '../../../utils/compensation/compensationUtils';
-import { formatDuration } from '../../../utils/formatting/formatters';
 import { 
-  PaginationControls as SharedPaginationControls,
   Button as SharedButton,
-  SharedEventItem,
-  SharedEventTimeContainer,
-  SharedEventTime,
-  SharedEventMetadata,
-  SharedHolidayIndicator,
-  SharedEventDuration,
-  SharedEventBadge,
-  SharedEventInfo,
-  SharedCompensationTable,
-  SharedMobileRatesContainer,
   SidePanel,
   SidePanelOverlay,
   SidePanelHeader,

@@ -1,5 +1,4 @@
 import styled from '@emotion/styled';
-import { CalendarIcon, ClockIcon } from '../../../../assets/icons'; // Assuming icon path
 
 export const SharedEventItem = styled.div`
   padding: 0.75rem;

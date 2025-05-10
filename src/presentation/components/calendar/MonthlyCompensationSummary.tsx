@@ -1,31 +1,24 @@
-import React, { useState, useRef, useMemo, useEffect, useCallback, memo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import styled from '@emotion/styled';
-import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import { storageService } from '../../services/storage';
 import { logger } from '../../../utils/logger';
 import { trackOperation } from '../../../utils/errorHandler';
 import { 
-  PhoneIcon, 
-  AlertIcon, 
-  ClockIcon, 
-  CalendarIcon, 
   ChevronRightIcon, 
   DollarIcon,
   XIcon
 } from '../../../assets/icons';
 import { extractHoursData } from '../../../utils/compensation/compensationUtils';
-import { formatDuration, formatMonthYear } from '../../../utils/formatting/formatters';
+import { formatMonthYear } from '../../../utils/formatting/formatters';
 // Import UI components
 import { 
-  PaginationControls, 
   Button, 
   Modal, 
   ModalHeader, 
   ModalTitle, 
   ModalBody, 
   ModalFooter, 
-  CloseButton,
   Tooltip,
   SidePanel,
   SidePanelHeader,
@@ -36,7 +29,6 @@ import {
   SidePanelTab,
   SharedEventsPanelContent,
   type SharedPanelEvent,
-  RatesSidePanel,
   BarChart,
   type BarChartItem,
   PieChart,
@@ -53,102 +45,6 @@ import {
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 // Import custom hooks
 import { useTooltip, useSidePanel } from '../../hooks';
-
-const ScrollContainer = styled.div`
-  display: flex;
-  gap: 1rem;
-  overflow-x: auto;
-  scroll-behavior: smooth;
-  padding: 1rem 0.75rem;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
-`;
-
-const MonthBox = styled.button<{ isSelected: boolean }>`
-  min-width: 120px;
-  height: 80px;
-  border: 2px solid ${props => props.isSelected ? '#3b82f6' : '#e2e8f0'};
-  border-radius: 8px;
-  background: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  font-weight: 500;
-  color: ${props => props.isSelected ? '#3b82f6' : '#1e293b'};
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  padding: 0.5rem;
-
-  &:hover {
-    border-color: #3b82f6;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
-`;
-
-const MonthTitle = styled.div`
-  font-size: 0.875rem;
-  color: #64748b;
-  margin-bottom: 0.25rem;
-`;
-
-const MonthValue = styled.div`
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
-`;
-
-const ScrollButton = styled.button`
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: white;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s;
-  padding: 0;
-  color: #64748b;
-
-  svg {
-    width: 20px;
-    height: 20px;
-    fill: currentColor;
-    transition: transform 0.2s;
-  }
-
-  &:hover {
-    background: #f8fafc;
-    border-color: #3b82f6;
-    color: #3b82f6;
-    
-    svg {
-      transform: scale(1.1);
-    }
-  }
-
-  &.left {
-    left: -16px;
-  }
-
-  &.right {
-    right: -16px;
-  }
-`;
 
 const ChartContainer = styled.div`
   margin: 2rem 0;

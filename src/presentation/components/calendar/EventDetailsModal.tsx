@@ -5,15 +5,12 @@ import { CompensationCalculatorFacade } from '../../../domain/calendar/services/
 import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
 import CompensationSummarySection from './CompensationSummarySection';
 import { logger } from '../../../utils/logger';
-import { trackOperation } from '../../../utils/errorHandler';
-import { formatDuration } from '../../../utils/formatting/formatters';
-import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, CloseButton, Button } from '../common/ui';
+import { Modal, ModalHeader, ModalTitle, ModalBody, CloseButton, Button } from '../common/ui';
 import { 
   PhoneIcon, 
   AlertIcon, 
   ClockIcon, 
   CalendarIcon, 
-  DollarIcon,
   ClipboardListIcon
 } from '../../../assets/icons';
 
@@ -113,26 +110,6 @@ const TimeInput = styled.input`
   }
 `;
 
-const EventInfoGrid = styled.div`
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 0.5rem 1rem;
-  align-items: center;
-  margin-top: 1rem;
-`;
-
-const InfoLabel = styled.span`
-  color: #64748b;
-  font-weight: 500;
-  font-size: 0.9rem;
-`;
-
-const InfoValue = styled.span`
-  color: #0f172a;
-  font-weight: 500;
-  font-size: 0.95rem;
-`;
-
 const ValidationError = styled.p`
   color: #e53e3e;
   margin: 0.5rem 0;
@@ -144,35 +121,6 @@ const ActionButtonContainer = styled.div`
   justify-content: space-between;
   margin-top: 2rem;
   gap: 1rem;
-`;
-
-const LoadingIndicator = styled.div`
-  text-align: center;
-  padding: 1.5rem;
-  color: #64748b;
-  font-style: italic;
-  background-color: #f8fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  
-  &::before {
-    content: '';
-    display: block;
-    width: 1rem;
-    height: 1rem;
-    border-radius: 50%;
-    border: 2px solid #e2e8f0;
-    border-top-color: #3b82f6;
-    animation: spin 1s linear infinite;
-  }
-  
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
 `;
 
 export interface EventDetailsModalProps {
@@ -309,17 +257,6 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
       logger.error('Error deleting event:', error);
     }
   }, [event, onDelete]);
-
-  // Calculate simple duration in hours
-  const durationHours = ((new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60)).toFixed(1);
-
-  // Handle modal overlay click with stopPropagation
-  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-    // Only close if directly clicking the overlay (not its children)
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  }, [onClose]);
 
   return (
     <Modal isOpen={true} onClose={onClose}>

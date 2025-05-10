@@ -1,5 +1,3 @@
-import { isWeekend, calculateNightShiftHours } from '../../../utils/calendarUtils';
-
 export type EventType = 'oncall' | 'incident' | 'holiday';
 
 export interface CalendarEventProps {

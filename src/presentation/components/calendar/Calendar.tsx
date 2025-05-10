@@ -22,11 +22,9 @@ import {
   updateEventAsync,
   deleteEventAsync
 } from '../../store/slices/calendarSlice';
-import { container } from '../../../config/container';
-import { CalculateCompensationUseCase } from '../../../application/calendar/use-cases/CalculateCompensation';
 import { storageService } from '../../services/storage';
 import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
-import { logger, LogLevel } from '../../../utils/logger';
+import { logger } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { trackOperation } from '../../../utils/errorHandler';
