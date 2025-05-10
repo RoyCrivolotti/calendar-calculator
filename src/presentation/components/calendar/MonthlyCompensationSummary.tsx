@@ -40,7 +40,11 @@ import {
   BarChart,
   type BarChartItem,
   PieChart,
-  type PieChartItem
+  type PieChartItem,
+  MonthScroller,
+  type MonthScrollerItem,
+  ChartLegend,
+  type LegendItemProps
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 // Import custom hooks
@@ -225,33 +229,6 @@ const ClearDataWarning = styled.p`
   margin-top: 8px;
 `;
 
-const Legend = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-top: 2rem;
-  justify-content: center;
-  
-  &:empty {
-    display: none;
-  }
-`;
-
-const LegendItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: #64748b;
-`;
-
-const LegendColor = styled.div<{ color: string }>`
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  background: ${props => props.color};
-`;
-
 const SectionTitle = styled.h2`
   color: #0f172a;
   font-size: 1.75rem;
@@ -261,78 +238,15 @@ const SectionTitle = styled.h2`
   border-bottom: 2px solid #f1f5f9;
 `;
 
-const EventListTitle = styled.h3`
-  color: #334155;
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0 0 1rem 0;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
-`;
-
-const EventTypeSection = styled.div`
-  margin-bottom: 1.5rem;
+const ActionButtonsContainer = styled.div`
+  display: flex;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  justify-content: center;
   
-  &:last-child {
-    margin-bottom: 0;
+  @media (max-width: 640px) {
+    flex-direction: column;
   }
-`;
-
-const EventTypeName = styled.h4`
-  color: #475569;
-  font-size: 1rem;
-  font-weight: 500;
-  margin: 0 0 0.75rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const EventItem = styled.div`
-  padding: 0.75rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const EventTimeContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-`;
-
-const EventTime = styled.span`
-  color: #334155;
-  font-size: 0.875rem;
-`;
-
-const EventMetadata = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.5rem;
-`;
-
-const EventDuration = styled.span`
-  color: #64748b;
-  font-size: 0.875rem;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-`;
-
-const HolidayIndicator = styled.span`
-  background: #fef3c7;
-  color: #92400e;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  margin-left: 0.5rem;
 `;
 
 const DeleteMonthButton = styled.button`
@@ -367,31 +281,6 @@ const DeleteMonthSection = styled.div`
   text-align: center;
 `;
 
-const EventCount = styled.span`
-  font-size: 0.8rem;
-  font-weight: 400;
-  color: #64748b;
-  margin-left: 0.5rem;
-`;
-
-const ActionButtonsContainer = styled.div`
-  display: flex;
-  gap: 1rem;
-  margin: 1.5rem 0;
-  justify-content: center;
-  
-  @media (max-width: 640px) {
-    flex-direction: column;
-  }
-`;
-
-const NoEventsMessage = styled.div`
-  text-align: center;
-  color: #64748b;
-  padding: 1rem;
-  font-style: italic;
-`;
-
 interface MonthData {
   date: Date;
   data: CompensationBreakdown[];
@@ -412,7 +301,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showDeleteMonthModal, setShowDeleteMonthModal] = useState(false);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
   const [isVisible, setIsVisible] = useState(false);
   
@@ -522,18 +410,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       handleCloseModal();
     }
   }, [handleCloseModal]);
-
-  const scrollLeft = useCallback(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -200, behavior: 'smooth' });
-    }
-  }, []);
-
-  const scrollRight = useCallback(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 200, behavior: 'smooth' });
-    }
-  }, []);
 
   const handleClearAllData = useCallback(async () => {
     logger.info('User initiated clearing of all calendar data');
@@ -903,6 +779,39 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     setShowDeleteMonthModal(false);
   }, []);
 
+  const monthScrollerItems = useMemo((): MonthScrollerItem[] => {
+    return monthsWithData.map(monthData => ({
+      id: monthData.date.toISOString(),
+      date: monthData.date,
+      displayValue: `${monthData.data.find(d => d.type === 'total')?.amount.toFixed(2)}€`
+    }));
+  }, [monthsWithData]);
+
+  const handleMonthScrollerSelect = useCallback((id: string, date: Date) => {
+    handleMonthClick(date);
+  }, [handleMonthClick]);
+
+  const renderChartLegend = () => {
+    const legendItems: LegendItemProps[] = [];
+    if (oncallData.length > 0) {
+      const hours = extractHoursData(oncallData[0].description);
+      if (hours.weekday > 0) legendItems.push({ label: "Weekday On-Call", color: "#3b82f6" });
+      if (hours.weekend > 0) legendItems.push({ label: "Weekend On-Call", color: "#93c5fd" });
+    }
+    if (incidentData.length > 0) {
+      const hours = extractHoursData(incidentData[0].description);
+      if (hours.weekday > 0) legendItems.push({ label: "Weekday Incident", color: "#dc2626" });
+      if (hours.weekend > 0) legendItems.push({ label: "Weekend Incident", color: "#fca5a5" });
+      if (hours.nightShift && hours.nightShift > 0) legendItems.push({ label: "Night Shift Incident", color: "#9f1239" });
+      if (hours.weekendNight && hours.weekendNight > 0) legendItems.push({ label: "Weekend Night", color: "#f43f5e" });
+    }
+
+    if (legendItems.length === 0 || (!renderHoursChart() && !renderCompensationPieChart())) {
+      return null;
+    }
+    return <ChartLegend items={legendItems} />;
+  };
+
   return (
     <Container>
       <Tooltip
@@ -966,30 +875,12 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       </SidePanel>
       
       <SectionTitle>Monthly Compensation Summary</SectionTitle>
-      <ScrollButton className="left" onClick={scrollLeft}>
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-        </svg>
-      </ScrollButton>
-      <ScrollContainer ref={scrollContainerRef}>
-        {monthsWithData.map(({ date, data }) => (
-          <MonthBox
-            key={date.toISOString()}
-            isSelected={selectedMonth?.getTime() === date.getTime()}
-            onClick={() => handleMonthClick(date)}
-          >
-            <MonthTitle>{formatMonthYear(date)}</MonthTitle>
-            <MonthValue>
-              {data.find(d => d.type === 'total')?.amount.toFixed(2)}€
-            </MonthValue>
-          </MonthBox>
-        ))}
-      </ScrollContainer>
-      <ScrollButton className="right" onClick={scrollRight}>
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
-        </svg>
-      </ScrollButton>
+      
+      <MonthScroller 
+        items={monthScrollerItems}
+        selectedItemId={selectedMonth ? selectedMonth.toISOString() : null}
+        onItemSelect={handleMonthScrollerSelect}
+      />
 
       {selectedMonth && (
         <Modal isOpen={!!selectedMonth} onClose={handleCloseModal}>
@@ -1088,55 +979,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 {renderCompensationPieChart()}
               </ChartGrid>
               
-              {(!!renderHoursChart() || !!renderCompensationPieChart()) && (
-                <Legend>
-                  {oncallData.length > 0 && extractHoursData(oncallData[0].description).weekday > 0 && (
-                    <LegendItem>
-                      <LegendColor color="#3b82f6" />
-                      <span>Weekday On-Call</span>
-                    </LegendItem>
-                  )}
-                  
-                  {oncallData.length > 0 && extractHoursData(oncallData[0].description).weekend > 0 && (
-                    <LegendItem>
-                      <LegendColor color="#93c5fd" />
-                      <span>Weekend On-Call</span>
-                    </LegendItem>
-                  )}
-                  
-                  {incidentData.length > 0 && extractHoursData(incidentData[0].description).weekday > 0 && (
-                    <LegendItem>
-                      <LegendColor color="#dc2626" />
-                      <span>Weekday Incident</span>
-                    </LegendItem>
-                  )}
-                  
-                  {incidentData.length > 0 && extractHoursData(incidentData[0].description).weekend > 0 && (
-                    <LegendItem>
-                      <LegendColor color="#fca5a5" />
-                      <span>Weekend Incident</span>
-                    </LegendItem>
-                  )}
-                  
-                  {incidentData.length > 0 && 
-                    extractHoursData(incidentData[0].description).nightShift !== undefined && 
-                    extractHoursData(incidentData[0].description).nightShift! > 0 && (
-                    <LegendItem>
-                      <LegendColor color="#9f1239" />
-                      <span>Night Shift Incident</span>
-                    </LegendItem>
-                  )}
-                  
-                  {incidentData.length > 0 && 
-                    extractHoursData(incidentData[0].description).weekendNight !== undefined && 
-                    extractHoursData(incidentData[0].description).weekendNight! > 0 && (
-                    <LegendItem>
-                      <LegendColor color="#f43f5e" />
-                      <span>Weekend Night</span>
-                    </LegendItem>
-                  )}
-                </Legend>
-              )}
+              {renderChartLegend()}
             </ChartContainer>
             
             <DeleteMonthSection>

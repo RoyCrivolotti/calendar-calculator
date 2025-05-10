@@ -35,6 +35,15 @@ import SharedEventsPanelContent, { Event as SharedPanelEvent } from '../SharedEv
 import SharedCompensationDisplay from './SharedCompensationDisplay';
 import BarChart, { type BarChartItem } from '../charts/BarChart';
 import PieChart, { type PieChartItem } from '../charts/PieChart';
+import MonthScroller, { 
+  type MonthScrollerItem, 
+  ScrollContainer as SharedScrollContainer,
+  MonthBox as SharedMonthBox,
+  MonthTitle as SharedMonthTitle,
+  MonthValueDisplay as SharedMonthValueDisplay,
+  ScrollButton as SharedScrollButton
+} from './MonthScroller';
+import ChartLegend, { type LegendItemProps } from '../charts/ChartLegend';
 
 export {
   Modal,
@@ -75,5 +84,14 @@ export {
   BarChart,
   type BarChartItem,
   PieChart,
-  type PieChartItem
+  type PieChartItem,
+  MonthScroller,
+  type MonthScrollerItem,
+  SharedScrollContainer,
+  SharedMonthBox,
+  SharedMonthTitle,
+  SharedMonthValueDisplay,
+  SharedScrollButton,
+  ChartLegend,
+  type LegendItemProps
 }; 
