@@ -349,6 +349,8 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     const eventContent = useCallback((eventInfo: any) => {
       const { event, view } = eventInfo;
+
+      // Helper to format time, needed for incidents
       const formatTime = (dateStr: string | null) => {
         if (!dateStr) return '';
         const date = new Date(dateStr);
@@ -357,16 +359,36 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
 
       if (view.type === 'dayGridMonth') {
         const eventType = event.extendedProps.type as CalendarEvent['type'];
+        const originalEventStart = new Date(event.extendedProps.originalStart);
+        const overallEventEnd = event.end; // Overall end Date of the event
+        const segmentStart = event.start; // Start Date of the current segment
 
-        // Use event.extendedProps for color functions as they only need the type
         const backgroundColor = formatEventColor(event.extendedProps as CalendarEvent);
         const textColor = formatEventTextColor(event.extendedProps as CalendarEvent);
         const borderColor = formatEventBorderColor(event.extendedProps as CalendarEvent);
 
+        let prefixString = '';
+
+        if (eventType === 'oncall' && overallEventEnd) {
+          const durationMs = overallEventEnd.getTime() - originalEventStart.getTime();
+          if (durationMs > 0) {
+            const totalHours = Math.round(durationMs / (1000 * 60 * 60));
+            if (totalHours > 0) {
+              prefixString = `~${totalHours}hr`;
+            }
+          }
+        } else if (eventType === 'incident') {
+          // For incidents, show start time only on the first day
+          if (segmentStart.toDateString() === originalEventStart.toDateString()) {
+            prefixString = formatTime(event.startStr);
+          }
+        }
+        // Holidays will have an empty prefixString by default
+
         const commonStyles = `
           padding: 2px 4px;
           border-radius: 4px;
-          font-size: 0.85em;
+          font-size: 0.9em;
           margin: 1px 0;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -374,20 +396,20 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
           display: block;
         `;
 
+        const displayTitle = event.title || '';
+
         return {
           html: `
             <div
               style="background-color: ${backgroundColor}; color: ${textColor}; border: 1px solid ${borderColor}; ${commonStyles}"
               class="${eventType}-event-month"
-              title="${event.title}"
-            >
-              <span style="font-weight: 500;">${eventType === 'holiday' ? '' : formatTime(event.startStr)}</span>
-              ${event.title}
+              title="${displayTitle} ${prefixString ? '(' + prefixString + ')' : ''}">
+              <span style="font-weight: 500;">${prefixString}</span>
+              ${prefixString ? ' ' : ''}${displayTitle}
             </div>
           `
         };
       }
-      // For other views, FullCalendar will use its default rendering or the props passed in the events array
       return null; 
     }, [formatEventColor, formatEventTextColor, formatEventBorderColor]);
 
@@ -409,15 +431,18 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             selectMirror={true}
             dayMaxEvents={true}
             weekends={true}
-            events={events.map(event => ({
-              id: event.id,
-              title: formatEventTitle(event),
-              start: event.start,
-              end: event.end,
-              backgroundColor: formatEventColor(event),
-              borderColor: formatEventBorderColor(event),
-              textColor: formatEventTextColor(event),
-              extendedProps: { type: event.type }
+            events={events.map(calEvent => ({
+              id: calEvent.id,
+              title: formatEventTitle(calEvent),
+              start: calEvent.start,
+              end: calEvent.end,
+              backgroundColor: formatEventColor(calEvent),
+              borderColor: formatEventBorderColor(calEvent),
+              textColor: formatEventTextColor(calEvent),
+              extendedProps: {
+                type: calEvent.type,
+                originalStart: calEvent.start // Store the original start date of the event
+              }
             }))}
             eventClick={onEventClick}
             select={handleDateSelect}
