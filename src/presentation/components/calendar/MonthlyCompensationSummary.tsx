@@ -1081,12 +1081,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     );
   };
 
-  // Function to format duration
-  const formatDuration = (start: Date, end: Date) => {
-    const hours = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60));
-    return `${hours} hour${hours !== 1 ? 's' : ''}`;
-  };
-
   // Function to render the events list with pagination
   const renderEventsList = (isSidePanel = false) => {
     if (!selectedMonth || !oncallData.length && !incidentData.length) return null;
@@ -1485,114 +1479,123 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             : 'Compensation Rates'
         }
       >
-        {sidePanelContent === 'events' && (
-          <>
-            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '1rem' }}>
-              <button
-                onClick={() => setSidePanelTab('all')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: `2px solid ${sidePanelTab === 'all' ? '#3b82f6' : 'transparent'}`,
-                  color: sidePanelTab === 'all' ? '#0f172a' : '#64748b',
-                  fontWeight: sidePanelTab === 'all' ? 600 : 500,
-                  cursor: 'pointer'
-                }}
-              >
-                All Events
-              </button>
-              <button
-                onClick={() => setSidePanelTab('oncall')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: `2px solid ${sidePanelTab === 'oncall' ? '#3b82f6' : 'transparent'}`,
-                  color: sidePanelTab === 'oncall' ? '#0f172a' : '#64748b',
-                  fontWeight: sidePanelTab === 'oncall' ? 600 : 500,
-                  cursor: 'pointer'
-                }}
-              >
-                On-Call
-              </button>
-              <button
-                onClick={() => setSidePanelTab('incident')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: `2px solid ${sidePanelTab === 'incident' ? '#3b82f6' : 'transparent'}`,
-                  color: sidePanelTab === 'incident' ? '#0f172a' : '#64748b',
-                  fontWeight: sidePanelTab === 'incident' ? 600 : 500,
-                  cursor: 'pointer'
-                }}
-              >
-                Incidents
-              </button>
+        <SidePanelHeader>
+          <SidePanelTitle>
+            {sidePanelContent === 'events' 
+              ? `Events for ${selectedMonth ? formatMonthYear(selectedMonth) : ''}` 
+              : 'Compensation Rates'}
+          </SidePanelTitle>
+        </SidePanelHeader>
+        <SidePanelBody>
+          {sidePanelContent === 'events' && (
+            <>
+              <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+                <button
+                  onClick={() => setSidePanelTab('all')}
+                  style={{
+                    padding: '0.75rem 1rem',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: `2px solid ${sidePanelTab === 'all' ? '#3b82f6' : 'transparent'}`,
+                    color: sidePanelTab === 'all' ? '#0f172a' : '#64748b',
+                    fontWeight: sidePanelTab === 'all' ? 600 : 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  All Events
+                </button>
+                <button
+                  onClick={() => setSidePanelTab('oncall')}
+                  style={{
+                    padding: '0.75rem 1rem',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: `2px solid ${sidePanelTab === 'oncall' ? '#3b82f6' : 'transparent'}`,
+                    color: sidePanelTab === 'oncall' ? '#0f172a' : '#64748b',
+                    fontWeight: sidePanelTab === 'oncall' ? 600 : 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  On-Call
+                </button>
+                <button
+                  onClick={() => setSidePanelTab('incident')}
+                  style={{
+                    padding: '0.75rem 1rem',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: `2px solid ${sidePanelTab === 'incident' ? '#3b82f6' : 'transparent'}`,
+                    color: sidePanelTab === 'incident' ? '#0f172a' : '#64748b',
+                    fontWeight: sidePanelTab === 'incident' ? 600 : 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Incidents
+                </button>
+              </div>
+              
+              {renderEventsList(true)}
+            </>
+          )}
+          
+          {sidePanelContent === 'rates' && (
+            <div>
+              <h3 style={{ 
+                color: '#334155', 
+                fontSize: '1.1rem', 
+                fontWeight: 600, 
+                margin: '0 0 1rem 0',
+                paddingBottom: '0.75rem',
+                borderBottom: '1px solid #e2e8f0'
+              }}>
+                Compensation Rates
+              </h3>
+              
+              <CompensationTable>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Rate</th>
+                    <th>Multiplier</th>
+                    <th>Effective Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Weekday On-Call (non-office hours)</td>
+                    <td>€3.90/hour</td>
+                    <td>-</td>
+                    <td>€3.90/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekend On-Call</td>
+                    <td>€7.34/hour</td>
+                    <td>-</td>
+                    <td>€7.34/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekday Incident</td>
+                    <td>€33.50/hour</td>
+                    <td>1.8×</td>
+                    <td>€60.30/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Weekend Incident</td>
+                    <td>€33.50/hour</td>
+                    <td>2.0×</td>
+                    <td>€67.00/hour</td>
+                  </tr>
+                  <tr>
+                    <td>Night Shift (additional)</td>
+                    <td>-</td>
+                    <td>1.4×</td>
+                    <td>+40% bonus</td>
+                  </tr>
+                </tbody>
+              </CompensationTable>
             </div>
-            
-            {renderEventsList(true)}
-          </>
-        )}
-        
-        {sidePanelContent === 'rates' && (
-          <div>
-            <h3 style={{ 
-              color: '#334155', 
-              fontSize: '1.1rem', 
-              fontWeight: 600, 
-              margin: '0 0 1rem 0',
-              paddingBottom: '0.75rem',
-              borderBottom: '1px solid #e2e8f0'
-            }}>
-              Compensation Rates
-            </h3>
-            
-            <CompensationTable>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Rate</th>
-                  <th>Multiplier</th>
-                  <th>Effective Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Weekday On-Call (non-office hours)</td>
-                  <td>€3.90/hour</td>
-                  <td>-</td>
-                  <td>€3.90/hour</td>
-                </tr>
-                <tr>
-                  <td>Weekend On-Call</td>
-                  <td>€7.34/hour</td>
-                  <td>-</td>
-                  <td>€7.34/hour</td>
-                </tr>
-                <tr>
-                  <td>Weekday Incident</td>
-                  <td>€33.50/hour</td>
-                  <td>1.8×</td>
-                  <td>€60.30/hour</td>
-                </tr>
-                <tr>
-                  <td>Weekend Incident</td>
-                  <td>€33.50/hour</td>
-                  <td>2.0×</td>
-                  <td>€67.00/hour</td>
-                </tr>
-                <tr>
-                  <td>Night Shift (additional)</td>
-                  <td>-</td>
-                  <td>1.4×</td>
-                  <td>+40% bonus</td>
-                </tr>
-              </tbody>
-            </CompensationTable>
-          </div>
-        )}
+          )}
+        </SidePanelBody>
       </SidePanel>
       
       <SectionTitle>Monthly Compensation Summary</SectionTitle>
