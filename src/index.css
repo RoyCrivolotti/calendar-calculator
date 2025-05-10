@@ -256,24 +256,29 @@ button:focus-visible {
 }
 
 .fc-toolbar-title {
-  font-size: 1.5rem !important;
+  font-size: 1.75rem !important;
   font-weight: 600 !important;
-  color: #0f172a !important;
+  color: #1e293b !important;
+  font-family: inherit !important;
   margin: 0 !important;
 }
 
 .fc-day-header {
-  font-weight: 600 !important;
-  color: #1e293b !important;
-  padding: 1rem !important;
-  background-color: #f8fafc !important;
-  border-color: #e2e8f0 !important;
+  font-family: inherit !important;
+  font-size: 0.8rem !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
+  padding: 0.75rem 0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
 }
 
 .fc-day-number {
-  font-weight: 500 !important;
-  color: #1e293b !important;
+  font-family: inherit !important;
+  font-size: 0.875rem !important;
+  color: #334155 !important;
   padding: 0.5rem !important;
+  text-align: right !important;
 }
 
 .fc-today {
@@ -293,8 +298,8 @@ button:focus-visible {
 }
 
 .fc-col-header-cell {
-  background-color: #f8fafc !important;
-  border-color: #e2e8f0 !important;
+  background: #f8fafc !important;
+  font-family: inherit !important;
 }
 
 .fc-theme-standard td, 

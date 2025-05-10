@@ -129,6 +129,15 @@ const CalendarContainer = styled.div`
   .fc-dayGridMonth-view {
     height: auto !important;
     overflow: visible !important;
+
+    .fc-day-sat, .fc-day-sun {
+      background-color: #f8fafc; /* Light gray for weekend days */
+    }
+
+    .fc-day-today {
+      background-color: #e0f2fe !important; /* Light blue for today, distinct from weekend */
+      font-weight: bold;
+    }
   }
 
   /* Week view specific styles - maintain scrolling */
