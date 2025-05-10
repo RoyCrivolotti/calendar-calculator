@@ -29,25 +29,25 @@ const EventTypeBadge = styled.span<{ eventType: string }>`
   line-height: 1.2;
   border: 1px solid ${props => {
     switch(props.eventType) {
-      case 'oncall': return '#bae6fd';
-      case 'incident': return '#fecaca';
-      case 'holiday': return '#fcd34d';
+      case 'oncall': return '#e0f2fe';
+      case 'incident': return '#fca5a5';
+      case 'holiday': return '#fde68a';
       default: return '#d1fae5';
     }
   }};
   background: ${props => {
     switch(props.eventType) {
-      case 'oncall': return '#f0f9ff';
-      case 'incident': return '#fef2f2';
+      case 'oncall': return '#e0f2fe';
+      case 'incident': return '#fee2e2';
       case 'holiday': return '#fef3c7';
       default: return '#f0fdf4';
     }
   }};
   color: ${props => {
     switch(props.eventType) {
-      case 'oncall': return '#0369a1';
-      case 'incident': return '#dc2626';
-      case 'holiday': return '#b45309';
+      case 'oncall': return '#075985';
+      case 'incident': return '#991b1b';
+      case 'holiday': return '#92400e';
       default: return '#16a34a';
     }
   }};

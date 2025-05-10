@@ -315,30 +315,81 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
 
     const formatEventColor = useCallback((event: CalendarEvent) => {
       if (event.type === 'oncall') {
-        return '#e0f2fe';
+        return '#e0f2fe'; // Changed from #f0f9ff (sky-100 instead of sky-50)
       }
       if (event.type === 'incident') {
-        return '#ef4444'; // Always Red for incident
+        return '#fee2e2'; // Changed from #ef4444 (red-100)
       }
-      return '#f59e0b'; // Amber/Orange-Yellow for holidays
+      return '#fef3c7'; // Changed from #f59e0b (amber-100 for holidays)
     }, []);
 
     const formatEventBorderColor = useCallback((event: CalendarEvent) => {
       if (event.type === 'oncall') {
-        return '#7dd3fc';
+        return '#e0f2fe'; // Changed from #f0f9ff (sky-100 to match new background)
       }
       if (event.type === 'incident') {
-        return '#ef4444'; // Match background for incident
+        return '#fca5a5'; // Changed from #ef4444 (red-300)
       }
-      return '#f59e0b'; // Match background for holidays
+      return '#fde68a'; // Changed from #f59e0b (amber-300 for holidays)
     }, []);
 
     const formatEventTextColor = useCallback((event: CalendarEvent) => {
       if (event.type === 'oncall') {
-        return '#0369a1'; // sky-700
+        return '#075985'; // sky-800 (consistent)
       }
-      return '#ffffff'; // White text for incident and holiday
+      // For incident and holiday, we now want specific darker text, not just white
+      if (event.type === 'incident') {
+        return '#991b1b'; // red-800
+      }
+      if (event.type === 'holiday') {
+        return '#92400e'; // amber-800
+      }
+      return '#ffffff'; // Should ideally not be reached if all types handled
     }, []);
+
+    const eventContent = useCallback((eventInfo: any) => {
+      const { event, view } = eventInfo;
+      const formatTime = (dateStr: string | null) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit', hour12: false });
+      };
+
+      if (view.type === 'dayGridMonth') {
+        const eventType = event.extendedProps.type as CalendarEvent['type'];
+
+        // Use event.extendedProps for color functions as they only need the type
+        const backgroundColor = formatEventColor(event.extendedProps as CalendarEvent);
+        const textColor = formatEventTextColor(event.extendedProps as CalendarEvent);
+        const borderColor = formatEventBorderColor(event.extendedProps as CalendarEvent);
+
+        const commonStyles = `
+          padding: 2px 4px;
+          border-radius: 4px; /* Changed from 3px */
+          font-size: 0.75em;
+          margin: 1px 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: block;
+        `;
+
+        return {
+          html: `
+            <div
+              style="background-color: ${backgroundColor}; color: ${textColor}; border: 1px solid ${borderColor}; ${commonStyles}"
+              class="${eventType}-event-month"
+              title="${event.title}"
+            >
+              <span style="font-weight: 500;">${eventType === 'holiday' ? '' : formatTime(event.startStr)}</span>
+              ${event.title}
+            </div>
+          `
+        };
+      }
+      // For other views, FullCalendar will use its default rendering or the props passed in the events array
+      return null; 
+    }, [formatEventColor, formatEventTextColor, formatEventBorderColor]);
 
     return (
       <>
@@ -365,7 +416,8 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
               end: event.end,
               backgroundColor: formatEventColor(event),
               borderColor: formatEventBorderColor(event),
-              textColor: formatEventTextColor(event)
+              textColor: formatEventTextColor(event),
+              extendedProps: { type: event.type }
             }))}
             eventClick={onEventClick}
             select={handleDateSelect}
@@ -407,7 +459,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
                 dateIncrement: { days: 1 }
               },
               dayGridMonth: {
-                dayHeaderFormat: { weekday: 'long' },
+                dayHeaderFormat: { weekday: 'short' },
                 fixedWeekCount: false,
                 showNonCurrentDates: false,
                 dayMaxEvents: true,
@@ -418,6 +470,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             windowResizeDelay={100}
             nowIndicator={true}
             dayMaxEventRows={true}
+            eventContent={eventContent}
           />
         </CalendarContainer>
         {showEventTypeSelector && (
