@@ -68,17 +68,7 @@ button:focus-visible {
 }
 
 /* Calendar Event Styles */
-.oncall-event {
-  background-color: #4CAF50 !important;
-  border-color: #45a049 !important;
-  color: white !important;
-}
-
-.incident-event {
-  background-color: #f44336 !important;
-  border-color: #da190b !important;
-  color: white !important;
-}
+/* Legacy .oncall-event and .incident-event rules fully removed */
 
 .fc-timegrid-event {
   border-radius: 4px !important;
@@ -92,18 +82,8 @@ button:focus-visible {
   user-select: none !important;
 }
 
-.fc-timegrid-event.oncall-event {
-  background-color: #4CAF50 !important;
-  border-color: #388E3C !important;
-  z-index: 1 !important;
-}
-
-.fc-timegrid-event.incident-event {
-  background-color: #f44336 !important;
-  border-color: #d32f2f !important;
-  z-index: 2 !important;
-  opacity: 0.9 !important;
-}
+/* .fc-timegrid-event.oncall-event { ... } Fully Removed */
+/* .fc-timegrid-event.incident-event { ... } Fully Removed */
 
 .fc-timegrid-event.fc-event-dragging {
   opacity: 0.8 !important;
@@ -115,26 +95,26 @@ button:focus-visible {
   padding: 2px 4px !important;
   height: 100% !important;
   background-color: inherit !important;
-  pointer-events: none !important;
+  /* pointer-events: none !important; Fully Removed */
 }
 
 .fc-timegrid-event .fc-event-time {
   font-size: 0.85em !important;
   padding: 2px 4px !important;
-  color: white !important;
+  /* color: white !important; Fully Removed */
   background-color: inherit !important;
-  pointer-events: none !important;
+  /* pointer-events: none !important; Fully Removed */
 }
 
 .fc-timegrid-event .fc-event-title {
   font-size: 0.85em !important;
   padding: 2px 4px !important;
-  color: white !important;
+  /* color: white !important; Fully Removed */
   background-color: inherit !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  pointer-events: none !important;
+  /* pointer-events: none !important; Fully Removed */
 }
 
 .fc-event {

@@ -350,23 +350,22 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
     const eventContent = useCallback((eventInfo: any) => {
       const { event, view } = eventInfo;
 
-      // Helper to format time, needed for incidents
       const formatTime = (dateStr: string | null) => {
         if (!dateStr) return '';
         const date = new Date(dateStr);
         return date.toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit', hour12: false });
       };
 
+      const eventType = event.extendedProps.type as CalendarEvent['type'];
+      const backgroundColor = formatEventColor(event.extendedProps as CalendarEvent);
+      const textColor = formatEventTextColor(event.extendedProps as CalendarEvent);
+      const borderColor = formatEventBorderColor(event.extendedProps as CalendarEvent);
+      const displayTitle = event.title || '';
+
       if (view.type === 'dayGridMonth') {
-        const eventType = event.extendedProps.type as CalendarEvent['type'];
         const originalEventStart = new Date(event.extendedProps.originalStart);
-        const overallEventEnd = event.end; // Overall end Date of the event
-        const segmentStart = event.start; // Start Date of the current segment
-
-        const backgroundColor = formatEventColor(event.extendedProps as CalendarEvent);
-        const textColor = formatEventTextColor(event.extendedProps as CalendarEvent);
-        const borderColor = formatEventBorderColor(event.extendedProps as CalendarEvent);
-
+        const overallEventEnd = event.end;
+        const segmentStart = event.start;
         let prefixString = '';
 
         if (eventType === 'oncall' && overallEventEnd) {
@@ -378,14 +377,12 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             }
           }
         } else if (eventType === 'incident') {
-          // For incidents, show start time only on the first day
           if (segmentStart.toDateString() === originalEventStart.toDateString()) {
             prefixString = formatTime(event.startStr);
           }
         }
-        // Holidays will have an empty prefixString by default
 
-        const commonStyles = `
+        const monthViewStyles = `
           padding: 2px 4px;
           border-radius: 4px;
           font-size: 0.9em;
@@ -395,17 +392,37 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
           white-space: nowrap;
           display: block;
         `;
-
-        const displayTitle = event.title || '';
-
         return {
           html: `
             <div
-              style="background-color: ${backgroundColor}; color: ${textColor}; border: 1px solid ${borderColor}; ${commonStyles}"
+              style="background-color: ${backgroundColor}; color: ${textColor}; border: 1px solid ${borderColor}; ${monthViewStyles}"
               class="${eventType}-event-month"
               title="${displayTitle} ${prefixString ? '(' + prefixString + ')' : ''}">
               <span style="font-weight: 500;">${prefixString}</span>
               ${prefixString ? ' ' : ''}${displayTitle}
+            </div>
+          `
+        };
+      } else if (view.type === 'timeGridWeek') {
+        const weekViewStyles = `
+          padding: 2px 4px;
+          font-size: 0.85em;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          border: none;
+        `;
+        const timeString = formatTime(event.startStr);
+
+        return {
+          html: `
+            <div 
+              style="background-color: ${backgroundColor}; color: ${textColor}; ${weekViewStyles}"
+              class="${eventType}-event-week"
+              title="${timeString} ${displayTitle}">
+              <div style="font-weight: 500;">${timeString}</div>
+              <div>${displayTitle}</div>
             </div>
           `
         };
@@ -470,7 +487,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             }}
             views={{
               timeGridWeek: {
-                dayHeaderFormat: { weekday: 'long', day: 'numeric' },
+                dayHeaderFormat: { weekday: 'short', day: 'numeric' },
                 slotDuration: '01:00:00',
                 slotLabelInterval: '01:00',
                 snapDuration: '00:15:00',
