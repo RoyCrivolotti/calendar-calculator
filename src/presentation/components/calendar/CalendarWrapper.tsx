@@ -129,6 +129,15 @@ const CalendarContainer = styled.div`
   .fc-dayGridMonth-view {
     height: auto !important;
     overflow: visible !important;
+
+    .fc-day-sat, .fc-day-sun {
+      background-color: #f8fafc; /* Light gray for weekend days */
+    }
+
+    .fc-day-today {
+      background-color: #e0f2fe !important; /* Light blue for today, distinct from weekend */
+      font-weight: bold;
+    }
   }
 
   /* Week view specific styles - maintain scrolling */
@@ -305,15 +314,121 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
     }, []);
 
     const formatEventColor = useCallback((event: CalendarEvent) => {
-      const isWeekend = event.start.getDay() === 0 || event.start.getDay() === 6;
       if (event.type === 'oncall') {
-        return isWeekend ? '#f59e0b' : '#3b82f6';
+        return '#e0f2fe'; // Changed from #f0f9ff (sky-100 instead of sky-50)
       }
       if (event.type === 'incident') {
-        return isWeekend ? '#dc2626' : '#ef4444';
+        return '#fee2e2'; // Changed from #ef4444 (red-100)
       }
-      return '#6b7280'; // Gray color for holidays
+      return '#fef3c7'; // Changed from #f59e0b (amber-100 for holidays)
     }, []);
+
+    const formatEventBorderColor = useCallback((event: CalendarEvent) => {
+      if (event.type === 'oncall') {
+        return '#e0f2fe'; // Changed from #f0f9ff (sky-100 to match new background)
+      }
+      if (event.type === 'incident') {
+        return '#fca5a5'; // Changed from #ef4444 (red-300)
+      }
+      return '#fde68a'; // Changed from #f59e0b (amber-300 for holidays)
+    }, []);
+
+    const formatEventTextColor = useCallback((event: CalendarEvent) => {
+      if (event.type === 'oncall') {
+        return '#075985'; // sky-800 (consistent)
+      }
+      // For incident and holiday, we now want specific darker text, not just white
+      if (event.type === 'incident') {
+        return '#991b1b'; // red-800
+      }
+      if (event.type === 'holiday') {
+        return '#92400e'; // amber-800
+      }
+      return '#ffffff'; // Should ideally not be reached if all types handled
+    }, []);
+
+    const eventContent = useCallback((eventInfo: any) => {
+      const { event, view } = eventInfo;
+
+      const formatTime = (dateStr: string | null) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit', hour12: false });
+      };
+
+      const eventType = event.extendedProps.type as CalendarEvent['type'];
+      const backgroundColor = formatEventColor(event.extendedProps as CalendarEvent);
+      const textColor = formatEventTextColor(event.extendedProps as CalendarEvent);
+      const borderColor = formatEventBorderColor(event.extendedProps as CalendarEvent);
+      const displayTitle = event.title || '';
+
+      if (view.type === 'dayGridMonth') {
+        const originalEventStart = new Date(event.extendedProps.originalStart);
+        const overallEventEnd = event.end;
+        const segmentStart = event.start;
+        let prefixString = '';
+
+        if (eventType === 'oncall' && overallEventEnd) {
+          const durationMs = overallEventEnd.getTime() - originalEventStart.getTime();
+          if (durationMs > 0) {
+            const totalHours = Math.round(durationMs / (1000 * 60 * 60));
+            if (totalHours > 0) {
+              prefixString = `~${totalHours}hr`;
+            }
+          }
+        } else if (eventType === 'incident') {
+          if (segmentStart.toDateString() === originalEventStart.toDateString()) {
+            prefixString = formatTime(event.startStr);
+          }
+        }
+
+        const monthViewStyles = `
+          padding: 2px 4px;
+          border-radius: 4px;
+          font-size: 0.9em;
+          margin: 1px 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: block;
+        `;
+        return {
+          html: `
+            <div
+              style="background-color: ${backgroundColor}; color: ${textColor}; border: 1px solid ${borderColor}; ${monthViewStyles}"
+              class="${eventType}-event-month"
+              title="${displayTitle} ${prefixString ? '(' + prefixString + ')' : ''}">
+              <span style="font-weight: 500;">${prefixString}</span>
+              ${prefixString ? ' ' : ''}${displayTitle}
+            </div>
+          `
+        };
+      } else if (view.type === 'timeGridWeek') {
+        const weekViewStyles = `
+          padding: 2px 4px;
+          font-size: 0.85em;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          border: none;
+        `;
+        const timeString = formatTime(event.startStr);
+
+        return {
+          html: `
+            <div 
+              style="background-color: ${backgroundColor}; color: ${textColor}; ${weekViewStyles}"
+              class="${eventType}-event-week"
+              title="${timeString} ${displayTitle}">
+              <div style="font-weight: 500;">${timeString}</div>
+              <div>${displayTitle}</div>
+            </div>
+          `
+        };
+      }
+      return null; 
+    }, [formatEventColor, formatEventTextColor, formatEventBorderColor]);
 
     return (
       <>
@@ -333,14 +448,18 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             selectMirror={true}
             dayMaxEvents={true}
             weekends={true}
-            events={events.map(event => ({
-              id: event.id,
-              title: formatEventTitle(event),
-              start: event.start,
-              end: event.end,
-              backgroundColor: formatEventColor(event),
-              borderColor: formatEventColor(event),
-              textColor: '#ffffff'
+            events={events.map(calEvent => ({
+              id: calEvent.id,
+              title: formatEventTitle(calEvent),
+              start: calEvent.start,
+              end: calEvent.end,
+              backgroundColor: formatEventColor(calEvent),
+              borderColor: formatEventBorderColor(calEvent),
+              textColor: formatEventTextColor(calEvent),
+              extendedProps: {
+                type: calEvent.type,
+                originalStart: calEvent.start // Store the original start date of the event
+              }
             }))}
             eventClick={onEventClick}
             select={handleDateSelect}
@@ -368,7 +487,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             }}
             views={{
               timeGridWeek: {
-                dayHeaderFormat: { weekday: 'long', day: 'numeric' },
+                dayHeaderFormat: { weekday: 'short', day: 'numeric' },
                 slotDuration: '01:00:00',
                 slotLabelInterval: '01:00',
                 snapDuration: '00:15:00',
@@ -382,7 +501,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
                 dateIncrement: { days: 1 }
               },
               dayGridMonth: {
-                dayHeaderFormat: { weekday: 'long' },
+                dayHeaderFormat: { weekday: 'short' },
                 fixedWeekCount: false,
                 showNonCurrentDates: false,
                 dayMaxEvents: true,
@@ -393,6 +512,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             windowResizeDelay={100}
             nowIndicator={true}
             dayMaxEventRows={true}
+            eventContent={eventContent}
           />
         </CalendarContainer>
         {showEventTypeSelector && (

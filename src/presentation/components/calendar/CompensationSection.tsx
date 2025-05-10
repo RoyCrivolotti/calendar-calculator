@@ -6,15 +6,35 @@ import { CompensationBreakdown } from '../../../domain/calendar/types/Compensati
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { logger } from '../../../utils/logger';
 import { 
-  PhoneIcon, 
-  AlertIcon, 
-  ClockIcon, 
-  CalendarIcon, 
   ChevronRightIcon, 
   ListIcon, 
   XIcon, 
   DollarIcon 
 } from '../../../assets/icons';
+import { extractHoursData } from '../../../utils/compensation/compensationUtils';
+import { 
+  Button as SharedButton,
+  SidePanel,
+  SidePanelOverlay,
+  SidePanelHeader,
+  SidePanelTitle,
+  SidePanelCloseButton,
+  SidePanelBody,
+  SidePanelTabs,
+  SidePanelTab,
+  SharedEventsPanelContent,
+  type SharedPanelEvent,
+  RatesSidePanel,
+  Tooltip,
+  SharedCompensationDisplay,
+  Modal,
+  ModalHeader,
+  ModalTitle,
+  ModalBody,
+  ModalFooter
+} from '../common/ui';
+import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
+import { useSidePanel, useTooltip } from '../../hooks';
 
 const Section = styled.div`
   background: white;
@@ -148,47 +168,6 @@ const CompensationBarSegment = styled.div<{ width: string; color: string }>`
   }
 `;
 
-const CompensationBreakdownSection = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin: 1rem 0;
-`;
-
-const CompensationCategory = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border-radius: 6px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  flex: 1;
-  min-width: 180px;
-`;
-
-// Fix to remove title from props interface
-const CategoryColor = styled.div<{ color: string }>`
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  background: ${props => props.color};
-  flex-shrink: 0;
-  margin-right: 0.25rem;
-  position: relative;
-`;
-
-const CategoryAmount = styled.div`
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 1rem;
-`;
-
-const CategoryPercentage = styled.div`
-  font-size: 0.75rem;
-  color: #64748b;
-`;
-
 const ActionButtonsContainer = styled.div`
   display: flex;
   gap: 1rem;
@@ -196,353 +175,6 @@ const ActionButtonsContainer = styled.div`
   
   @media (max-width: 640px) {
     flex-direction: column;
-  }
-`;
-
-const ActionButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-  font-weight: 500;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  }
-  
-  svg {
-    color: #3b82f6;
-  }
-`;
-
-// Side panel styled components
-const SidePanel = styled.div<{ isOpen: boolean }>`
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 450px;
-  max-width: 95vw;
-  height: 100vh;
-  background: white;
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
-  transform: translateX(${props => props.isOpen ? '0' : '100%'});
-  transition: transform 0.3s ease;
-  z-index: 1010;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  
-  @media (max-width: 768px) {
-    width: 100%;
-    max-width: 100%;
-  }
-`;
-
-const SidePanelOverlay = styled.div<{ isOpen: boolean }>`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 1005;
-  opacity: ${props => props.isOpen ? 1 : 0};
-  visibility: ${props => props.isOpen ? 'visible' : 'hidden'};
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-`;
-
-const SidePanelHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
-`;
-
-const SidePanelTitle = styled.h2`
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
-`;
-
-const SidePanelCloseButton = styled.button`
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #0f172a;
-  padding: 0;
-  
-  &:hover {
-    background: #f8fafc;
-    color: #0f172a;
-  }
-  
-  svg {
-    width: 20px;
-    height: 20px;
-    stroke: currentColor;
-    stroke-width: 2px;
-  }
-`;
-
-const SidePanelBody = styled.div`
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 1.25rem;
-`;
-
-const SidePanelTabs = styled.div`
-  display: flex;
-  border-bottom: 1px solid #e2e8f0;
-  margin-bottom: 1rem;
-`;
-
-const SidePanelTab = styled.button<{ isActive: boolean }>`
-  padding: 0.75rem 1rem;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid ${props => props.isActive ? '#3b82f6' : 'transparent'};
-  color: ${props => props.isActive ? '#0f172a' : '#64748b'};
-  font-weight: ${props => props.isActive ? '600' : '500'};
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    color: ${props => props.isActive ? '#0f172a' : '#334155'};
-  }
-`;
-
-// Event list styled components for side panel
-const EventSection = styled.div`
-  margin-bottom: 1.5rem;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const EventTypeName = styled.h4`
-  color: #475569;
-  font-size: 1rem;
-  font-weight: 500;
-  margin: 0 0 0.75rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const EventCount = styled.span`
-  font-size: 0.8rem;
-  font-weight: 400;
-  color: #64748b;
-  margin-left: 0.5rem;
-`;
-
-const EventItem = styled.div`
-  padding: 0.75rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const EventTimeContainer = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-`;
-
-const EventTime = styled.div`
-  color: #334155;
-  font-size: 0.875rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const EventMetadata = styled.div`
-  display: flex;
-  align-items: center;
-  margin-top: 0.5rem;
-  justify-content: space-between;
-`;
-
-const HolidayIndicator = styled.span`
-  background: #fef3c7;
-  color: #92400e;
-  font-size: 0.75rem;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  font-weight: 500;
-`;
-
-const EventDuration = styled.span`
-  color: #64748b;
-  font-size: 0.875rem;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-`;
-
-const PaginationControls = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #f1f5f9;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-`;
-
-const PageInfo = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-`;
-
-const PageButtons = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const PageButton = styled.button<{ disabled?: boolean }>`
-  padding: 0.25rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  background: ${props => props.disabled ? '#f8fafc' : 'white'};
-  color: ${props => props.disabled ? '#cbd5e1' : '#0f172a'};
-  font-size: 0.8rem;
-  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
-  transition: all 0.2s;
-  
-  &:hover {
-    background: ${props => props.disabled ? '#f8fafc' : '#f1f5f9'};
-    border-color: ${props => props.disabled ? '#e2e8f0' : '#cbd5e1'};
-  }
-`;
-
-const PageNumber = styled.div`
-  font-size: 0.8rem;
-  color: #64748b;
-  padding: 0 0.25rem;
-`;
-
-// Global tooltip
-const GlobalTooltip = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: #ffffff;
-  border: 2px solid #3b82f6;
-  border-radius: 6px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-  font-size: 14px;
-  color: #000000;
-  z-index: 99999;
-  pointer-events: none;
-  max-width: 200px;
-  visibility: hidden; /* Start hidden */
-  opacity: 0;
-  transition: opacity 0.2s;
-  
-  &.visible {
-    visibility: visible;
-    opacity: 1;
-  }
-`;
-
-const CompensationTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-  table-layout: fixed;
-  
-  th, td {
-    padding: 0.75rem 0.5rem;
-    text-align: left;
-    border-bottom: 1px solid #e2e8f0;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    font-size: 0.875rem;
-    vertical-align: top;
-  }
-  
-  th {
-    color: #64748b;
-    font-weight: 500;
-    background: #f8fafc;
-    white-space: nowrap;
-  }
-  
-  td {
-    color: #334155;
-  }
-  
-  /* Column widths */
-  th:nth-of-type(1), td:nth-of-type(1) { width: 40%; }
-  th:nth-of-type(2), td:nth-of-type(2) { width: 20%; }
-  th:nth-of-type(3), td:nth-of-type(3) { width: 15%; }
-  th:nth-of-type(4), td:nth-of-type(4) { width: 25%; }
-  
-  tr:last-child td {
-    border-bottom: none;
-  }
-  
-  tr:hover td {
-    background: #f8fafc;
-  }
-  
-  @media (max-width: 768px) {
-    th, td {
-      padding: 0.5rem;
-      font-size: 0.75rem;
-    }
-  }
-`;
-
-const MobileRatesContainer = styled.div`
-  display: none;
-  
-  @media (max-width: 480px) {
-    display: block;
-  }
-`;
-
-// Add a wider side panel for rates
-const RatesSidePanel = styled(SidePanel)`
-  width: 520px;
-  
-  @media (max-width: 768px) {
-    width: 100%;
   }
 `;
 
@@ -585,94 +217,10 @@ const DeleteWarningText = styled.p`
   font-style: italic;
 `;
 
-// Delete Confirmation Modal
-const DeleteModal = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1100;
-`;
-
-const DeleteModalContent = styled.div`
-  background: white;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 500px;
-  padding: 1.5rem;
-  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-  position: relative;
-`;
-
-const DeleteModalTitle = styled.h3`
-  color: #ef4444;
-  margin: 0 0 1rem 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-`;
-
-const DeleteModalMessage = styled.p`
-  color: #334155;
-  margin: 0 0 1.5rem 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-`;
-
-const DeleteModalButtons = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-`;
-
-const CancelDeleteButton = styled.button`
-  background: #f1f5f9;
-  color: #0f172a;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: #e2e8f0;
-  }
-`;
-
-const ConfirmDeleteButton = styled.button`
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: #dc2626;
-  }
-`;
-
 interface CompensationSectionProps {
   events: CalendarEvent[];
   currentDate: Date;
   onDateChange: (date: Date) => void;
-}
-
-interface Event {
-  id: string;
-  type: 'oncall' | 'incident';
-  start: Date;
-  end: Date;
-  isHoliday?: boolean;
 }
 
 // Type for compensation data breakdown
@@ -681,14 +229,6 @@ interface CompensationData {
   amount: number;
   color: string;
   percentage?: number;
-}
-
-// Add an interface for the custom event
-interface OpenPanelEvent extends CustomEvent {
-  detail: {
-    type: 'events' | 'rates';
-    date: Date;
-  }
 }
 
 const CompensationSection: React.FC<CompensationSectionProps> = ({
@@ -703,27 +243,25 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   const [loading, setLoading] = useState(false);
   const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
   
-  // New side panel states
-  const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [sidePanelContent, setSidePanelContent] = useState<'events' | 'rates'>('events');
-  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
+  // Use useSidePanel hook
+  const { 
+    isOpen: isSidePanelOpen,
+    contentType: sidePanelContentType, 
+    openPanel: openSidePanelHook,
+    closePanel: closeSidePanelHook,
+    setContent: setSidePanelContentForHook
+  } = useSidePanel({ defaultContent: 'events' });
   
-  // Pagination states
-  const [oncallPage, setOncallPage] = useState(1);
-  const [incidentPage, setIncidentPage] = useState(1);
-  const [allEventsPage, setAllEventsPage] = useState(1);
+  // Retain sidePanelTab state if it's specific to this component's tab implementation within the panel
+  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'incident' | 'oncall'>('all');
   
-  // Global tooltip state
-  const [globalTooltip, setGlobalTooltip] = useState({
-    visible: false,
-    x: 0,
-    y: 0,
-    content: {
-      title: '',
-      value: '',
-      extra: ''
-    }
-  });
+  // Use useTooltip hook
+  const {
+    tooltipState,
+    showTooltip: showTooltipHook,
+    hideTooltip: hideTooltipHook,
+    updateTooltipPosition
+  } = useTooltip();
   
   // Track calculations in progress
   const pendingCalculation = useRef<boolean>(false);
@@ -746,27 +284,11 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     }
   }, []);
   
-  // Side panel handlers
-  const openSidePanel = useCallback((content: 'events' | 'rates') => {
-    setSidePanelContent(content);
-    setSidePanelOpen(true);
-    // Reset the tab to 'all' when opening
-    setSidePanelTab('all');
-    // Reset pagination
-    setOncallPage(1);
-    setIncidentPage(1);
-    setAllEventsPage(1);
-  }, []);
-
-  const closeSidePanel = useCallback(() => {
-    setSidePanelOpen(false);
-  }, []);
-  
   // Handle ESC key to close side panel
   useEffect(() => {
     const handleEscapeKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && sidePanelOpen) {
-        closeSidePanel();
+      if (e.key === 'Escape' && isSidePanelOpen) {
+        closeSidePanelHook();
       }
     };
     
@@ -774,37 +296,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     return () => {
       window.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [sidePanelOpen, closeSidePanel]);
-  
-  // Tooltip handlers
-  const showTooltip = useCallback((e: React.MouseEvent, title: string, value: string, extra: string) => {
-    setGlobalTooltip({
-      visible: true,
-      x: e.clientX + 15,
-      y: e.clientY + 15,
-      content: {
-        title,
-        value,
-        extra
-      }
-    });
-  }, []);
-  
-  const hideTooltip = useCallback(() => {
-    setGlobalTooltip(prev => ({
-      ...prev,
-      visible: false
-    }));
-  }, []);
-  
-  // Effect cleanup
-  useEffect(() => {
-    return () => {
-      if (loadingTimerRef.current) {
-        clearTimeout(loadingTimerRef.current);
-      }
-    };
-  }, []);
+  }, [isSidePanelOpen, closeSidePanelHook]);
   
   // Effect to calculate compensation data
   useEffect(() => {
@@ -969,45 +461,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     }));
   }, [breakdown]);
   
-  // Helper function to extract hours from the description
-  const extractHoursData = (description: string): { weekday: number, weekend: number, nightShift: number, weekendNight: number } => {
-    try {
-      const match = description.match(/\((.+?)\)/);
-      if (!match) return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-      
-      const parts = match[1].split(',').map(s => s.trim());
-      
-      const result = { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-      
-      parts.forEach(part => {
-        const [hoursStr, ...typeParts] = part.split(' ');
-        const type = typeParts.join(' '); // Rejoin in case there are spaces in the type
-        const hours = parseFloat(hoursStr);
-        
-        if (type.includes('weekday') && !type.includes('night')) {
-          result.weekday = hours;
-        } else if (type.includes('weekend') && !type.includes('night')) {
-          result.weekend = hours;
-        } else if (type.includes('weekday') && type.includes('night')) {
-          result.nightShift = hours;
-        } else if (type.includes('weekend') && type.includes('night')) {
-          result.weekendNight = hours;
-        }
-      });
-      
-      return result;
-    } catch (error) {
-      logger.error('Error parsing hours:', error);
-      return { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-    }
-  };
-  
-  // Function to format duration
-  const formatDuration = (start: Date, end: Date) => {
-    const hours = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60));
-    return `${hours} hour${hours !== 1 ? 's' : ''}`;
-  };
-
   // Generate month options for the selector
   const months = useMemo(() => {
     const result = [];
@@ -1048,362 +501,55 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
               key={`segment-${index}`}
               width={`${segment.percentage}%`}
               color={segment.color}
-              onMouseEnter={(e) => showTooltip(
+              onMouseEnter={(e) => showTooltipHook(
                 e, 
                 segment.type, 
                 `€${segment.amount.toFixed(2)}`, 
                 `${segment.percentage?.toFixed(1)}% of total`
               )}
-              onMouseMove={(e) => setGlobalTooltip(prev => ({ 
-                ...prev, 
-                x: e.clientX + 15, 
-                y: e.clientY + 15 
-              }))}
-              onMouseLeave={hideTooltip}
+              onMouseMove={updateTooltipPosition}
+              onMouseLeave={hideTooltipHook}
             />
           ))}
         </CompensationBar>
         
-        <div style={{ marginTop: '0.75rem', marginBottom: '0.5rem', fontWeight: 500, color: '#64748b', fontSize: '0.9rem' }}>
-          Compensation Breakdown by Category:
-        </div>
-        
-        <CompensationBreakdownSection>
-          {compensationData.map((segment, index) => (
-            <CompensationCategory key={`category-${index}`}>
-              <CategoryColor 
-                color={segment.color}
-                title={`Color indicator for ${segment.type}`}
-              />
-              <div>
-                <div>
-                  <span style={{ 
-                    verticalAlign: 'middle', 
-                    color: '#0f172a',
-                    fontWeight: 500
-                  }}>
-                    {segment.type}
-                  </span>
-                  <span style={{ 
-                    fontSize: '0.75rem', 
-                    marginLeft: '0.5rem', 
-                    padding: '0.1rem 0.3rem', 
-                    background: segment.color, 
-                    color: '#fff', 
-                    borderRadius: '3px', 
-                    display: 'inline-block',
-                    verticalAlign: 'middle',
-                    fontWeight: 'bold'
-                  }}>
-                    {segment.type.includes('Weekend') ? 'WEEKEND' : 
-                     segment.type.includes('Night') ? 'NIGHT SHIFT' : 'STANDARD'}
-                  </span>
-                </div>
-                <CategoryAmount>€{segment.amount.toFixed(2)}</CategoryAmount>
-                <CategoryPercentage>{segment.percentage?.toFixed(1)}% of total</CategoryPercentage>
-              </div>
-            </CompensationCategory>
-          ))}
-        </CompensationBreakdownSection>
+        {/* Use SharedCompensationDisplay component */}
+        <SharedCompensationDisplay 
+          title="Compensation Breakdown by Category:"
+          data={compensationData} 
+        />
         
         <ActionButtonsContainer>
-          <ActionButton onClick={() => openSidePanel('events')}>
-            <ListIcon />
-            View all events
-            <ChevronRightIcon />
-          </ActionButton>
-          <ActionButton onClick={() => openSidePanel('rates')}>
-            <DollarIcon />
-            View compensation rates
-            <ChevronRightIcon />
-          </ActionButton>
+          <SharedButton 
+            variant="secondary" 
+            onClick={() => {
+              setSidePanelContentForHook('events');
+              setSidePanelTab('all');
+              openSidePanelHook();
+            }}
+            fullWidth
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ListIcon />
+              View all events
+              <ChevronRightIcon />
+            </div>
+          </SharedButton>
+          <SharedButton 
+            variant="secondary" 
+            onClick={() => {
+              setSidePanelContentForHook('rates');
+              openSidePanelHook();
+            }}
+            fullWidth
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <DollarIcon />
+              View compensation rates
+              <ChevronRightIcon />
+            </div>
+          </SharedButton>
         </ActionButtonsContainer>
-      </div>
-    );
-  };
-
-  // Function to render events for the side panel
-  const renderEventsList = () => {
-    const oncallData = breakdown.find(item => item.type === 'oncall');
-    const incidentData = breakdown.find(item => item.type === 'incident');
-    
-    if (!oncallData && !incidentData) {
-      return (
-        <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>
-          No events found for this month
-        </div>
-      );
-    }
-    
-    const events: Event[] = [];
-    
-    // Extract events from oncallData
-    if (oncallData && oncallData.events) {
-      const oncallEvents = oncallData.events;
-      events.push(...oncallEvents.map(event => ({
-        id: event.id,
-        type: 'oncall' as const,
-        start: event.start,
-        end: event.end,
-        isHoliday: event.isHoliday
-      })));
-    }
-    
-    // Extract events from incidentData
-    if (incidentData && incidentData.events) {
-      const incidentEvents = incidentData.events;
-      events.push(...incidentEvents.map(event => ({
-        id: event.id,
-        type: 'incident' as const,
-        start: event.start,
-        end: event.end,
-        isHoliday: event.isHoliday
-      })));
-    }
-    
-    // Sort all events chronologically by start date
-    const sortedEvents = [...events].sort((a, b) => {
-      const dateA = new Date(a.start).getTime();
-      const dateB = new Date(b.start).getTime();
-      return dateA - dateB;
-    });
-    
-    // Group events by type
-    const groupedEvents = {
-      oncall: sortedEvents.filter(e => e.type === 'oncall'),
-      incident: sortedEvents.filter(e => e.type === 'incident')
-    };
-    
-    // Filter events based on the active tab
-    const filteredOncallEvents = sidePanelTab !== 'all' 
-      ? groupedEvents.oncall.filter(() => sidePanelTab === 'oncall')
-      : groupedEvents.oncall;
-    
-    const filteredIncidentEvents = sidePanelTab !== 'all'
-      ? groupedEvents.incident.filter(() => sidePanelTab === 'incident')
-      : groupedEvents.incident;
-    
-    // Calculate pagination for on-call events
-    const totalOncallPages = Math.ceil(filteredOncallEvents.length / EVENTS_PER_PAGE);
-    const oncallStartIndex = (oncallPage - 1) * EVENTS_PER_PAGE;
-    const oncallEndIndex = Math.min(oncallStartIndex + EVENTS_PER_PAGE, filteredOncallEvents.length);
-    const paginatedOncallEvents = filteredOncallEvents.slice(oncallStartIndex, oncallEndIndex);
-    
-    // Calculate pagination for incident events
-    const totalIncidentPages = Math.ceil(filteredIncidentEvents.length / EVENTS_PER_PAGE);
-    const incidentStartIndex = (incidentPage - 1) * EVENTS_PER_PAGE;
-    const incidentEndIndex = Math.min(incidentStartIndex + EVENTS_PER_PAGE, filteredIncidentEvents.length);
-    const paginatedIncidentEvents = filteredIncidentEvents.slice(incidentStartIndex, incidentEndIndex);
-    
-    // Determine which events to show based on the active tab
-    const showTab = (tab: 'all' | 'oncall' | 'incident') => sidePanelTab === tab || sidePanelTab === 'all';
-    
-    // Combined sorted list for the "All" tab
-    const allEvents = sidePanelTab === 'all' 
-      ? [...filteredOncallEvents, ...filteredIncidentEvents].sort((a, b) => {
-          const dateA = new Date(a.start).getTime();
-          const dateB = new Date(b.start).getTime();
-          return dateA - dateB;
-        })
-      : [];
-    
-    // Pagination for all events
-    const totalAllEventsPages = Math.ceil(allEvents.length / EVENTS_PER_PAGE);
-    const allEventsStartIndex = (allEventsPage - 1) * EVENTS_PER_PAGE;
-    const allEventsEndIndex = Math.min(allEventsStartIndex + EVENTS_PER_PAGE, allEvents.length);
-    const paginatedAllEvents = allEvents.slice(allEventsStartIndex, allEventsEndIndex);
-    
-    return (
-      <div>
-        {/* When 'all' tab is active, show combined sorted list */}
-        {sidePanelTab === 'all' && allEvents.length > 0 && (
-          <div>
-            {paginatedAllEvents.map(event => (
-              <EventItem key={event.id}>
-                <EventTimeContainer>
-                  <EventTime>
-                    <CalendarIcon />
-                    {format(new Date(event.start), 'MMM d, HH:mm')} - 
-                    {event.type === 'incident' 
-                      ? format(new Date(event.end), 'HH:mm')
-                      : format(new Date(event.end), 'MMM d, HH:mm')
-                    }
-                  </EventTime>
-                  {event.type === 'oncall' && (
-                    <span style={{ 
-                      fontSize: '0.75rem', 
-                      padding: '0.15rem 0.4rem', 
-                      background: '#e0f2fe', 
-                      color: '#0369a1',
-                      borderRadius: '4px',
-                      fontWeight: '500'
-                    }}>
-                      On-Call
-                    </span>
-                  )}
-                  {event.type === 'incident' && (
-                    <span style={{ 
-                      fontSize: '0.75rem', 
-                      padding: '0.15rem 0.4rem', 
-                      background: '#fee2e2', 
-                      color: '#b91c1c',
-                      borderRadius: '4px',
-                      fontWeight: '500'
-                    }}>
-                      Incident
-                    </span>
-                  )}
-                </EventTimeContainer>
-                <EventMetadata>
-                  <EventDuration>
-                    <ClockIcon />
-                    Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                  </EventDuration>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
-                </EventMetadata>
-              </EventItem>
-            ))}
-            
-            {/* Pagination controls for all events */}
-            {totalAllEventsPages > 1 && (
-              <PaginationControls>
-                <PageInfo>
-                  Showing {allEventsStartIndex + 1}-{allEventsEndIndex} of {allEvents.length}
-                </PageInfo>
-                <PageButtons>
-                  <PageButton 
-                    disabled={allEventsPage === 1}
-                    onClick={() => setAllEventsPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </PageButton>
-                  <PageNumber>{allEventsPage} / {totalAllEventsPages}</PageNumber>
-                  <PageButton 
-                    disabled={allEventsPage === totalAllEventsPages}
-                    onClick={() => setAllEventsPage(prev => Math.min(prev + 1, totalAllEventsPages))}
-                  >
-                    Next
-                  </PageButton>
-                </PageButtons>
-              </PaginationControls>
-            )}
-          </div>
-        )}
-        
-        {/* On-Call Shifts (only shown when 'all' tab is not active) */}
-        {sidePanelTab !== 'all' && showTab('oncall') && filteredOncallEvents.length > 0 && (
-          <EventSection>
-            <EventTypeName>
-              <PhoneIcon /> 
-              On-Call Shifts
-              <EventCount>{filteredOncallEvents.length} events</EventCount>
-            </EventTypeName>
-            
-            {paginatedOncallEvents.map(event => (
-              <EventItem key={event.id}>
-                <EventTimeContainer>
-                  <EventTime>
-                    <CalendarIcon />
-                    {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'MMM d, HH:mm')}
-                  </EventTime>
-                </EventTimeContainer>
-                <EventMetadata>
-                  <EventDuration>
-                    <ClockIcon />
-                    Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                  </EventDuration>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
-                </EventMetadata>
-              </EventItem>
-            ))}
-            
-            {/* Pagination controls for on-call events */}
-            {totalOncallPages > 1 && (
-              <PaginationControls>
-                <PageInfo>
-                  Showing {oncallStartIndex + 1}-{oncallEndIndex} of {filteredOncallEvents.length}
-                </PageInfo>
-                <PageButtons>
-                  <PageButton 
-                    disabled={oncallPage === 1}
-                    onClick={() => setOncallPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </PageButton>
-                  <PageNumber>{oncallPage} / {totalOncallPages}</PageNumber>
-                  <PageButton 
-                    disabled={oncallPage === totalOncallPages}
-                    onClick={() => setOncallPage(prev => Math.min(prev + 1, totalOncallPages))}
-                  >
-                    Next
-                  </PageButton>
-                </PageButtons>
-              </PaginationControls>
-            )}
-          </EventSection>
-        )}
-        
-        {/* Incidents (only shown when 'all' tab is not active) */}
-        {sidePanelTab !== 'all' && showTab('incident') && filteredIncidentEvents.length > 0 && (
-          <EventSection>
-            <EventTypeName>
-              <AlertIcon />
-              Incidents
-              <EventCount>{filteredIncidentEvents.length} events</EventCount>
-            </EventTypeName>
-            
-            {paginatedIncidentEvents.map(event => (
-              <EventItem key={event.id}>
-                <EventTimeContainer>
-                  <EventTime>
-                    <CalendarIcon />
-                    {format(new Date(event.start), 'MMM d, HH:mm')} - {format(new Date(event.end), 'HH:mm')}
-                  </EventTime>
-                </EventTimeContainer>
-                <EventMetadata>
-                  <EventDuration>
-                    <ClockIcon />
-                    Duration: {formatDuration(new Date(event.start), new Date(event.end))}
-                  </EventDuration>
-                  {event.isHoliday && <HolidayIndicator>Holiday</HolidayIndicator>}
-                </EventMetadata>
-              </EventItem>
-            ))}
-            
-            {/* Pagination controls for incident events */}
-            {totalIncidentPages > 1 && (
-              <PaginationControls>
-                <PageInfo>
-                  Showing {incidentStartIndex + 1}-{incidentEndIndex} of {filteredIncidentEvents.length}
-                </PageInfo>
-                <PageButtons>
-                  <PageButton 
-                    disabled={incidentPage === 1}
-                    onClick={() => setIncidentPage(prev => Math.max(prev - 1, 1))}
-                  >
-                    Previous
-                  </PageButton>
-                  <PageNumber>{incidentPage} / {totalIncidentPages}</PageNumber>
-                  <PageButton 
-                    disabled={incidentPage === totalIncidentPages}
-                    onClick={() => setIncidentPage(prev => Math.min(prev + 1, totalIncidentPages))}
-                  >
-                    Next
-                  </PageButton>
-                </PageButtons>
-              </PaginationControls>
-            )}
-          </EventSection>
-        )}
-        
-        {/* No events message */}
-        {((sidePanelTab === 'all' && allEvents.length === 0) ||
-          (sidePanelTab === 'oncall' && filteredOncallEvents.length === 0) ||
-          (sidePanelTab === 'incident' && filteredIncidentEvents.length === 0)) && (
-          <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>
-            No events found for this month
-          </div>
-        )}
       </div>
     );
   };
@@ -1466,231 +612,92 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     }
   };
 
-  // Add event listener for opening panels from MonthlyCompensationSummary
-  useEffect(() => {
-    const handleOpenPanel = (e: CustomEvent) => {
-      const { type, date } = (e as OpenPanelEvent).detail;
-      
-      // If we need to change the date first
-      if (date && date.getTime() !== currentDate.getTime()) {
-        onDateChange(date);
-      }
-      
-      // Open the side panel with the requested content
-      setSidePanelContent(type as 'events' | 'rates');
-      setSidePanelOpen(true);
-      
-      // If events panel, reset to 'all' tab
-      if (type === 'events') {
-        setSidePanelTab('all');
-      }
-    };
-    
-    window.addEventListener('openCompensationPanel', handleOpenPanel as EventListener);
-    
-    return () => {
-      window.removeEventListener('openCompensationPanel', handleOpenPanel as EventListener);
-    };
-  }, [currentDate, onDateChange]);
-
   return (
     <>
-      {/* Global tooltip */}
-      <GlobalTooltip 
-        className={globalTooltip.visible ? 'visible' : ''}
-        style={{ 
-          top: `${globalTooltip.y}px`, 
-          left: `${globalTooltip.x}px` 
-        }}
-      >
-        <div style={{ fontWeight: 'bold' }}>{globalTooltip.content.title}</div>
-        <div>{globalTooltip.content.value}</div>
-        <div>{globalTooltip.content.extra}</div>
-      </GlobalTooltip>
+      {/* Use shared Tooltip component */}
+      <Tooltip
+        visible={tooltipState.visible}
+        x={tooltipState.x}
+        y={tooltipState.y}
+        title={tooltipState.content.title}
+        value={tooltipState.content.value}
+        extra={tooltipState.content.extra}
+      />
       
-      {/* Delete confirmation modal */}
+      {/* Delete confirmation modal using shared Modal component */}
       {showDeleteModal && (
-        <DeleteModal onClick={handleCloseDeleteModal}>
-          <DeleteModalContent onClick={e => e.stopPropagation()}>
-            <DeleteModalTitle>Remove All Events for {format(currentDate, 'MMMM yyyy')}?</DeleteModalTitle>
-            <DeleteModalMessage>
-              This will permanently remove all events that overlap with {format(currentDate, 'MMMM yyyy')}. 
+        <Modal isOpen={showDeleteModal} onClose={handleCloseDeleteModal}>
+          <ModalHeader>
+            <ModalTitle>Remove All Events for {format(currentDate, 'MMMM yyyy' )}?</ModalTitle>
+            {/* Optional: Add a CloseButton here if needed, though Modal's onClose handles Esc/backdrop */}
+          </ModalHeader>
+          <ModalBody>
+            <p>
+              This will permanently remove all events that overlap with {format(currentDate, 'MMMM yyyy' )}. 
               This includes events that start in previous months or end in future months.
               This action cannot be undone.
-            </DeleteModalMessage>
-            <DeleteModalButtons>
-              <CancelDeleteButton onClick={handleCloseDeleteModal}>
-                Cancel
-              </CancelDeleteButton>
-              <ConfirmDeleteButton onClick={handleDeleteAllEvents}>
-                Remove Events
-              </ConfirmDeleteButton>
-            </DeleteModalButtons>
-          </DeleteModalContent>
-        </DeleteModal>
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <SharedButton variant="secondary" onClick={handleCloseDeleteModal}>
+              Cancel
+            </SharedButton>
+            <SharedButton variant="danger" onClick={handleDeleteAllEvents}>
+              Remove Events
+            </SharedButton>
+          </ModalFooter>
+        </Modal>
       )}
       
-      {/* Side panel for events and rates */}
-      <SidePanelOverlay isOpen={sidePanelOpen} onClick={closeSidePanel} />
-      
-      {sidePanelContent === 'rates' ? (
-        <RatesSidePanel isOpen={sidePanelOpen}>
+      {/* Side panel for events and rates - Restructured for persistent panel instances */}
+      <>
+        <SidePanelOverlay isOpen={isSidePanelOpen} onClick={closeSidePanelHook} />
+
+        {/* Events Panel */}
+        <SidePanel isOpen={isSidePanelOpen && sidePanelContentType === 'events'}>
           <SidePanelHeader>
-            <SidePanelTitle>
-              Compensation Rates
-            </SidePanelTitle>
-            <SidePanelCloseButton onClick={closeSidePanel}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </SidePanelCloseButton>
+            <SidePanelTitle>Events</SidePanelTitle>
+            <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
           </SidePanelHeader>
-          
-          <SidePanelBody>
-            <div>
-              <div className="desktop-table" style={{ display: 'block' }}>
-                <CompensationTable>
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Rate</th>
-                      <th>Multiplier</th>
-                      <th>Effective</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Weekday On-Call (non-office hours)</td>
-                      <td>€3.90/hour</td>
-                      <td>-</td>
-                      <td>€3.90/hour</td>
-                    </tr>
-                    <tr>
-                      <td>Weekend On-Call</td>
-                      <td>€7.34/hour</td>
-                      <td>-</td>
-                      <td>€7.34/hour</td>
-                    </tr>
-                    <tr>
-                      <td>Weekday Incident</td>
-                      <td>€33.50/hour</td>
-                      <td>1.8×</td>
-                      <td>€60.30/hour</td>
-                    </tr>
-                    <tr>
-                      <td>Weekend Incident</td>
-                      <td>€33.50/hour</td>
-                      <td>2.0×</td>
-                      <td>€67.00/hour</td>
-                    </tr>
-                    <tr>
-                      <td>Night Shift (additional)</td>
-                      <td>-</td>
-                      <td>1.4×</td>
-                      <td>+40% bonus</td>
-                    </tr>
-                  </tbody>
-                </CompensationTable>
-              </div>
-              
-              {/* Mobile-friendly version that only shows on smaller screens */}
-              <MobileRatesContainer>
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekday On-Call (non-office hours)</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Rate: €3.90/hour</span>
-                    <span>Effective: €3.90/hour</span>
-                  </div>
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekend On-Call</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Rate: €7.34/hour</span>
-                    <span>Effective: €7.34/hour</span>
-                  </div>
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekday Incident</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Base: €33.50/hour</span>
-                    <span>Mult: 1.8×</span>
-                  </div>
-                  <div>Effective: €60.30/hour</div>
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Weekend Incident</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Base: €33.50/hour</span>
-                    <span>Mult: 2.0×</span>
-                  </div>
-                  <div>Effective: €67.00/hour</div>
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Night Shift (additional)</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Multiplier: 1.4×</span>
-                    <span>Effect: +40%</span>
-                  </div>
-                </div>
-              </MobileRatesContainer>
-            </div>
-          </SidePanelBody>
-        </RatesSidePanel>
-      ) : (
-        <SidePanel isOpen={sidePanelOpen}>
-          <SidePanelHeader>
-            <SidePanelTitle>
-              Events for {format(currentDate, 'MMMM yyyy')}
-            </SidePanelTitle>
-            <SidePanelCloseButton onClick={closeSidePanel}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </SidePanelCloseButton>
-          </SidePanelHeader>
-          
           <SidePanelBody>
             <SidePanelTabs>
-              <SidePanelTab 
-                isActive={sidePanelTab === 'all'} 
-                onClick={() => setSidePanelTab('all')}
-              >
-                All Events
-              </SidePanelTab>
-              <SidePanelTab 
-                isActive={sidePanelTab === 'oncall'} 
-                onClick={() => setSidePanelTab('oncall')}
-              >
-                On-Call
-              </SidePanelTab>
-              <SidePanelTab 
-                isActive={sidePanelTab === 'incident'} 
-                onClick={() => setSidePanelTab('incident')}
-              >
-                Incidents
-              </SidePanelTab>
+              <SidePanelTab isActive={sidePanelTab === 'all'} onClick={() => setSidePanelTab('all')}>All Events</SidePanelTab>
+              <SidePanelTab isActive={sidePanelTab === 'oncall'} onClick={() => setSidePanelTab('oncall')}>On-Call</SidePanelTab>
+              <SidePanelTab isActive={sidePanelTab === 'incident'} onClick={() => setSidePanelTab('incident')}>Incidents</SidePanelTab>
             </SidePanelTabs>
-            
-            {renderEventsList()}
-            
-            {/* Add Delete Events button to the bottom of the panel */}
+            {(() => {
+              const oncallDataForPanel = breakdown.find(item => item.type === 'oncall');
+              const incidentDataForPanel = breakdown.find(item => item.type === 'incident');
+
+              const oncallEventsForPanel: SharedPanelEvent[] = (oncallDataForPanel?.events || []).map(e => ({ ...e, type: 'oncall' as const, start: new Date(e.start), end: new Date(e.end) }));
+              const incidentEventsForPanel: SharedPanelEvent[] = (incidentDataForPanel?.events || []).map(e => ({ ...e, type: 'incident' as const, start: new Date(e.start), end: new Date(e.end) }));
+              
+              return (
+                <SharedEventsPanelContent 
+                  oncallEvents={oncallEventsForPanel}
+                  incidentEvents={incidentEventsForPanel}
+                  activeTab={sidePanelTab}
+                />
+              );
+            })()}
             <DeleteEventsContainer>
-              <DeleteEventsButton onClick={handleOpenDeleteModal}>
-                Remove All Events for {format(currentDate, 'MMMM yyyy')}
-              </DeleteEventsButton>
-              <DeleteWarningText>
-                Warning: This will permanently delete all events for this month.
-              </DeleteWarningText>
+              <DeleteEventsButton onClick={handleOpenDeleteModal}>Remove All Events for {format(currentDate, 'MMMM yyyy')}</DeleteEventsButton>
+              <DeleteWarningText>Warning: This will permanently delete all events for this month.</DeleteWarningText>
             </DeleteEventsContainer>
           </SidePanelBody>
         </SidePanel>
-      )}
+
+        {/* Rates Panel */}
+        <RatesSidePanel isOpen={isSidePanelOpen && sidePanelContentType === 'rates'}>
+          <SidePanelHeader>
+            <SidePanelTitle>Compensation Rates</SidePanelTitle>
+            <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
+          </SidePanelHeader>
+          <SidePanelBody>
+            <SharedRatesPanelContent displayMode="full" />
+          </SidePanelBody>
+        </RatesSidePanel>
+      </>
       
       <Section>
         <Title>Compensation Breakdown for {format(currentDate, 'MMMM yyyy')}</Title>

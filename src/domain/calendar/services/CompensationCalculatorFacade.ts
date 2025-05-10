@@ -4,7 +4,7 @@ import { SubEvent } from '../entities/SubEvent';
 import { CompensationService } from './CompensationService';
 import { storageService } from '../../../presentation/services/storage';
 import { logger } from '../../../utils/logger';
-import { getMonthKey, createMonthDate, isSameMonth } from '../../../utils/calendarUtils';
+import { getMonthKey } from '../../../utils/calendarUtils';
 import { EventCompensationService } from './EventCompensationService';
 import { CompensationSummary } from '../types/CompensationSummary';
 import { HolidayChecker } from './HolidayChecker';
