@@ -119,7 +119,6 @@ button:focus-visible {
 
 .fc-event {
   cursor: pointer !important;
-  transition: transform 0.2s ease !important;
 }
 
 .fc-event:hover {
