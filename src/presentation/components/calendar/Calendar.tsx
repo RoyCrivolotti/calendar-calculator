@@ -290,53 +290,104 @@ const Calendar: React.FC = () => {
   }, [events, dispatch]);
 
   const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
-    logger.info(`User selected date range: ${selectInfo.start.toISOString()} to ${selectInfo.end.toISOString()} for ${type} event`);
-    const start = new Date(selectInfo.start);
-    let end = new Date(selectInfo.end);
-    end.setDate(end.getDate() - 1); // Subtract one day since end is exclusive
-    
-    if (type === 'holiday') {
-      // For holidays, set to full day (00:00 to 23:59)
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-    } else if (type === 'oncall') {
-      // For on-call, set to full 24 hours (00:00 to 00:00 next day)
-      start.setHours(0, 0, 0, 0);
+    // Check if there's an existing event at the exact start of this selection
+    if (calendarRef.current) {
+      const calendarApi = calendarRef.current.getApi();
+      const fcevents = calendarApi.getEvents();
+      const selectionStartMs = selectInfo.start.getTime();
       
-      // If it's a single day event, set end to 00:00 the next day
-      if (start.toDateString() === end.toDateString()) {
-        end.setDate(end.getDate() + 1);
-        end.setHours(0, 0, 0, 0);
-      } else {
-        // For multi-day on-call, end at 00:00 of the day after the last selected day
-        end.setDate(end.getDate() + 1);
-        end.setHours(0, 0, 0, 0);
+      const clickedFcEvent = fcevents.find(fce => {
+        if (!fce.start || !fce.end) return false;
+        const eventStartMs = fce.start.getTime();
+        const eventEndMs = fce.end.getTime();
+        return selectionStartMs >= eventStartMs && selectionStartMs < eventEndMs;
+      });
+
+      if (clickedFcEvent) {
+        const reduxEvent = events.find(e => e.id === clickedFcEvent.id);
+        if (reduxEvent) {
+          dispatch(setSelectedEvent(reduxEvent));
+          dispatch(setShowEventModal(true));
+          calendarApi.unselect(); 
+          return; 
+        }
+      }
+    }
+
+    let effectiveStart = new Date(selectInfo.start);
+    let effectiveEnd = new Date(selectInfo.end); // This is exclusive from FullCalendar
+
+    if (type === 'holiday') {
+      effectiveStart.setHours(0, 0, 0, 0);
+      // selectInfo.end is exclusive (e.g., start of the day AFTER the selection ends).
+      // To make it inclusive (end of the last selected day), we subtract 1 millisecond.
+      effectiveEnd = new Date(effectiveEnd.getTime() - 1);
+      effectiveEnd.setHours(23, 59, 59, 999); // Ensure it's the very end of that day
+    } else if (type === 'oncall') {
+      const calendarApi = calendarRef.current?.getApi();
+      const viewType = calendarApi?.view.type;
+
+      if (viewType === 'dayGridMonth' || selectInfo.allDay) { 
+        effectiveStart.setHours(0, 0, 0, 0);
+        // effectiveEnd from selectInfo.end is already exclusive (start of next day),
+        // which is correct for an on-call shift that runs 00:00 to 00:00.
+        // No change to effectiveEnd needed here if it's already what we want for 00:00 next day.
+      } else { // Week view (timed selection) - default to full day(s)
+        effectiveStart.setHours(0, 0, 0, 0);
+        
+        // If it's a single day selection in week view, make it end 00:00 next day
+        // FullCalendar's selectInfo.end for a timed selection will be the *exact* end time.
+        // If start and end are on different days, FC's selectInfo.end might already be 00:00 of next day if dragged to midnight.
+        // Let's make it simpler: if it's a oncall selection, set it to full days selected.
+        let inclusiveEndDay = new Date(selectInfo.end);
+        // If end is 00:00:00, it means it's the start of that day.
+        // If it's something like 03:00, we want the end of *that* day for our inclusive calculation.
+        if (inclusiveEndDay.getHours() === 0 && inclusiveEndDay.getMinutes() === 0 && inclusiveEndDay.getSeconds() === 0 && inclusiveEndDay.getMilliseconds() === 0) {
+            // If it's exactly midnight, it means it's the *start* of the exclusive end day.
+            // So, to get the end of the *previous* (selected) day, subtract 1ms.
+            inclusiveEndDay = new Date(inclusiveEndDay.getTime() - 1);
+        }
+        // Now inclusiveEndDay is definitely within the last selected day.
+        effectiveEnd = new Date(inclusiveEndDay);
+        effectiveEnd.setDate(inclusiveEndDay.getDate() + 1); // Go to start of next day
+        effectiveEnd.setHours(0, 0, 0, 0); // Set to 00:00
       }
     } else if (type === 'incident') {
-      // Use default times for incidents, but ensure they span at least 1 hour
-      start.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
-      
-      // If it's a single day incident, set end to 1 hour after start
-      if (start.toDateString() === end.toDateString()) {
-        const endTime = new Date(start);
-        endTime.setHours(endTime.getHours() + 1);
-        end = endTime;
-      } else {
-        end.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
+      const calendarApi = calendarRef.current?.getApi();
+      const viewType = calendarApi?.view.type;
+
+      if (viewType === 'dayGridMonth' || selectInfo.allDay) {
+        effectiveStart.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
+        
+        let inclusiveEndDay = new Date(selectInfo.end);
+        inclusiveEndDay = new Date(inclusiveEndDay.getTime() - 1); // Get actual last day of selection
+
+        effectiveEnd = new Date(inclusiveEndDay);
+        effectiveEnd.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
+
+        if (selectInfo.start.toDateString() === inclusiveEndDay.toDateString()) { // Single day selection
+          effectiveEnd = new Date(effectiveStart);
+          effectiveEnd.setHours(effectiveStart.getHours() + 1); // Default 1 hour duration
+        }
+      } else { // Week view - use precise times from selection
+        if (selectInfo.start.getTime() === selectInfo.end.getTime()) { // Click, not drag
+          effectiveEnd.setHours(effectiveStart.getHours() + 1); // Default 1 hour
+        }
+        // For drag in week view, effectiveStart/End are already the precise times.
       }
     }
 
     const newEvent = createCalendarEvent({
-      id: `temp-${crypto.randomUUID()}`, // Use temp- prefix for new events
-      start,
-      end,
+      id: `temp-${crypto.randomUUID()}`, 
+      start: effectiveStart, // Pass Date object
+      end: effectiveEnd,   // Pass Date object
       type,
       title: type === 'oncall' ? 'On-Call Shift' : type === 'incident' ? 'Incident' : 'Holiday'
     });
 
     dispatch(setSelectedEvent(newEvent.toJSON()));
     dispatch(setShowEventModal(true));
-  }, [dispatch]);
+  }, [dispatch, events, logger, calendarRef]);
 
   const handleViewChange = useCallback((info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
     logger.info(`Calendar view changed to: ${info.start.toISOString()} - ${info.end.toISOString()}`);
@@ -456,16 +507,16 @@ const Calendar: React.FC = () => {
     
     // New event with a temporary ID, create a new one
     if (isNewEvent) {
-      // Generate a permanent ID
       const permanentId = crypto.randomUUID();
       logger.debug(`Converting temp ID ${event.id} to permanent ID ${permanentId}`);
       
+      const eventToCreateJson = event.toJSON();
+
       const eventWithoutTempId = createCalendarEvent({
-        ...event.toJSON(),
+        ...eventToCreateJson,
         id: permanentId
       });
       
-      // Ensure event has a title
       if (!eventWithoutTempId.title) {
         const defaultTitle = eventWithoutTempId.type === 'oncall' ? 'On-Call Shift' : 
                             eventWithoutTempId.type === 'incident' ? 'Incident' : 'Holiday';
@@ -475,8 +526,6 @@ const Calendar: React.FC = () => {
       
       savePromise = dispatch(createEventAsync(eventWithoutTempId.toJSON())).unwrap();
     } else {
-      // Existing event, just update it
-      // Ensure event has a title
       if (!event.title) {
         const defaultTitle = event.type === 'oncall' ? 'On-Call Shift' : 
                            event.type === 'incident' ? 'Incident' : 'Holiday';
@@ -484,7 +533,8 @@ const Calendar: React.FC = () => {
         event.title = defaultTitle;
       }
       
-      savePromise = dispatch(updateEventAsync(event.toJSON())).unwrap();
+      const eventToUpdateJson = event.toJSON();
+      savePromise = dispatch(updateEventAsync(eventToUpdateJson)).unwrap();
     }
     
     // Clear modals immediately for better UX
@@ -522,6 +572,19 @@ const Calendar: React.FC = () => {
     const isNewEvent = event.id.startsWith('temp-');
     logger.info(`Checking conflicts for ${isNewEvent ? 'new' : 'existing'} ${event.type} event: ${event.id}`);
   
+    // Ensure holidays are always full-day when saved from the modal
+    if (event.type === 'holiday') {
+      logger.info(`[Calendar] handleSaveEvent - Adjusting holiday ${event.id} to full day.`);
+      const startDate = new Date(event.start);
+      startDate.setHours(0, 0, 0, 0);
+      event.start = startDate;
+
+      const endDate = new Date(event.end);
+      endDate.setHours(23, 59, 59, 999);
+      event.end = endDate;
+      logger.info(`  Adjusted holiday times: Start: ${event.start.toISOString()}, End: ${event.end.toISOString()}`);
+    }
+
     // Find all conflicting events
     const allConflictingEvents = findConflictingEvents(event, events);
     logger.info(`Found ${allConflictingEvents.length} total conflicting events`);
