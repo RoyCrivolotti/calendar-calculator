@@ -185,6 +185,96 @@ const Calendar: React.FC = () => {
     }, 300);
   }, [calculatorFacade, updateCompensationData]);
 
+  // Add this new simple handler for onEventUpdate
+  const handleEventUpdate = useCallback((eventDataFromWrapper: { id: string; start: Date; end: Date | null; viewType: string }) => {
+    logger.info(
+      `%c[Calendar] handleEventUpdate for [${eventDataFromWrapper.viewType}] view, event ID: ${eventDataFromWrapper.id}`,
+      'color: green; font-weight: bold;',
+      {
+        rawStartDate: eventDataFromWrapper.start,
+        rawEndDate: eventDataFromWrapper.end,
+        startISO: eventDataFromWrapper.start?.toISOString(),
+        endISO: eventDataFromWrapper.end?.toISOString(),
+      }
+    );
+
+    const eventToUpdate = events.find(e => e.id === eventDataFromWrapper.id);
+    if (!eventToUpdate) {
+      logger.warn(`[Calendar] Event with ID ${eventDataFromWrapper.id} not found for update.`);
+      return;
+    }
+
+    let newStart = eventDataFromWrapper.start ? new Date(eventDataFromWrapper.start) : null;
+    let newEnd = eventDataFromWrapper.end ? new Date(eventDataFromWrapper.end) : null;
+
+    if (!newStart) {
+      logger.error('[Calendar] newStart is null. Aborting update.', eventDataFromWrapper);
+      return;
+    }
+
+    if (!newEnd) {
+      const originalStart = new Date(eventToUpdate.start);
+      const originalEnd = new Date(eventToUpdate.end);
+      const duration = originalEnd.getTime() - originalStart.getTime();
+      newEnd = new Date(newStart.getTime() + duration);
+      logger.warn('[Calendar] newEnd was null. Calculated based on original duration:', newEnd.toISOString());
+    }
+    
+    logger.info(`[Calendar] Original event type: ${eventToUpdate.type}. Before logic - Parsed newStart: ${newStart.toISOString()}, Parsed newEnd: ${newEnd.toISOString()}`);
+
+    // --- Apply Business Logic based on viewType and eventType ---
+    if (eventDataFromWrapper.viewType === 'dayGridMonth') {
+      logger.info('[Calendar] Applying DAY_GRID_MONTH logic');
+      if (eventToUpdate.type === 'holiday') {
+        // Holidays in month view: FullCalendar gives 00:00 on start day to 00:00 on day *after* end day.
+        // We want start of first day to end of last day.
+        newStart.setHours(0, 0, 0, 0);
+        newEnd = new Date(newEnd.setDate(newEnd.getDate() -1)); // Make end inclusive of the last day cell dropped on
+        newEnd.setHours(23, 59, 59, 999);
+        logger.info(`  Holiday in Month: Set to full days. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
+      } else if (eventToUpdate.type === 'oncall') {
+        // On-Call in Month View: Start at 9 AM on the new start day, maintain original duration.
+        const originalEventStart = new Date(eventToUpdate.start);
+        const originalEventEnd = new Date(eventToUpdate.end);
+        const durationMs = originalEventEnd.getTime() - originalEventStart.getTime();
+        
+        newStart.setHours(9, 0, 0, 0); // Set to 9 AM on the (FullCalendar-provided) start day
+        newEnd = new Date(newStart.getTime() + durationMs);
+        logger.info(`  On-Call in Month: Set to 9AM start, maintained duration. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
+      } else if (eventToUpdate.type === 'incident') {
+        // Incident in Month View: Maintain original time of day and duration, shift to new start date.
+        const originalEventStart = new Date(eventToUpdate.start);
+        const originalEventEnd = new Date(eventToUpdate.end);
+        const durationMs = originalEventEnd.getTime() - originalEventStart.getTime();
+        const originalStartHour = originalEventStart.getHours();
+        const originalStartMinutes = originalEventStart.getMinutes();
+
+        newStart.setHours(originalStartHour, originalStartMinutes, 0, 0); // Apply original time to new date
+        newEnd = new Date(newStart.getTime() + durationMs);
+        logger.info(`  Incident in Month: Maintained time/duration. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
+      }
+    } else if (eventDataFromWrapper.viewType === 'timeGridWeek') {
+      logger.info('[Calendar] Applying TIME_GRID_WEEK logic - using precise times from FC.');
+      // For on-call and incidents, we use the precise times from FC (already in newStart, newEnd)
+      // No changes needed here as this was the part that worked perfectly.
+    } else {
+      logger.warn(`[Calendar] Unknown viewType: ${eventDataFromWrapper.viewType} - using direct times.`);
+    }
+
+    const updatedEventProps: CalendarEventProps = {
+      ...eventToUpdate,
+      start: newStart.toISOString(),
+      end: newEnd.toISOString(),
+    };
+
+    logger.info(
+      `[Calendar] Dispatching updateEventAsync for event ID: ${updatedEventProps.id}`,
+      updatedEventProps
+    );
+    dispatch(updateEventAsync(updatedEventProps));
+
+  }, [dispatch, events, logger]);
+
   // Update compensation data when events or current date changes
   useEffect(() => {
     debouncedUpdateCompensationData();
@@ -846,6 +936,7 @@ const Calendar: React.FC = () => {
         onDateSelect={(selectInfo, type) => handleDateSelect(selectInfo, type)}
         onViewChange={handleViewChange}
         currentDate={new Date(currentDate)}
+        onEventUpdate={handleEventUpdate}
       />
       <CompensationSection
         events={events.map(event => new CalendarEvent(event))}
@@ -873,6 +964,7 @@ const Calendar: React.FC = () => {
       {showConflictModal && pendingEventSave && (
         <Suspense fallback={<ModalLoadingFallback>Loading...</ModalLoadingFallback>}>
           <HolidayConflictModal
+            isOpen={showConflictModal}
             isHoliday={isHolidayConflict}
             conflicts={conflictingEvents}
             onAdjust={handleConflictModalAdjust}
@@ -885,6 +977,7 @@ const Calendar: React.FC = () => {
       {showDeleteModal && pendingEventDelete && (
         <Suspense fallback={<ModalLoadingFallback>Loading...</ModalLoadingFallback>}>
           <HolidayDeleteModal
+            isOpen={showDeleteModal}
             holidayDate={pendingEventDelete.start}
             affectedEvents={conflictingEvents}
             onDelete={handleDeleteWithRegeneration}

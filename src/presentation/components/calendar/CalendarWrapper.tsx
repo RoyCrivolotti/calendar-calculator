@@ -196,10 +196,11 @@ interface CalendarWrapperProps {
   onDateSelect: (selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => void;
   onViewChange: (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => void;
   currentDate: Date;
+  onEventUpdate: (updatedEventData: { id: string; start: Date; end: Date | null; viewType: string; /* FC view type, e.g., 'timeGridWeek', 'dayGridMonth' */ }) => void;
 }
 
 const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
-  ({ events, onEventClick, onDateSelect, onViewChange, currentDate }, ref) => {
+  ({ events, onEventClick, onDateSelect, onViewChange, currentDate, onEventUpdate }, ref) => {
     const [showEventTypeSelector, setShowEventTypeSelector] = useState(false);
     const [pendingEventInfo, setPendingEventInfo] = useState<DateSelectArg | null>(null);
     const calendarContainerRef = useRef<HTMLDivElement>(null);
@@ -430,6 +431,66 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
       return null; 
     }, [formatEventColor, formatEventTextColor, formatEventBorderColor]);
 
+    const handleEventDrop = useCallback((dropInfo: any) => {
+      const calendarApi = ref && (ref as React.RefObject<FullCalendar>).current?.getApi();
+      const currentViewType = calendarApi?.view.type || 'unknown';
+      console.log(
+        '%c[CalendarWrapper] handleEventDrop triggered',
+        'color: blue; font-weight: bold;',
+        {
+          eventId: dropInfo.event.id,
+          eventType: dropInfo.event.extendedProps.type,
+          viewType: currentViewType,
+          rawStartDate: dropInfo.event.start,
+          rawEndDate: dropInfo.event.end,
+          startISO: dropInfo.event.start?.toISOString(),
+          endISO: dropInfo.event.end?.toISOString(),
+          allDay: dropInfo.event.allDay,
+          dropInfoObject: dropInfo
+        }
+      );
+      if (dropInfo.event.start) {
+        onEventUpdate({
+          id: dropInfo.event.id,
+          start: dropInfo.event.start,
+          end: dropInfo.event.end,
+          viewType: currentViewType,
+        });
+      } else {
+        console.error('[CalendarWrapper] Event drop data missing start time', dropInfo);
+      }
+    }, [onEventUpdate, ref]);
+
+    const handleEventResize = useCallback((resizeInfo: any) => {
+      const calendarApi = ref && (ref as React.RefObject<FullCalendar>).current?.getApi();
+      const currentViewType = calendarApi?.view.type || 'unknown';
+      console.log(
+        '%c[CalendarWrapper] handleEventResize triggered',
+        'color: blue; font-weight: bold;',
+        {
+          eventId: resizeInfo.event.id,
+          eventType: resizeInfo.event.extendedProps.type,
+          viewType: currentViewType,
+          rawStartDate: resizeInfo.event.start,
+          rawEndDate: resizeInfo.event.end,
+          startISO: resizeInfo.event.start?.toISOString(),
+          endISO: resizeInfo.event.end?.toISOString(),
+          allDay: resizeInfo.event.allDay,
+          resizeInfoObject: resizeInfo
+        }
+      );
+      if (resizeInfo.event.start && resizeInfo.event.end) {
+        onEventUpdate({
+          id: resizeInfo.event.id,
+          start: resizeInfo.event.start,
+          end: resizeInfo.event.end,
+          viewType: currentViewType,
+        });
+      } else {
+        console.error('[CalendarWrapper] Event resize data missing start or end time', resizeInfo);
+      }
+    }, [onEventUpdate, ref]);
+
     return (
       <>
         <CalendarContainer ref={calendarContainerRef}>
@@ -513,6 +574,8 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
             nowIndicator={true}
             dayMaxEventRows={true}
             eventContent={eventContent}
+            eventDrop={handleEventDrop}
+            eventResize={handleEventResize}
           />
         </CalendarContainer>
         {showEventTypeSelector && (
@@ -575,7 +638,8 @@ const arePropsEqual = (prevProps: CalendarWrapperProps, nextProps: CalendarWrapp
   // Only re-render if the function references have changed
   return prevProps.onEventClick === nextProps.onEventClick &&
     prevProps.onDateSelect === nextProps.onDateSelect &&
-    prevProps.onViewChange === nextProps.onViewChange;
+    prevProps.onViewChange === nextProps.onViewChange &&
+    prevProps.onEventUpdate === nextProps.onEventUpdate;
 };
 
 // Export with React.memo for performance optimization
