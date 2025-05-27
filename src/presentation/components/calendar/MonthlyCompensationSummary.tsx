@@ -322,7 +322,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const totalHoursForAllBars = allHoursValues.reduce((sum, h) => sum + h, 0);
 
     if (totalHoursForAllBars === 0) return null;
-
+    
     if (oncallHours.weekday > 0) {
       chartItems.push({
         key: "weekday-oncall",
@@ -483,8 +483,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const compensationPieData = getCompensationData();
     
     if (compensationPieData.length === 0) return null;
-    
-    return (
+      
+      return (
       <PieChart
         data={compensationPieData}
         isVisible={isVisible}
@@ -654,7 +654,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           <SidePanelTitle>
             {sidePanelContent === 'events' 
               ? `Events for ${selectedMonth ? formatMonthYear(selectedMonth) : ''}` 
-              : 'Compensation Rates'} 
+              : 'Compensation Rates'}
           </SidePanelTitle>
           <SidePanelCloseButton onClick={closeSidePanel}>
             <XIcon />
@@ -710,7 +710,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
       {selectedMonth && (
         <Modal isOpen={!!selectedMonth} onClose={handleCloseModal}>
-          <ModalHeader>
+            <ModalHeader>
             <ModalTitle>{formatMonthYear(selectedMonth)}</ModalTitle>
             <div style={{ 
               fontSize: '1.5rem', 
@@ -723,8 +723,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             }}>
               €{monthTotal.toFixed(2)}
             </div>
-          </ModalHeader>
-          
+            </ModalHeader>
+            
           <ModalBody>
             <div style={{ margin: '2rem 0 1.5rem 0', textAlign: 'center' }}>
               <h3 style={{ fontSize: '1.1rem', color: '#475569', marginBottom: '1rem', fontWeight: 600 }}>
@@ -852,10 +852,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           </ModalBody>
           <ModalFooter>
             <Button variant="secondary" onClick={handleCloseDeleteMonthModal}>
-              Cancel
+                Cancel
             </Button>
             <Button variant="danger" onClick={handleDeleteMonth}>
-              Remove Events
+                Remove Events
             </Button>
           </ModalFooter>
         </Modal>

@@ -290,30 +290,6 @@ const Calendar: React.FC = () => {
   }, [events, dispatch]);
 
   const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
-    // Check if there's an existing event at the exact start of this selection
-    if (calendarRef.current) {
-      const calendarApi = calendarRef.current.getApi();
-      const fcevents = calendarApi.getEvents();
-      const selectionStartMs = selectInfo.start.getTime();
-      
-      const clickedFcEvent = fcevents.find(fce => {
-        if (!fce.start || !fce.end) return false;
-        const eventStartMs = fce.start.getTime();
-        const eventEndMs = fce.end.getTime();
-        return selectionStartMs >= eventStartMs && selectionStartMs < eventEndMs;
-      });
-
-      if (clickedFcEvent) {
-        const reduxEvent = events.find(e => e.id === clickedFcEvent.id);
-        if (reduxEvent) {
-          dispatch(setSelectedEvent(reduxEvent));
-          dispatch(setShowEventModal(true));
-          calendarApi.unselect(); 
-          return; 
-        }
-      }
-    }
-
     let effectiveStart = new Date(selectInfo.start);
     let effectiveEnd = new Date(selectInfo.end); // This is exclusive from FullCalendar
 
@@ -387,6 +363,12 @@ const Calendar: React.FC = () => {
 
     dispatch(setSelectedEvent(newEvent.toJSON()));
     dispatch(setShowEventModal(true));
+
+    // Unselect the dates on the calendar UI
+    if (calendarRef.current) {
+      const calendarApi = calendarRef.current.getApi();
+      calendarApi.unselect();
+    }
   }, [dispatch, events, logger, calendarRef]);
 
   const handleViewChange = useCallback((info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
