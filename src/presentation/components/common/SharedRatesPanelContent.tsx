@@ -15,7 +15,7 @@ const SharedRatesPanelContent: React.FC<SharedRatesPanelContentProps> = ({ displ
       <thead>
         <tr>
           <th>Type</th>
-          <th>Rate</th>
+          <th>Rate (hourly)</th>
           <th>Multiplier</th>
           <th>Effective</th>
         </tr>
@@ -23,27 +23,27 @@ const SharedRatesPanelContent: React.FC<SharedRatesPanelContentProps> = ({ displ
       <tbody>
         <tr>
           <td>Weekday On-Call (non-office hours)</td>
-          <td>€3.90/hr</td>
+          <td>€3.90</td>
           <td>-</td>
-          <td>€3.90/hr</td>
+          <td>€3.90</td>
         </tr>
         <tr>
           <td>Weekend On-Call</td>
-          <td>€7.34/hr</td>
+          <td>€7.34</td>
           <td>-</td>
-          <td>€7.34/hr</td>
+          <td>€7.34</td>
         </tr>
         <tr>
           <td>Weekday Incident</td>
-          <td>€33.50/hr</td>
+          <td>€33.50</td>
           <td>1.8×</td>
-          <td>€60.30/hr</td>
+          <td>€60.30</td>
         </tr>
         <tr>
           <td>Weekend Incident</td>
-          <td>€33.50/hr</td>
+          <td>€33.50</td>
           <td>2.0×</td>
-          <td>€67.00/hr</td>
+          <td>€67.00</td>
         </tr>
         <tr>
           <td>Night Shift (additional)</td>
