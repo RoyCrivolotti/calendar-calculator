@@ -720,7 +720,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               fontWeight: 600,
               color: '#0f172a',
               background: '#f0f9ff',
-              padding: '0.5rem 1rem',
+              padding: '0.5rem 0.5rem',
+              marginLeft: '12px',
               borderRadius: '8px',
               border: '1px solid #bae6fd'
             }}>
