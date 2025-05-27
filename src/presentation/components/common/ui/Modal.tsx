@@ -64,10 +64,11 @@ const StyledCloseButton = styled.button`
 const StyledModalHeader = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 2px solid #f1f5f9;
+  position: relative;
 `;
 
 // Modal Title
@@ -76,6 +77,7 @@ const StyledModalTitle = styled.h2`
   font-size: 1.5rem;
   font-weight: 600;
   margin: 0;
+  text-align: center;
 `;
 
 // Modal Body

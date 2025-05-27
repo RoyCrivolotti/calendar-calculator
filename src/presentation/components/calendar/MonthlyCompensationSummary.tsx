@@ -98,6 +98,9 @@ const ClearDataSection = styled.div`
 `;
 
 const DeleteMonthSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin: 2rem 0;
   padding: 1.5rem;
   border-top: 1px solid #e2e8f0;
@@ -812,7 +815,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <p style={{ color: '#64748b', margin: '0 0 1rem 0', fontSize: '0.875rem' }}>
                 Remove all events for this month, including events that overlap with other months.
               </p>
-              <Button variant="danger" onClick={handleOpenDeleteMonthModal}>
+              <Button style={{ width: 'fit-content' }} variant="danger" onClick={handleOpenDeleteMonthModal}>
                 Remove All Events for {formatMonthYear(selectedMonth)}
               </Button>
             </DeleteMonthSection>
