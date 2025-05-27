@@ -1,19 +1,13 @@
 import React from 'react';
 import styled from '@emotion/styled';
-import { CompensationSummary, CompensationDetail, HoursSummary, MonthlyCompensation } from '../../../domain/calendar/types/CompensationSummary';
+import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
 
 const SummaryContainer = styled.div`
-  margin-top: 1.5rem;
-  border-top: 1px solid #e2e8f0;
-  padding-top: 1rem;
+  /* margin-top: 1.5rem; */
+  /* border-top: 1px solid #e2e8f0; */
+  /* padding-top: 1rem; */
 `;
 
-const SummaryTitle = styled.h4`
-  margin: 0 0 0.75rem 0;
-  color: #0f172a;
-  font-size: 1rem;
-  font-weight: 600;
-`;
 
 const SummarySection = styled.div`
   margin-bottom: 1.25rem;
@@ -86,12 +80,6 @@ const DetailTitle = styled.div`
   border-bottom: 1px solid #f1f5f9;
 `;
 
-const MonthlySection = styled.div`
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #e2e8f0;
-`;
-
 const MonthTitle = styled.div`
   font-weight: 600;
   color: #0f172a;
@@ -108,14 +96,31 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
   
   const { hours, details, total, monthlyBreakdown } = summary;
   
-  // Determine if this is an incident event based on the first detail
   const isIncident = details.length > 0 && details[0].description.toLowerCase().includes('incident');
+
+  let compensatedWeekdayOnCallHours = 0;
+  let calculatedNonBillableWeekdayHours = 0;
+
+  if (!isIncident) {
+    const weekdayOnCallDetails = details.filter(
+      d => d.description.toLowerCase() === 'weekday on-call'
+    );
+    compensatedWeekdayOnCallHours = weekdayOnCallDetails.reduce((sum, d) => sum + d.hours, 0);
+
+    // Ensure hours.weekday is a valid number before subtraction
+    const totalWeekdayHours = typeof hours.weekday === 'number' ? hours.weekday : 0;
+    calculatedNonBillableWeekdayHours = totalWeekdayHours - compensatedWeekdayOnCallHours;
+  } else {
+    // For incidents, we don't explicitly show "Office Hours (Non-billable)" in the top summary,
+    // and "Weekday Hours" shows total weekday hours. 
+    // So, we can stick to the original hours.officeHours if needed elsewhere, or set to 0 if not applicable here.
+    // For now, this specific calculation is only for the non-incident path.
+  }
   
   return (
     <SummaryContainer>
-      <SummaryTitle>Compensation Details</SummaryTitle>
+      {/* <SummaryTitle>Compensation Details</SummaryTitle> */}
       
-      {/* Hours summary */}
       <SummarySection>
         <DetailTitle>Hours Breakdown</DetailTitle>
         <SummaryRow>
@@ -123,84 +128,86 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
           <Value>{hours.total.toFixed(1)}h</Value>
         </SummaryRow>
         
-        {/* For on-call events: billable weekday hours */}
-        {!isIncident && hours.weekday > 0 && (
+        {/* For ON-CALL events (i.e., !isIncident) */}
+        {!isIncident && compensatedWeekdayOnCallHours > 0 && (
           <SummaryRow>
             <Label>Billable Weekday Hours</Label>
-            <Value>{hours.weekday.toFixed(1)}h</Value>
+            <Value>{compensatedWeekdayOnCallHours.toFixed(1)}h</Value>
           </SummaryRow>
         )}
         
-        {/* For incident events: weekday hours with NS badge if applicable */}
-        {isIncident && hours.weekday > 0 && (
+        {/* For INCIDENT events */}
+        {isIncident && typeof hours.weekday === 'number' && hours.weekday > 0 && (
           <SummaryRow>
             <Label>Weekday Hours</Label>
             <Value>
               {hours.weekday.toFixed(1)}h
-              {hours.nightShift > 0 && hours.weekday === hours.nightShift && (
+              {typeof hours.nightShift === 'number' && hours.nightShift > 0 && hours.weekday === hours.nightShift && (
                 <NightShiftBadge>NS</NightShiftBadge>
               )}
             </Value>
           </SummaryRow>
         )}
         
-        {/* Weekend hours for all events */}
-        {hours.weekend > 0 && (
+        {/* Weekend hours for ALL event types */}
+        {typeof hours.weekend === 'number' && hours.weekend > 0 && (
           <SummaryRow>
             <Label>Weekend/Holiday Hours</Label>
             <Value>
               {hours.weekend.toFixed(1)}h
-              {isIncident && hours.nightShift > 0 && hours.nightShift > hours.weekday && (
+              {isIncident && typeof hours.nightShift === 'number' && hours.nightShift > 0 && hours.nightShift > (typeof hours.weekday === 'number' ? hours.weekday : 0) && (
                 <NightShiftBadge>NS</NightShiftBadge>
               )}
             </Value>
           </SummaryRow>
         )}
         
-        {/* Office hours for on-call events only */}
-        {!isIncident && hours.officeHours > 0 && (
+        {/* Office hours for ON-CALL events only, derived from the remainder */}
+        {!isIncident && calculatedNonBillableWeekdayHours > 0 && (
           <SummaryRow>
             <Label>Office Hours (Non-billable)</Label>
-            <Value>{hours.officeHours.toFixed(1)}h</Value>
+            <Value>{calculatedNonBillableWeekdayHours.toFixed(1)}h</Value>
           </SummaryRow>
         )}
       </SummarySection>
       
       {/* Compensation breakdown */}
-      <SummarySection>
-        <DetailTitle>Compensation Breakdown</DetailTitle>
-        {details.map((detail, index) => (
-          <DetailSection key={index}>
-            <DetailTitle>{detail.description}</DetailTitle>
-            <SummaryRow>
-              <Label>Hours</Label>
-              <Value>{detail.hours.toFixed(1)}h</Value>
-            </SummaryRow>
-            <SummaryRow>
-              <Label>Base Rate</Label>
-              <Value>€{detail.rate.toFixed(2)}/h</Value>
-            </SummaryRow>
-            {detail.multiplier && (
+      {details && details.length > 0 && (
+        <SummarySection>
+          <DetailTitle>Compensation Breakdown</DetailTitle>
+          {details.map((detail, index) => (
+            <DetailSection key={index}>
+              <DetailTitle>{detail.description}</DetailTitle>
               <SummaryRow>
-                <Label>Multiplier</Label>
-                <Value>×{detail.multiplier.toFixed(1)}</Value>
+                <Label>Hours</Label>
+                <Value>{detail.hours.toFixed(1)}h</Value>
               </SummaryRow>
-            )}
-            {detail.nightShiftMultiplier && (
               <SummaryRow>
-                <Label>Night Shift Bonus</Label>
-                <Value>×{detail.nightShiftMultiplier.toFixed(1)}</Value>
+                <Label>Base Rate</Label>
+                <Value>€{detail.rate.toFixed(2)}/h</Value>
               </SummaryRow>
-            )}
-            <TotalRow>
-              <span>Subtotal</span>
-              <span>€{detail.amount.toFixed(2)}</span>
-            </TotalRow>
-          </DetailSection>
-        ))}
-      </SummarySection>
+              {detail.multiplier && (
+                <SummaryRow>
+                  <Label>Multiplier</Label>
+                  <Value>×{detail.multiplier.toFixed(1)}</Value>
+                </SummaryRow>
+              )}
+              {detail.nightShiftMultiplier && (
+                <SummaryRow>
+                  <Label>Night Shift Bonus</Label>
+                  <Value>×{detail.nightShiftMultiplier.toFixed(1)}</Value>
+                </SummaryRow>
+              )}
+              <TotalRow>
+                <span>Subtotal</span>
+                <span>€{detail.amount.toFixed(2)}</span>
+              </TotalRow>
+            </DetailSection>
+          ))}
+        </SummarySection>
+      )}
       
-      {/* Monthly breakdown for cross-month events */}
+      {/* Monthly breakdown */}
       {monthlyBreakdown && monthlyBreakdown.length > 1 && (
         <SummarySection>
           <DetailTitle>Monthly Breakdown</DetailTitle>
@@ -222,7 +229,6 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
         </SummarySection>
       )}
       
-      {/* Total compensation */}
       <TotalRow>
         <span>Total Compensation</span>
         <span>€{total.toFixed(2)}</span>
