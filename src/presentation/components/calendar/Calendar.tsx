@@ -292,7 +292,7 @@ const Calendar: React.FC = () => {
   const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
     let effectiveStart = new Date(selectInfo.start);
     let effectiveEnd = new Date(selectInfo.end); // This is exclusive from FullCalendar
-
+    
     if (type === 'holiday') {
       effectiveStart.setHours(0, 0, 0, 0);
       // selectInfo.end is exclusive (e.g., start of the day AFTER the selection ends).
@@ -310,7 +310,7 @@ const Calendar: React.FC = () => {
         // No change to effectiveEnd needed here if it's already what we want for 00:00 next day.
       } else { // Week view (timed selection) - default to full day(s)
         effectiveStart.setHours(0, 0, 0, 0);
-        
+      
         // If it's a single day selection in week view, make it end 00:00 next day
         // FullCalendar's selectInfo.end for a timed selection will be the *exact* end time.
         // If start and end are on different days, FC's selectInfo.end might already be 00:00 of next day if dragged to midnight.
@@ -334,7 +334,7 @@ const Calendar: React.FC = () => {
 
       if (viewType === 'dayGridMonth' || selectInfo.allDay) {
         effectiveStart.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
-        
+      
         let inclusiveEndDay = new Date(selectInfo.end);
         inclusiveEndDay = new Date(inclusiveEndDay.getTime() - 1); // Get actual last day of selection
 
@@ -493,7 +493,7 @@ const Calendar: React.FC = () => {
       logger.debug(`Converting temp ID ${event.id} to permanent ID ${permanentId}`);
       
       const eventToCreateJson = event.toJSON();
-
+      
       const eventWithoutTempId = createCalendarEvent({
         ...eventToCreateJson,
         id: permanentId
@@ -566,7 +566,7 @@ const Calendar: React.FC = () => {
       event.end = endDate;
       logger.info(`  Adjusted holiday times: Start: ${event.start.toISOString()}, End: ${event.end.toISOString()}`);
     }
-
+  
     // Find all conflicting events
     const allConflictingEvents = findConflictingEvents(event, events);
     logger.info(`Found ${allConflictingEvents.length} total conflicting events`);

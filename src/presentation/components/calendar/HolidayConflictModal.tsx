@@ -57,68 +57,68 @@ const HolidayConflictModal: React.FC<HolidayConflictModalProps> = ({
       </ModalHeader>
       
       <ModalBody>
-        {isHoliday ? (
-          <>
-            <p>
-              This holiday overlaps with {conflicts.length} existing {uniqueTypes.join(', ')} {conflicts.length === 1 ? 'event' : 'events'}.
-            </p>
-            <ConflictList>
-              {Object.entries(conflictsByType).map(([type, events]) => (
-                <ConflictItem key={type}>
-                  {events.length} {type}{events.length > 1 ? 's' : ''} 
-                  {events.length <= 3 && (
-                    <ul>
-                      {events.map(event => (
-                        <li key={event.id}>
-                          {new Date(event.start).toLocaleDateString()} {new Date(event.start).toLocaleTimeString()} - {new Date(event.end).toLocaleTimeString()}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </ConflictItem>
-              ))}
-            </ConflictList>
-            <p>
-              These events' sub-events will be automatically updated to account for the holiday.
-              This ensures accurate compensation calculations that reflect the holiday status.
-            </p>
-          </>
-        ) : (
-          <>
-            <p>
-              This event overlaps with holidays on the following dates:
-            </p>
-            <ConflictList>
-              {conflicts.map(holiday => (
-                <ConflictItem key={holiday.id}>
-                  {new Date(holiday.start).toLocaleDateString()}
-                </ConflictItem>
-              ))}
-            </ConflictList>
-            <p>
-              Sub-events will be automatically adjusted to account for these holidays.
-              This ensures compensation calculations reflect the holiday status.
-            </p>
-          </>
-        )}
+          {isHoliday ? (
+            <>
+              <p>
+                This holiday overlaps with {conflicts.length} existing {uniqueTypes.join(', ')} {conflicts.length === 1 ? 'event' : 'events'}.
+              </p>
+              <ConflictList>
+                {Object.entries(conflictsByType).map(([type, events]) => (
+                  <ConflictItem key={type}>
+                    {events.length} {type}{events.length > 1 ? 's' : ''} 
+                    {events.length <= 3 && (
+                      <ul>
+                        {events.map(event => (
+                          <li key={event.id}>
+                            {new Date(event.start).toLocaleDateString()} {new Date(event.start).toLocaleTimeString()} - {new Date(event.end).toLocaleTimeString()}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </ConflictItem>
+                ))}
+              </ConflictList>
+              <p>
+                These events' sub-events will be automatically updated to account for the holiday.
+                This ensures accurate compensation calculations that reflect the holiday status.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                This event overlaps with holidays on the following dates:
+              </p>
+              <ConflictList>
+                {conflicts.map(holiday => (
+                  <ConflictItem key={holiday.id}>
+                    {new Date(holiday.start).toLocaleDateString()}
+                  </ConflictItem>
+                ))}
+              </ConflictList>
+              <p>
+                Sub-events will be automatically adjusted to account for these holidays.
+                This ensures compensation calculations reflect the holiday status.
+              </p>
+            </>
+          )}
       </ModalBody>
       
       <ModalFooter>
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
           <Button variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
+              Cancel
+            </Button>
           
-          {isHoliday ? (
+            {isHoliday ? (
             <Button variant="primary" onClick={onAdjust}>
-              Save Holiday & Adjust Events
-            </Button>
-          ) : (
+                Save Holiday & Adjust Events
+              </Button>
+            ) : (
             <Button variant="primary" onClick={onContinue}>
-              Continue
-            </Button>
-          )}
-        </div>
+                Continue
+              </Button>
+            )}
+          </div>
       </ModalFooter>
     </Modal>
   );
