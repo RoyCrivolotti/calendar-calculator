@@ -90,35 +90,28 @@ const Calendar: React.FC = () => {
     setCompensationDataRef.current = setCompensationData;
   }, [setCompensationData]);
 
-  useEffect(() => {
-    const loadEventsFromFirestore = async () => {
-      if (!currentUser || !currentUser.uid) {
-        logger.info('[Calendar] No authenticated user or UID. Skipping Firestore event load.');
-        dispatch(setEvents([]));
-        return;
-      }
-
-      logger.info(`[Calendar] Authenticated user ${currentUser.uid}. Loading events from Firestore...`);
-      try {
-        const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
-        const firestoreEvents = await eventRepo.getAll();
-        dispatch(setEvents(firestoreEvents.map(event => event.toJSON())));
-        logger.info(`[Calendar] Loaded ${firestoreEvents.length} events from Firestore.`);
-
-        // Example: If sub-events were also loaded globally for the calendar (adjust as per your app logic)
-        // const subEventRepo = container.get<SubEventRepository>('subEventRepository');
-        // const firestoreSubEvents = await subEventRepo.getAll(); // Or based on current user
-        // dispatch(setSubEvents(firestoreSubEvents.map(subEvent => subEvent.toJSON()))); // Assuming a setSubEvents action
-        // logger.info(`[Calendar] Loaded ${firestoreSubEvents.length} sub-events from Firestore.`);
-
-      } catch (error) {
-        logger.error('[Calendar] Error loading events from Firestore:', error);
-        dispatch(setEvents([]));
-      }
-    };
-
-    loadEventsFromFirestore();
+  // ADD: Extracted function for loading events
+  const refreshCalendarEvents = useCallback(async () => {
+    if (!currentUser || !currentUser.uid) {
+      logger.info('[Calendar] No authenticated user or UID. Skipping Firestore event load.');
+      dispatch(setEvents([]));
+      return;
+    }
+    logger.info(`[Calendar] User ${currentUser.uid}. Refreshing events from Firestore...`);
+    try {
+      const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
+      const firestoreEvents = await eventRepo.getAll();
+      dispatch(setEvents(firestoreEvents.map(event => event.toJSON())));
+      logger.info(`[Calendar] Loaded ${firestoreEvents.length} events from Firestore after refresh.`);
+    } catch (error) {
+      logger.error('[Calendar] Error refreshing events from Firestore:', error);
+      dispatch(setEvents([])); // Clear events on error
+    }
   }, [dispatch, currentUser]);
+
+  useEffect(() => {
+    refreshCalendarEvents(); // Call the extracted function on initial load/user change
+  }, [refreshCalendarEvents]); // Dependency on the memoized refresh function
   
   const updateCompensationData = useCallback(async () => {
     logger.info('Events available for compensation calculation:', currentEventsFromStore.length);
@@ -199,22 +192,22 @@ const Calendar: React.FC = () => {
     }
   }, [currentEventsFromStore, calculatorFacade, getMonthKey, logger]);
   
-  // Debounced version of updateCompensationData to prevent flickering
   const debouncedUpdateCompensationData = useCallback(() => {
-    // Clear any existing timeout
     if (updateCompensationTimeoutRef.current) {
       clearTimeout(updateCompensationTimeoutRef.current);
     }
-    
-    // Always clear the facade caches before scheduling an update
-    // This ensures we always get fresh data for all components
     calculatorFacade.clearCaches();
-    
-    // Set a new timeout (300ms is usually a good debounce delay)
     updateCompensationTimeoutRef.current = setTimeout(() => {
       updateCompensationData();
     }, 300);
   }, [calculatorFacade, updateCompensationData]);
+
+  // ADD: Handler for onDataChange from MonthlyCompensationSummary
+  const handleDataRefresh = useCallback(async () => {
+    logger.info('[Calendar] Data changed in summary, triggering full refresh.');
+    await refreshCalendarEvents();
+    debouncedUpdateCompensationData();
+  }, [refreshCalendarEvents, debouncedUpdateCompensationData]);
 
   // Add this new simple handler for onEventUpdate
   const handleEventUpdate = useCallback((eventDataFromWrapper: { id: string; start: Date; end: Date | null; viewType: string }) => {
@@ -1009,15 +1002,16 @@ const Calendar: React.FC = () => {
         onEventUpdate={handleEventUpdate}
       />
       <CompensationSection
-        events={currentEventsFromStore.map(event => new CalendarEvent(event))}
+        events={currentEventsFromStore.map(e => new CalendarEvent(e))}
         currentDate={new Date(currentDate)}
-        onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
+        onDateChange={(date) => dispatch(setCurrentDate(date.toISOString()))}
       />
-      {/* Add key using length to force re-render when data changes */}
-      <MonthlyCompensationSummary 
-        key={`summary-${compensationData.length}`} 
-        data={compensationData} 
-      />
+      {compensationData.length > 0 && (
+        <MonthlyCompensationSummary 
+          data={compensationData} 
+          onDataChange={handleDataRefresh}
+        />
+      )}
       
       {/* Lazy-loaded modals with Suspense */}
       {showEventModal && selectedEvent && (

@@ -6,9 +6,8 @@ import { trackOperation } from '../../../utils/errorHandler';
 import { container } from '../../../config/container';
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
-// ADD: Import for Redux state to get current user (optional, as repos handle it, but good for consistency)
-import { useAppSelector } from '../../store/hooks'; // Assuming standard hook setup
-import { RootState } from '../../store'; // Assuming RootState is exported from store
+import { useAppSelector } from '../../store/hooks';
+import { RootState } from '../../store';
 import { 
   ChevronRightIcon, 
   DollarIcon,
@@ -16,7 +15,6 @@ import {
 } from '../../../assets/icons';
 import { extractHoursData } from '../../../utils/compensation/compensationUtils';
 import { formatMonthYear } from '../../../utils/formatting/formatters';
-// Import UI components
 import { 
   Button, 
   Modal, 
@@ -48,7 +46,6 @@ import {
   SharedWarningText
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
-// Import custom hooks
 import { useTooltip, useSidePanel } from '../../hooks';
 
 const ChartContainer = styled.div`
@@ -120,10 +117,10 @@ interface MonthData {
 
 interface MonthlyCompensationSummaryProps {
   data: CompensationBreakdown[];
-  onDataChange?: () => void; // ADD: Callback for data refresh
+  onDataChange?: () => void;
 }
 
-const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data, onDataChange }) => { // ADD: onDataChange to destructuring
+const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data, onDataChange }) => {
   useEffect(() => {
     logger.debug(`MonthlyCompensationSummary received data with ${data.length} items`);
     if (data.length > 0) {
@@ -131,14 +128,17 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     }
   }, [data]);
 
-  // ADD: Get repositories and current user
   const calendarEventRepository = useMemo(() => container.get<CalendarEventRepository>('calendarEventRepository'), []);
   const subEventRepository = useMemo(() => container.get<SubEventRepository>('subEventRepository'), []);
-  const currentUser = useAppSelector((state: RootState) => state.auth.currentUser); // Get currentUser from Redux
+  const currentUser = useAppSelector((state: RootState) => state.auth.currentUser);
 
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showDeleteMonthModal, setShowDeleteMonthModal] = useState(false);
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const [notificationModalTitle, setNotificationModalTitle] = useState('');
+  const [notificationModalMessage, setNotificationModalMessage] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
   const [isVisible, setIsVisible] = useState(false);
   
@@ -259,14 +259,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const handleConfirmClear = useCallback(async () => {
     if (!currentUser?.uid) {
       logger.error('[MonthlySummary] Cannot clear data: User not authenticated.');
-      alert('Error: You must be logged in to clear data.');
+      setNotificationModalTitle('Authentication Error');
+      setNotificationModalMessage('You must be logged in to clear data.');
+      setNotificationModalVisible(true);
       setShowConfirmModal(false);
       return;
     }
 
     logger.info(`[MonthlySummary] User ${currentUser.uid} initiated clearing of ALL calendar data.`);
-    // ADD: Loading state if this operation is long
-    // setLoading(true); 
+    setIsDeleting(true);
 
     try {
       await trackOperation(
@@ -291,6 +292,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           if (onDataChange) {
             onDataChange(); // Notify parent to refresh data
           }
+          setNotificationModalTitle('Success');
+          setNotificationModalMessage('All your calendar data has been successfully cleared.');
+          setNotificationModalVisible(true);
           return { success: true, itemsCleared: allEvents.length };
         },
         {
@@ -298,12 +302,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           userId: currentUser.uid
         }
       );
-      alert('All your calendar data has been successfully cleared.');
     } catch (error) {
       logger.error('[MonthlySummary] Error clearing all user data:', error);
-      alert('An error occurred while clearing your data. Please try again.');
+      setNotificationModalTitle('Error');
+      setNotificationModalMessage('An error occurred while clearing your data. Please try again.');
+      setNotificationModalVisible(true);
     } finally {
-      // setLoading(false);
+      setIsDeleting(false);
       setShowConfirmModal(false);
       setSelectedMonth(null); // Reset selected month as data context has changed
     }
@@ -545,35 +550,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     openPanel(); 
   };
 
-  const handlePreviousMonth = useCallback(() => {
-    if (!selectedMonth) return;
-    
-    const currentIndex = monthsWithData.findIndex(
-      m => m.date.getTime() === selectedMonth.getTime()
-    );
-    
-    if (currentIndex > 0) {
-      setSelectedMonth(monthsWithData[currentIndex - 1].date);
-    }
-  }, [selectedMonth, monthsWithData]);
-
-  const handleNextMonth = useCallback(() => {
-    if (!selectedMonth) return;
-    
-    const currentIndex = monthsWithData.findIndex(
-      m => m.date.getTime() === selectedMonth.getTime()
-    );
-    
-    if (currentIndex < monthsWithData.length - 1) {
-      setSelectedMonth(monthsWithData[currentIndex + 1].date);
-    }
-  }, [selectedMonth, monthsWithData]);
-
-  const selectedMonthIndex = useMemo(() => {
-    if (!selectedMonth) return -1;
-    return monthsWithData.findIndex(m => m.date.getTime() === selectedMonth.getTime());
-  }, [selectedMonth, monthsWithData]);
-
   const handleDeleteMonthData = useCallback(async () => {
     if (!selectedMonth) {
       logger.warn('No month selected for deletion attempt.');
@@ -590,15 +566,16 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     }
     if (!currentUser?.uid) {
       logger.error('[MonthlySummary] Cannot delete month data: User not authenticated.');
-      alert('Error: You must be logged in to delete data.');
+      setNotificationModalTitle('Authentication Error');
+      setNotificationModalMessage('You must be logged in to delete data.');
+      setNotificationModalVisible(true);
       setShowDeleteMonthModal(false);
       return;
     }
 
     const monthToClear = new Date(selectedMonth);
     logger.info(`[MonthlySummary] User ${currentUser.uid} initiated deletion of data for month: ${formatMonthYear(monthToClear)}.`);
-    // ADD: Loading state if this operation is long
-    // setLoading(true);
+    setIsDeleting(true);
 
     try {
       await trackOperation(
@@ -631,8 +608,11 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
           logger.info(`[MonthlySummary] Successfully cleared ${eventsToDelete.length} events for month ${formatMonthYear(monthToClear)} for user ${currentUser.uid}.`);
           if (onDataChange) {
-            onDataChange(); // Notify parent to refresh data
+            onDataChange();
           }
+          setNotificationModalTitle('Success');
+          setNotificationModalMessage(`Successfully deleted all events for ${formatMonthYear(monthToClear)}.`);
+          setNotificationModalVisible(true);
           return { success: true, itemsCleared: eventsToDelete.length };
         },
         {
@@ -641,14 +621,15 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
           month: formatMonthYear(monthToClear)
         }
       );
-      alert(`Successfully deleted all events for ${formatMonthYear(monthToClear)}.`);
     } catch (error) {
       logger.error(`[MonthlySummary] Error deleting data for month ${formatMonthYear(monthToClear)}:`, error);
-      alert(`An error occurred while deleting data for ${formatMonthYear(monthToClear)}. Please try again.`);
+      setNotificationModalTitle('Error');
+      setNotificationModalMessage(`An error occurred while deleting data for ${formatMonthYear(monthToClear)}. Please try again.`);
+      setNotificationModalVisible(true);
     } finally {
-      // setLoading(false);
+      setIsDeleting(false);
       setShowDeleteMonthModal(false);
-      setSelectedMonth(null); // Reset selected month as data context has changed
+      setSelectedMonth(null);
     }
   }, [selectedMonth, currentUser, calendarEventRepository, subEventRepository, onDataChange, trackOperation]);
 
@@ -872,6 +853,20 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         </Modal>
       )}
 
+      {notificationModalVisible && (
+        <Modal isOpen={notificationModalVisible} onClose={() => setNotificationModalVisible(false)}>
+          <ModalHeader>
+            <ModalTitle>{notificationModalTitle}</ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <p>{notificationModalMessage}</p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="primary" onClick={() => setNotificationModalVisible(false)}>OK</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
       {showConfirmModal && (
         <Modal isOpen={showConfirmModal} onClose={handleCancelClear}>
           <ModalHeader>
@@ -884,8 +879,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             </p>
           </ModalBody>
           <ModalFooter>
-            <Button variant="secondary" onClick={handleCancelClear}>Cancel</Button>
-            <Button variant="danger" onClick={handleConfirmClear}>Delete All Data</Button>
+            <Button variant="secondary" onClick={handleCancelClear} disabled={isDeleting}>Cancel</Button>
+            <Button variant="danger" onClick={handleConfirmClear} disabled={isDeleting}>Delete All Data</Button>
           </ModalFooter>
         </Modal>
       )}
@@ -903,18 +898,14 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             </p>
           </ModalBody>
           <ModalFooter>
-            <Button variant="secondary" onClick={handleCancelDeleteMonth}>
-                Cancel
-            </Button>
-            <Button variant="danger" onClick={handleConfirmDeleteMonth}>
-                Remove Events
-            </Button>
+            <Button variant="secondary" onClick={handleCancelDeleteMonth} disabled={isDeleting}>Cancel</Button>
+            <Button variant="danger" onClick={handleConfirmDeleteMonth} disabled={isDeleting}>Remove Events</Button>
           </ModalFooter>
         </Modal>
       )}
 
       <ClearDataSection>
-        <Button variant="danger" onClick={handleClearAllData}>
+        <Button variant="danger" onClick={handleClearAllData} disabled={isDeleting}>
           Clear All Calendar Data
         </Button>
         <SharedWarningText>Warning: This will permanently delete all events and compensation data.</SharedWarningText>
