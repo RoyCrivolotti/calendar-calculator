@@ -6,6 +6,8 @@ import { CompensationSummary } from '../../../domain/calendar/types/Compensation
 import CompensationSummarySection from './CompensationSummarySection';
 import { logger } from '../../../utils/logger';
 import { Modal, ModalHeader, ModalTitle, ModalBody, CloseButton, Button } from '../common/ui';
+import { container } from '../../../config/container';
+import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { 
   PhoneIcon, 
   AlertIcon, 
@@ -154,7 +156,10 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [compensationSummary, setCompensationSummary] = useState<CompensationSummary | null>(null);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
-  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
+  const calculatorFacade = useMemo(() => {
+    const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+    return CompensationCalculatorFacade.getInstance(subEventRepo);
+  }, []);
 
   // Set up event listener for escape key
   useEffect(() => {

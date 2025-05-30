@@ -5,4 +5,5 @@ export interface CalendarEventRepository {
   getAll(): Promise<CalendarEvent[]>;
   delete(id: string): Promise<void>;
   update(event: CalendarEvent): Promise<void>;
+  deleteMultipleByIds(ids: string[]): Promise<void>;
 } 

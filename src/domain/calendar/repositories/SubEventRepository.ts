@@ -5,4 +5,5 @@ export interface SubEventRepository {
   getAll(): Promise<SubEvent[]>;
   getByParentId(parentId: string): Promise<SubEvent[]>;
   deleteByParentId(parentId: string): Promise<void>;
+  deleteMultipleByParentIds(parentIds: string[]): Promise<void>;
 } 

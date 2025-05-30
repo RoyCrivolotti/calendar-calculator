@@ -148,4 +148,54 @@ export class FirestoreSubEventRepository implements SubEventRepository {
       throw error;
     }
   }
+
+  // ADD: New method for batch deleting sub-events by multiple parent IDs
+  async deleteMultipleByParentIds(parentIds: string[]): Promise<void> {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      logger.error('[FirestoreSubRepo] User not authenticated to delete multiple subEvents by parentIds.');
+      throw new Error('User not authenticated.');
+    }
+    if (!parentIds || parentIds.length === 0) {
+      logger.info('[FirestoreSubRepo] No parent IDs provided for batch subEvent deletion.');
+      return;
+    }
+
+    // Firestore 'in' query supports up to 30 elements. If more, we need to batch the queries.
+    // However, for simplicity here, we assume parentIds.length will be manageable or
+    // this can be a point of future optimization if parentIds arrays are very large.
+    // A more robust solution for very large arrays would be multiple 'in' queries.
+    const subEventsCollection = this.getSubEventsCollection(userId);
+    const q = query(subEventsCollection, where('parentEventId', 'in', parentIds));
+
+    let allSubEventsToDelete: SubEvent[] = [];
+    try {
+      const querySnapshot = await getDocs(q);
+      allSubEventsToDelete = querySnapshot.docs.map(docSnap => docSnap.data());
+    } catch (error) {
+      logger.error(`[FirestoreSubRepo] Error fetching subEvents for parentIds ${parentIds.join(', ')}:`, error);
+      throw error; // Rethrow to stop if we can't fetch the subEvents to delete
+    }
+
+    if (allSubEventsToDelete.length === 0) {
+      logger.info(`[FirestoreSubRepo] No subEvents found to delete for parent IDs: ${parentIds.join(', ')}`);
+      return;
+    }
+
+    const batch = writeBatch(db);
+    const subEventsCollectionPath = `users/${userId}/subEvents`;
+
+    allSubEventsToDelete.forEach(subEvent => {
+      const subEventRef = doc(db, subEventsCollectionPath, subEvent.id);
+      batch.delete(subEventRef);
+    });
+
+    try {
+      await batch.commit();
+      logger.info(`[FirestoreSubRepo] Batch deleted ${allSubEventsToDelete.length} subEvents for ${parentIds.length} parent events. Parent IDs: ${parentIds.join(', ')}`);
+    } catch (error) {
+      logger.error(`[FirestoreSubRepo] Error batch deleting subEvents for parent IDs ${parentIds.join(', ')}:`, error);
+      throw error;
+    }
+  }
 } 

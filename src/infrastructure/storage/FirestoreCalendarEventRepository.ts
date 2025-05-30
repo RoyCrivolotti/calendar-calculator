@@ -127,4 +127,32 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       throw error;
     }
   }
+
+  async deleteMultipleByIds(ids: string[]): Promise<void> {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      logger.error('[FirestoreRepo] User not authenticated to delete multiple events.');
+      throw new Error('User not authenticated.');
+    }
+    if (!ids || ids.length === 0) {
+      logger.info('[FirestoreRepo] No event IDs provided for batch deletion.');
+      return;
+    }
+
+    const batch = writeBatch(db);
+    const eventsCollectionPath = `users/${userId}/events`; // Path for doc refs
+
+    ids.forEach(id => {
+      const eventRef = doc(db, eventsCollectionPath, id);
+      batch.delete(eventRef);
+    });
+
+    try {
+      await batch.commit();
+      logger.info(`[FirestoreRepo] Batch deleted ${ids.length} events for user ${userId}. IDs: ${ids.join(', ')}`);
+    } catch (error) {
+      logger.error(`[FirestoreRepo] Error batch deleting events. IDs: ${ids.join(', ')}:`, error);
+      throw error;
+    }
+  }
 } 
