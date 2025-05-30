@@ -38,7 +38,6 @@ import {
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 import { useSidePanel, useTooltip } from '../../hooks';
 import { useMonthDeletionHandler } from '../../hooks/useMonthDeletionHandler';
-import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
 
 const Section = styled.div`
   background: white;
@@ -224,7 +223,6 @@ const DeleteWarningText = styled.p`
 interface CompensationSectionProps {
   events: CalendarEvent[];
   currentDate: Date;
-  allSubEvents: SubEvent[];
   onDateChange: (date: Date) => void;
   onDataChange?: () => void;
 }
@@ -240,7 +238,6 @@ interface CompensationData {
 const CompensationSection: React.FC<CompensationSectionProps> = ({
   events,
   currentDate,
-  allSubEvents,
   onDateChange,
   onDataChange,
 }) => {
@@ -318,11 +315,15 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       setLoadingDebounced(true);
       
       try {
-        logger.info(`[CompensationSection] Calculating compensation for ${format(currentDate, 'MMMM yyyy')}`);
-        const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate, allSubEvents);
+        logger.info(`Calculating compensation for ${format(currentDate, 'MMMM yyyy')}`);
+        const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate);
         
-        logger.info(`[CompensationSection] Received ${result.length} compensation items. Updating breakdown.`);
+        // ALWAYS set the breakdown when events or currentDate change, as the event list in the panel depends on it.
+        // The previous check (dataString !== previousData.current) was too simplistic as it only considered compensation amounts.
+        logger.info(`Received ${result.length} compensation items. Updating breakdown.`);
         setBreakdown(result);
+        // previousData.current = JSON.stringify(result); // This specific optimization can be removed or re-evaluated if performance issues arise
+        
       } catch (error) {
         logger.error('Error calculating compensation:', error);
         setBreakdown([]); // Clear breakdown on error
@@ -335,7 +336,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 
     calculateData();
     
-  }, [events, currentDate, calculatorFacade, setLoadingDebounced, allSubEvents]); // Dependencies are correct
+  }, [events, currentDate, calculatorFacade, setLoadingDebounced]); // Dependencies are correct
 
   // Extract breakdown data for the visualization
   const getCompensationData = useCallback((): CompensationData[] => {
