@@ -132,7 +132,8 @@ export class CompensationCalculatorFacade {
    */
   public async calculateMonthlyCompensation(
     events: CalendarEvent[],
-    date: Date
+    date: Date,
+    allSubEvents: SubEvent[]
   ): Promise<CompensationBreakdown[]> {
     try {
       const monthKey = getMonthKey(date);
@@ -161,9 +162,7 @@ export class CompensationCalculatorFacade {
       
       logger.info(`Processed ${monthEvents.length} events for month ${monthKey}`);
       
-      // Load all sub-events using the repository
-      const allSubEvents = await this.subEventRepository.getAll();
-      logger.info(`Loaded ${allSubEvents.length} sub-events for calculation from Firestore`);
+      logger.info(`Using provided ${allSubEvents.length} sub-events for calculation.`);
       
       // Get relevant event IDs
       const eventIds = monthEvents.map(event => event.id);

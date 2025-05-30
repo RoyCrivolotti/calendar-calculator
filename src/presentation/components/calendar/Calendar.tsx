@@ -73,6 +73,8 @@ const Calendar: React.FC = () => {
   const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
   const [isHolidayConflict, setIsHolidayConflict] = useState(false);
   const [compensationSectionKey, setCompensationSectionKey] = useState(0);
+  const [compensationRefreshTrigger, setCompensationRefreshTrigger] = useState(0);
+  const [allSubEventsForProps, setAllSubEventsForProps] = useState<SubEvent[]>([]);
   const calculatorFacade = useMemo(() => {
     const subEventRepo = container.get<SubEventRepository>('subEventRepository');
     return CompensationCalculatorFacade.getInstance(subEventRepo);
@@ -115,22 +117,27 @@ const Calendar: React.FC = () => {
   }, [refreshCalendarEvents]); // Dependency on the memoized refresh function
   
   const updateCompensationData = useCallback(async () => {
-    logger.info('Events available for compensation calculation:', currentEventsFromStore.length);
-    
-    if (currentEventsFromStore.length === 0) {
+    logger.info('[Calendar] updateCompensationData triggered.');
+    const currentEvents = currentEventsFromStore.map(event => new CalendarEvent(event));
+
+    if (currentEvents.length === 0) {
       logger.info('No events available for compensation calculation');
       setCompensationDataRef.current([]);
+      setAllSubEventsForProps([]);
+      setLoading(false);
       return;
     }
     
     setLoading(true);
     
     try {
-      // Get unique months from events
+      const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+      const fetchedAllSubEvents = await subEventRepo.getAll();
+      logger.info(`[Calendar] Fetched ${fetchedAllSubEvents.length} total sub-events for compensation cycle.`);
+      setAllSubEventsForProps(fetchedAllSubEvents);
+
       const months = new Set<string>();
-      
-      // Scan through all events to find all months, including events that span across months
-      currentEventsFromStore.forEach(event => {
+      currentEvents.forEach(event => {
         const startDate = new Date(event.start);
         const endDate = new Date(event.end);
         
@@ -157,20 +164,15 @@ const Calendar: React.FC = () => {
       
       const allData: CompensationBreakdown[] = [];
       
-      // Convert events to CalendarEvent objects for the facade
-      const calendarEvents = currentEventsFromStore.map(event => new CalendarEvent(event));
-      
-      // For each month with events, calculate compensation using the facade
       for (const monthKey of Array.from(months)) {
         const [year, month] = monthKey.split('-').map(Number);
-        const monthDate = new Date(year, month - 1, 1); // Month is 0-indexed in Date constructor
-        monthDate.setHours(0, 0, 0, 0); // Reset time to midnight
+        const monthDate = new Date(year, month - 1, 1);
+        monthDate.setHours(0, 0, 0, 0);
         
-        logger.info(`Calculating compensation for month: ${year}-${month}`);
+        logger.info(`Calculating compensation for month: ${year}-${month} using pre-fetched sub-events.`);
         
-        // Use the facade for consistent calculation
         try {
-          const monthData = await calculatorFacade.calculateMonthlyCompensation(calendarEvents, monthDate);
+          const monthData = await calculatorFacade.calculateMonthlyCompensation(currentEvents, monthDate, fetchedAllSubEvents);
           if (monthData.length > 0) {
             allData.push(...monthData);
           }
@@ -309,8 +311,20 @@ const Calendar: React.FC = () => {
 
   // Update compensation data when events or current date changes
   useEffect(() => {
+    // Only trigger for currentDate changes directly here.
+    // CRUD operations will use compensationRefreshTrigger.
+    logger.info(`[Calendar Effect] Current date changed to ${currentDate}, triggering debounced compensation update.`);
     debouncedUpdateCompensationData();
-  }, [currentEventsFromStore, currentDate, debouncedUpdateCompensationData]);
+  }, [currentDate, debouncedUpdateCompensationData]); // Removed currentEventsFromStore from dependencies
+
+  // New useEffect to handle compensation refresh after CRUD operations
+  useEffect(() => {
+    if (compensationRefreshTrigger > 0) {
+      logger.info(`[Calendar Effect] compensationRefreshTrigger changed to ${compensationRefreshTrigger}, forcing compensation update.`);
+      calculatorFacade.clearCaches(); // Clear caches before update
+      updateCompensationData(); // Call non-debounced version for immediate update
+    }
+  }, [compensationRefreshTrigger, updateCompensationData, calculatorFacade]); // updateCompensationData is already memoized with currentEventsFromStore
 
   const handleEventClick = useCallback((clickInfo: EventClickArg) => {
     const event = currentEventsFromStore.find(e => e.id === clickInfo.event.id);
@@ -509,10 +523,8 @@ const Calendar: React.FC = () => {
     // Clear caches before operation
     calculatorFacade.clearCaches();
     
-    // Track the async operation being performed
     let savePromise;
     
-    // New event with a temporary ID, create a new one
     if (isNewEvent) {
       const permanentId = crypto.randomUUID();
       logger.debug(`Converting temp ID ${event.id} to permanent ID ${permanentId}`);
@@ -544,35 +556,37 @@ const Calendar: React.FC = () => {
       savePromise = dispatch(updateEventAsync(eventToUpdateJson)).unwrap();
     }
     
-    // Clear modals immediately for better UX
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    // After the save completes, ensure compensation data is refreshed
     savePromise.then(() => {
-      logger.info(`Event ${event.id} saved successfully, updating compensation data`);
+      logger.info(`Event ${event.id} saved successfully, queueing data refresh and UI updates.`);
+      // No direct call to updateCompensationData() here anymore.
+      // Instead, trigger the effect.
+      setCompensationRefreshTrigger(prev => prev + 1);
       
-      // Force refresh all calculations
-      calculatorFacade.clearCaches();
-      
-      // Ensure we calculate for all affected months
-      // This is particularly important for events that span across months
-      setTimeout(() => {
-        updateCompensationData();
-        
-        // Also update the current month view to refresh the display
-        if (calendarRef.current) {
-          const calendarApi = calendarRef.current.getApi();
-          calendarApi.refetchEvents();
-        }
-      }, 100); // Small delay to ensure state updates have propagated
-      
+      // Refetch FullCalendar events for immediate UI update of the calendar grid
+      if (calendarRef.current) {
+        const calendarApi = calendarRef.current.getApi();
+        calendarApi.refetchEvents();
+        logger.info('[Calendar] Explicitly refetched FullCalendar events post-save.');
+      }
     }).catch(error => {
       logger.error(`Failed to save event ${event.id}:`, error);
-      // Try to update compensation data anyway
-      setTimeout(updateCompensationData, 100);
+      // Optionally trigger a refresh even on error if partial data might need recalculating
+      setCompensationRefreshTrigger(prev => prev + 1);
     });
-  }, [dispatch, calculatorFacade, updateCompensationData, calendarRef, logger]);
+  }, [
+    dispatch, 
+    calculatorFacade, 
+    // updateCompensationData is NOT needed here anymore as a direct dependency for this callback's logic for .then()
+    // It will be used by the compensationRefreshTrigger effect
+    currentEventsFromStore, // Keep if findConflictingEvents uses it, or other parts of save logic before promise
+    logger, 
+    calendarRef,
+    // Add other direct dependencies of saveEventWithoutConflictCheck if any were missed
+    // For example, if findConflictingEvents is used and relies on something not listed.
+  ]);
 
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     // Check for conflicts with other events when updating or creating
@@ -696,7 +710,7 @@ const Calendar: React.FC = () => {
           // to ensure state updates have propagated
           setTimeout(() => {
             logger.info(`Conflict resolved, updating compensation data`);
-            updateCompensationData();
+            setCompensationRefreshTrigger(prev => prev + 1);
             
             // Also update the calendar display
             if (calendarRef.current) {
@@ -773,26 +787,24 @@ const Calendar: React.FC = () => {
   };
   
   const deleteEventWithoutConfirmation = useCallback((event: CalendarEvent) => {
-    // Clear caches before deleting to ensure fresh calculations
     calculatorFacade.clearCaches();
     
-    dispatch(deleteEventAsync(event.id));
-    dispatch(setShowEventModal(false));
-    dispatch(setSelectedEvent(null));
-    
-    // Force immediate recalculation of compensation data with a small delay
-    // to ensure state updates have propagated
-    setTimeout(() => {
-      logger.info(`Event ${event.id} deleted, updating compensation data`);
-      updateCompensationData();
-      
-      // Also update the calendar display
+    dispatch(deleteEventAsync(event.id)).unwrap().then(() => {
+      logger.info(`Event ${event.id} deleted successfully, queueing data refresh.`);
+      setCompensationRefreshTrigger(prev => prev + 1);
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
         calendarApi.refetchEvents();
+        logger.info('[Calendar] Explicitly refetched FullCalendar events post-delete.');
       }
-    }, 100);
-  }, [dispatch, calculatorFacade, updateCompensationData, calendarRef, logger]);
+    }).catch(error => {
+      logger.error(`Failed to delete event ${event.id}:`, error);
+      setCompensationRefreshTrigger(prev => prev + 1); // Refresh even on error
+    });
+
+    dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
+  }, [dispatch, calculatorFacade, calendarRef, logger]);
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
     if (!pendingEventDelete || !pendingEventDelete.id) return;
@@ -857,7 +869,7 @@ const Calendar: React.FC = () => {
         calculatorFacade.clearCaches();
         
         // Force immediate compensation recalculation
-        updateCompensationData();
+        setCompensationRefreshTrigger(prev => prev + 1);
         logger.info('Compensation data updated after holiday deletion');
         
       } catch (error) {
@@ -865,11 +877,11 @@ const Calendar: React.FC = () => {
         alert('Holiday deleted, but there was an error recalculating affected events. Compensation calculations may be affected.');
         
         // Try to update compensation data anyway
-        updateCompensationData();
+        setCompensationRefreshTrigger(prev => prev + 1);
       }
     } else {
       // Even if we don't regenerate events, we should update compensation data
-      updateCompensationData();
+      setCompensationRefreshTrigger(prev => prev + 1);
       logger.info('Compensation data updated after holiday deletion (no regeneration needed)');
     }
     
@@ -1013,6 +1025,7 @@ const Calendar: React.FC = () => {
         key={compensationSectionKey}
         events={currentEventsFromStore.map(e => new CalendarEvent(e))}
         currentDate={new Date(currentDate)}
+        allSubEvents={allSubEventsForProps}
         onDateChange={(date) => dispatch(setCurrentDate(date.toISOString()))}
         onDataChange={handleDataRefresh}
       />
