@@ -6,6 +6,7 @@ export interface CompensationBreakdown {
   count: number;
   description: string;
   month?: Date;
+  monthKey: string;
   events?: Array<{
     id: string;
     start: Date;

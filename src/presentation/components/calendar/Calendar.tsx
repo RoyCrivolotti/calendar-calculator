@@ -22,6 +22,8 @@ import {
   createEventAsync,
   updateEventAsync,
   deleteEventAsync,
+  optimisticallyAddEvent,
+  finalizeOptimisticEvent,
 } from '../../store/slices/calendarSlice';
 import { User } from '../../store/slices/authSlice';
 import { container } from '../../../config/container';
@@ -55,6 +57,24 @@ const ModalLoadingFallback = styled.div`
   min-height: 200px;
 `;
 
+// Helper function to get all month keys (YYYY-M) an event spans
+const getMonthsForEvent = (event: CalendarEvent | CalendarEventProps): string[] => {
+  const months = new Set<string>();
+  if (!event || !event.start || !event.end) return [];
+
+  const startDate = new Date(event.start);
+  const endDate = new Date(event.end);
+  
+  let currentDateIter = new Date(startDate);
+  currentDateIter.setDate(1); 
+
+  while (currentDateIter <= endDate) {
+    months.add(getMonthKey(currentDateIter));
+    currentDateIter.setMonth(currentDateIter.getMonth() + 1);
+  }
+  return Array.from(months);
+};
+
 const Calendar: React.FC = () => {
   const dispatch = useAppDispatch();
   const {
@@ -75,6 +95,7 @@ const Calendar: React.FC = () => {
   const [compensationSectionKey, setCompensationSectionKey] = useState(0);
   const [compensationRefreshTrigger, setCompensationRefreshTrigger] = useState(0);
   const [allSubEventsForProps, setAllSubEventsForProps] = useState<SubEvent[]>([]);
+  const [targetMonthsForRefresh, setTargetMonthsForRefresh] = useState<string[] | null>(null);
   const calculatorFacade = useMemo(() => {
     const subEventRepo = container.get<SubEventRepository>('subEventRepository');
     return CompensationCalculatorFacade.getInstance(subEventRepo);
@@ -116,12 +137,12 @@ const Calendar: React.FC = () => {
     refreshCalendarEvents(); // Call the extracted function on initial load/user change
   }, [refreshCalendarEvents]); // Dependency on the memoized refresh function
   
-  const updateCompensationData = useCallback(async () => {
-    logger.info('[Calendar] updateCompensationData triggered.');
-    const currentEvents = currentEventsFromStore.map(event => new CalendarEvent(event));
+  const updateCompensationData = useCallback(async (monthsToRefresh?: string[] | null) => {
+    logger.info(`[Calendar] updateCompensationData triggered. Target months: ${monthsToRefresh ? monthsToRefresh.join(', ') : 'ALL'}`);
+    const currentDomainEvents = currentEventsFromStore.map(event => new CalendarEvent(event));
 
-    if (currentEvents.length === 0) {
-      logger.info('No events available for compensation calculation');
+    if (currentDomainEvents.length === 0 && !(monthsToRefresh && monthsToRefresh.length > 0) ) {
+      logger.info('[Calendar] No events for compensation calculation, and not a targeted empty refresh.');
       setCompensationDataRef.current([]);
       setAllSubEventsForProps([]);
       setLoading(false);
@@ -136,72 +157,61 @@ const Calendar: React.FC = () => {
       logger.info(`[Calendar] Fetched ${fetchedAllSubEvents.length} total sub-events for compensation cycle.`);
       setAllSubEventsForProps(fetchedAllSubEvents);
 
-      const months = new Set<string>();
-      currentEvents.forEach(event => {
-        const startDate = new Date(event.start);
-        const endDate = new Date(event.end);
-        
-        // Check if event spans across months
-        if (getMonthKey(startDate) !== getMonthKey(endDate)) {
-          // For events spanning multiple months, add all months in the range
-          let currentDate = new Date(startDate);
-          while (currentDate <= endDate) {
-            const monthKey = getMonthKey(currentDate);
-            months.add(monthKey);
-            // Move to the next month
-            currentDate.setMonth(currentDate.getMonth() + 1);
-          }
-        } else {
-          // For single-month events, just add that month
-          const monthKey = getMonthKey(startDate);
-          months.add(monthKey);
-        }
-        
-        logger.debug(`Found event in month(s): ${Array.from(months).join(', ')}`);
+      const uniqueMonthsInEvents = new Set<string>();
+      currentDomainEvents.forEach(event => {
+        getMonthsForEvent(event).forEach(m => uniqueMonthsInEvents.add(m));
       });
-      
-      logger.info(`Found ${months.size} unique months with events`);
-      
-      const allData: CompensationBreakdown[] = [];
-      
-      for (const monthKey of Array.from(months)) {
-        const [year, month] = monthKey.split('-').map(Number);
-        const monthDate = new Date(year, month - 1, 1);
-        monthDate.setHours(0, 0, 0, 0);
-        
-        logger.info(`Calculating compensation for month: ${year}-${month} using pre-fetched sub-events.`);
+
+      const iterationMonths = monthsToRefresh 
+        ? monthsToRefresh
+        : Array.from(uniqueMonthsInEvents);
+
+      logger.info(`[Calendar] Will calculate/update compensation for months: ${iterationMonths.join(', ') || 'None'}`);
+
+      const newCalculatedDataForTargetMonths: CompensationBreakdown[] = [];
+      for (const monthKey of iterationMonths) {
+        const [year, monthNum] = monthKey.split('-').map(Number);
+        const monthDate = new Date(year, monthNum - 1, 1);
         
         try {
-          const monthData = await calculatorFacade.calculateMonthlyCompensation(currentEvents, monthDate, fetchedAllSubEvents);
-          if (monthData.length > 0) {
-            allData.push(...monthData);
-          }
+          const monthData = await calculatorFacade.calculateMonthlyCompensation(currentDomainEvents, monthDate, fetchedAllSubEvents);
+          newCalculatedDataForTargetMonths.push(...monthData); 
+          logger.info(`[Calendar] Successfully calculated ${monthData.length} breakdown items for month ${monthKey}.`);
         } catch (error) {
-          logger.error(`Error calculating compensation for month ${year}-${month}:`, error);
+          logger.error(`[Calendar] Error calculating compensation for month ${monthKey}:`, error);
         }
       }
       
-      logger.debug('All compensation data:', allData);
-      logger.info(`Generated ${allData.length} compensation data items`);
-      
-      // Use the ref to avoid closure issues
-      setCompensationDataRef.current(allData);
+      // Use functional update for setCompensationDataRef.current
+      setCompensationDataRef.current(prevCompensationData => {
+        let newFullCompensationData: CompensationBreakdown[];
+        if (monthsToRefresh) {
+          // Filter out old data for the months we just refreshed from prevCompensationData
+          newFullCompensationData = prevCompensationData.filter(item => !iterationMonths.includes(item.monthKey));
+          // Add the newly calculated data for these refreshed months
+          newFullCompensationData.push(...newCalculatedDataForTargetMonths);
+        } else {
+          // Full refresh, so newCalculatedDataForTargetMonths is the complete new dataset
+          newFullCompensationData = newCalculatedDataForTargetMonths;
+        }
+        logger.info(`[Calendar] Generated ${newFullCompensationData.length} total compensation data items after merge/update.`);
+        return newFullCompensationData;
+      });
       
     } catch (error) {
-      logger.error('Error in compensation calculation:', error);
-      setCompensationDataRef.current([]);
+      logger.error('[Calendar] Error in updateCompensationData:', error);
+      setCompensationDataRef.current([]); 
+      setAllSubEventsForProps([]);
     } finally {
       setLoading(false);
     }
-  }, [currentEventsFromStore, calculatorFacade, getMonthKey, logger]);
-  
+  }, [currentEventsFromStore, calculatorFacade, logger]); // Removed compensationData from dependencies
+
   const debouncedUpdateCompensationData = useCallback(() => {
-    if (updateCompensationTimeoutRef.current) {
-      clearTimeout(updateCompensationTimeoutRef.current);
-    }
-    calculatorFacade.clearCaches();
+    if (updateCompensationTimeoutRef.current) clearTimeout(updateCompensationTimeoutRef.current);
+    calculatorFacade.clearCaches(); // Clear facade (service) caches before any calculation
     updateCompensationTimeoutRef.current = setTimeout(() => {
-      updateCompensationData();
+      updateCompensationData(null); // Full refresh when debounced (e.g. month view change)
     }, 300);
   }, [calculatorFacade, updateCompensationData]);
 
@@ -307,24 +317,35 @@ const Calendar: React.FC = () => {
     );
     dispatch(updateEventAsync(updatedEventProps));
 
+    // After dispatching updateEventAsync, trigger targeted refresh
+    const originalEvent = currentEventsFromStore.find(e => e.id === updatedEventProps.id);
+    const oldMonths = originalEvent ? getMonthsForEvent(originalEvent) : [];
+    const newMonths = getMonthsForEvent(updatedEventProps);
+    const affectedMonths = Array.from(new Set([...oldMonths, ...newMonths]));
+
+    dispatch(updateEventAsync(updatedEventProps)).then(() => {
+        setTargetMonthsForRefresh(affectedMonths);
+        setCompensationRefreshTrigger(prev => prev + 1);
+    });
   }, [dispatch, currentEventsFromStore, logger]);
 
   // Update compensation data when events or current date changes
   useEffect(() => {
     // Only trigger for currentDate changes directly here.
     // CRUD operations will use compensationRefreshTrigger.
-    logger.info(`[Calendar Effect] Current date changed to ${currentDate}, triggering debounced compensation update.`);
+    logger.info(`[Calendar Effect] Current date changed to ${currentDate}, triggering debounced (full) compensation update.`);
     debouncedUpdateCompensationData();
   }, [currentDate, debouncedUpdateCompensationData]); // Removed currentEventsFromStore from dependencies
 
   // New useEffect to handle compensation refresh after CRUD operations
   useEffect(() => {
     if (compensationRefreshTrigger > 0) {
-      logger.info(`[Calendar Effect] compensationRefreshTrigger changed to ${compensationRefreshTrigger}, forcing compensation update.`);
-      calculatorFacade.clearCaches(); // Clear caches before update
-      updateCompensationData(); // Call non-debounced version for immediate update
+      logger.info(`[Calendar Effect] compensationRefreshTrigger changed to ${compensationRefreshTrigger}, forcing compensation update for months: ${targetMonthsForRefresh ? targetMonthsForRefresh.join(', ') : 'ALL (should be targeted)'}.`);
+      calculatorFacade.clearCaches(); 
+      updateCompensationData(targetMonthsForRefresh); 
+      setTargetMonthsForRefresh(null); 
     }
-  }, [compensationRefreshTrigger, updateCompensationData, calculatorFacade]); // updateCompensationData is already memoized with currentEventsFromStore
+  }, [compensationRefreshTrigger, updateCompensationData, calculatorFacade, targetMonthsForRefresh]); // updateCompensationData is already memoized with currentEventsFromStore
 
   const handleEventClick = useCallback((clickInfo: EventClickArg) => {
     const event = currentEventsFromStore.find(e => e.id === clickInfo.event.id);
@@ -346,8 +367,7 @@ const Calendar: React.FC = () => {
       effectiveEnd = new Date(effectiveEnd.getTime() - 1);
       effectiveEnd.setHours(23, 59, 59, 999); // Ensure it's the very end of that day
     } else if (type === 'oncall') {
-      const calendarApi = calendarRef.current?.getApi();
-      const viewType = calendarApi?.view.type;
+      const viewType = calendarRef.current?.getApi().view.type;
 
       if (viewType === 'dayGridMonth' || selectInfo.allDay) { 
         effectiveStart.setHours(0, 0, 0, 0);
@@ -375,8 +395,7 @@ const Calendar: React.FC = () => {
         effectiveEnd.setHours(0, 0, 0, 0); // Set to 00:00
       }
     } else if (type === 'incident') {
-      const calendarApi = calendarRef.current?.getApi();
-      const viewType = calendarApi?.view.type;
+      const viewType = calendarRef.current?.getApi().view.type;
 
       if (viewType === 'dayGridMonth' || selectInfo.allDay) {
         effectiveStart.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
@@ -514,79 +533,62 @@ const Calendar: React.FC = () => {
     logger.info('[regenerateConflictingSubEvents] Regeneration complete.');
   };
 
-  const saveEventWithoutConflictCheck = useCallback((event: CalendarEvent) => {
-    const isNewEvent = event.id.startsWith('temp-');
-    logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
-    logger.debug(`Event times: ${event.start.toISOString()} - ${event.end.toISOString()}`);
-    logger.debug(`Event title: ${event.title}`);
-    
-    // Clear caches before operation
-    calculatorFacade.clearCaches();
+  const saveEventWithoutConflictCheck = useCallback((eventToSave: CalendarEvent) => {
+    const isNewEvent = eventToSave.id.startsWith('temp-');
+    const tempId = isNewEvent ? eventToSave.id : null; 
+
+    logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${eventToSave.id} (${eventToSave.type})`);
+    calculatorFacade.clearCaches(); // Clear before any operation that might read
     
     let savePromise;
     
     if (isNewEvent) {
-      const permanentId = crypto.randomUUID();
-      logger.debug(`Converting temp ID ${event.id} to permanent ID ${permanentId}`);
-      
-      const eventToCreateJson = event.toJSON();
-      
-      const eventWithoutTempId = createCalendarEvent({
-        ...eventToCreateJson,
-        id: permanentId
-      });
-      
-      if (!eventWithoutTempId.title) {
-        const defaultTitle = eventWithoutTempId.type === 'oncall' ? 'On-Call Shift' : 
-                            eventWithoutTempId.type === 'incident' ? 'Incident' : 'Holiday';
-        logger.debug(`Setting default title for event: ${defaultTitle}`);
-        eventWithoutTempId.title = defaultTitle;
-      }
-      
-      savePromise = dispatch(createEventAsync(eventWithoutTempId.toJSON())).unwrap();
-    } else {
-      if (!event.title) {
-        const defaultTitle = event.type === 'oncall' ? 'On-Call Shift' : 
-                           event.type === 'incident' ? 'Incident' : 'Holiday';
-        logger.debug(`Setting default title for event: ${defaultTitle}`);
-        event.title = defaultTitle;
-      }
-      
-      const eventToUpdateJson = event.toJSON();
-      savePromise = dispatch(updateEventAsync(eventToUpdateJson)).unwrap();
+      const eventForOptimisticAdd = eventToSave.toJSON();
+      dispatch(optimisticallyAddEvent(eventForOptimisticAdd));
+      logger.info(`Optimistically added event ${tempId} to store.`);
+
+      const eventDataForCreation = { // Prepare data for backend (no tempId)
+        start: eventToSave.start.toISOString(),
+        end: eventToSave.end.toISOString(),
+        type: eventToSave.type,
+        title: eventToSave.title,
+      } as CalendarEventProps; 
+
+      savePromise = dispatch(createEventAsync(eventDataForCreation)).unwrap();
+    } else { // Existing event update
+      savePromise = dispatch(updateEventAsync(eventToSave.toJSON())).unwrap();
     }
     
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    savePromise.then(() => {
-      logger.info(`Event ${event.id} saved successfully, queueing data refresh and UI updates.`);
-      // No direct call to updateCompensationData() here anymore.
-      // Instead, trigger the effect.
-      setCompensationRefreshTrigger(prev => prev + 1);
-      
-      // Refetch FullCalendar events for immediate UI update of the calendar grid
-      if (calendarRef.current) {
-        const calendarApi = calendarRef.current.getApi();
-        calendarApi.refetchEvents();
-        logger.info('[Calendar] Explicitly refetched FullCalendar events post-save.');
+    savePromise.then((resultEventProps: CalendarEventProps) => {
+      if (isNewEvent && tempId) { // Ensure tempId is available
+        logger.info(`Event ${tempId} (now ${resultEventProps.id}) saved successfully to backend.`);
+        dispatch(finalizeOptimisticEvent({ tempId, finalEvent: resultEventProps }));
+      } else {
+        logger.info(`Event ${resultEventProps.id} updated successfully.`);
+        // updateEventAsync.fulfilled handles store update for existing events
       }
+      
+      const affectedMonths = getMonthsForEvent(resultEventProps); 
+      setTargetMonthsForRefresh(affectedMonths);
+      setCompensationRefreshTrigger(prev => prev + 1);
+      logger.info(`Queued targeted compensation refresh for months: ${affectedMonths.join(', ')}`);
+      
+      if (calendarRef.current) calendarRef.current.getApi().refetchEvents();
     }).catch(error => {
-      logger.error(`Failed to save event ${event.id}:`, error);
-      // Optionally trigger a refresh even on error if partial data might need recalculating
+      logger.error(`Failed to save event ${eventToSave.id}:`, error);
+      if (isNewEvent && tempId) { // Rollback optimistic add on failure
+        logger.warn(`Rolling back optimistic add for ${tempId}`);
+        dispatch(deleteEventAsync(tempId)); // Use deleteEventAsync which handles sub-events if any were created by mistake
+      }
+      // Still trigger a refresh, maybe for a specific error state or to ensure consistency
+      const affectedMonths = getMonthsForEvent(eventToSave); 
+      setTargetMonthsForRefresh(affectedMonths);
       setCompensationRefreshTrigger(prev => prev + 1);
     });
-  }, [
-    dispatch, 
-    calculatorFacade, 
-    // updateCompensationData is NOT needed here anymore as a direct dependency for this callback's logic for .then()
-    // It will be used by the compensationRefreshTrigger effect
-    currentEventsFromStore, // Keep if findConflictingEvents uses it, or other parts of save logic before promise
-    logger, 
-    calendarRef,
-    // Add other direct dependencies of saveEventWithoutConflictCheck if any were missed
-    // For example, if findConflictingEvents is used and relies on something not listed.
-  ]);
+  }, [dispatch, calculatorFacade, logger, calendarRef]); // currentEventsFromStore removed as direct dep for this specific logic
 
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     // Check for conflicts with other events when updating or creating
@@ -786,20 +788,21 @@ const Calendar: React.FC = () => {
     deleteEventWithoutConfirmation(event);
   };
   
-  const deleteEventWithoutConfirmation = useCallback((event: CalendarEvent) => {
+  const deleteEventWithoutConfirmation = useCallback((eventToDelete: CalendarEvent) => {
+    const affectedMonths = getMonthsForEvent(eventToDelete);
+    const eventIdToDelete = eventToDelete.id; // Capture id before it's potentially gone
+
     calculatorFacade.clearCaches();
     
-    dispatch(deleteEventAsync(event.id)).unwrap().then(() => {
-      logger.info(`Event ${event.id} deleted successfully, queueing data refresh.`);
+    dispatch(deleteEventAsync(eventIdToDelete)).unwrap().then(() => {
+      logger.info(`Event ${eventIdToDelete} deleted successfully, queueing data refresh.`);
+      setTargetMonthsForRefresh(affectedMonths);
       setCompensationRefreshTrigger(prev => prev + 1);
-      if (calendarRef.current) {
-        const calendarApi = calendarRef.current.getApi();
-        calendarApi.refetchEvents();
-        logger.info('[Calendar] Explicitly refetched FullCalendar events post-delete.');
-      }
+      if (calendarRef.current) calendarRef.current.getApi().refetchEvents();
     }).catch(error => {
-      logger.error(`Failed to delete event ${event.id}:`, error);
-      setCompensationRefreshTrigger(prev => prev + 1); // Refresh even on error
+      logger.error(`Failed to delete event ${eventIdToDelete}:`, error);
+      setTargetMonthsForRefresh(affectedMonths); // Still refresh UI for relevant months
+      setCompensationRefreshTrigger(prev => prev + 1);
     });
 
     dispatch(setShowEventModal(false));
