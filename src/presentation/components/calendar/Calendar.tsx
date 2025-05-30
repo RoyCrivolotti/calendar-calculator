@@ -72,6 +72,7 @@ const Calendar: React.FC = () => {
   const [pendingEventSave, setPendingEventSave] = useState<CalendarEvent | null>(null);
   const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
   const [isHolidayConflict, setIsHolidayConflict] = useState(false);
+  const [compensationSectionKey, setCompensationSectionKey] = useState(0);
   const calculatorFacade = useMemo(() => {
     const subEventRepo = container.get<SubEventRepository>('subEventRepository');
     return CompensationCalculatorFacade.getInstance(subEventRepo);
@@ -207,7 +208,14 @@ const Calendar: React.FC = () => {
     logger.info('[Calendar] Data changed in summary, triggering full refresh.');
     await refreshCalendarEvents();
     debouncedUpdateCompensationData();
-  }, [refreshCalendarEvents, debouncedUpdateCompensationData]);
+    // ADD: Explicitly refetch events for FullCalendar instance
+    if (calendarRef.current) {
+      const calendarApi = calendarRef.current.getApi();
+      calendarApi.refetchEvents();
+      logger.info('[Calendar] Explicitly refetched FullCalendar events after data refresh.');
+    }
+    setCompensationSectionKey(prev => prev + 1);
+  }, [refreshCalendarEvents, debouncedUpdateCompensationData, calendarRef]);
 
   // Add this new simple handler for onEventUpdate
   const handleEventUpdate = useCallback((eventDataFromWrapper: { id: string; start: Date; end: Date | null; viewType: string }) => {
@@ -1002,9 +1010,11 @@ const Calendar: React.FC = () => {
         onEventUpdate={handleEventUpdate}
       />
       <CompensationSection
+        key={compensationSectionKey}
         events={currentEventsFromStore.map(e => new CalendarEvent(e))}
         currentDate={new Date(currentDate)}
         onDateChange={(date) => dispatch(setCurrentDate(date.toISOString()))}
+        onDataChange={handleDataRefresh}
       />
       {compensationData.length > 0 && (
         <MonthlyCompensationSummary 

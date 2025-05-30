@@ -307,47 +307,36 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   
   // Effect to calculate compensation data
   useEffect(() => {
-    // Define an async function to calculate compensation
     const calculateData = async () => {
-      // Prevent duplicate calculations
       if (pendingCalculation.current) {
         return;
       }
-      
       pendingCalculation.current = true;
       setLoadingDebounced(true);
       
       try {
         logger.info(`Calculating compensation for ${format(currentDate, 'MMMM yyyy')}`);
-        
-        // Calculate compensation data
         const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate);
         
-        // Check if the data has actually changed
-        const dataString = JSON.stringify(result);
-        if (dataString !== previousData.current) {
-          logger.info(`Received ${result.length} compensation items - data changed`);
-          setBreakdown(result);
-          previousData.current = dataString;
-        } else {
-          logger.info('Compensation data unchanged, avoiding rerender');
-        }
+        // ALWAYS set the breakdown when events or currentDate change, as the event list in the panel depends on it.
+        // The previous check (dataString !== previousData.current) was too simplistic as it only considered compensation amounts.
+        logger.info(`Received ${result.length} compensation items. Updating breakdown.`);
+        setBreakdown(result);
+        // previousData.current = JSON.stringify(result); // This specific optimization can be removed or re-evaluated if performance issues arise
         
       } catch (error) {
         logger.error('Error calculating compensation:', error);
-        setBreakdown([]);
+        setBreakdown([]); // Clear breakdown on error
       } finally {
-        // Ensure loading state is cleared
         logger.info('Compensation calculation complete, hiding loading indicator');
         setLoadingDebounced(false);
         pendingCalculation.current = false;
       }
     };
 
-    // Run the calculation
     calculateData();
     
-  }, [events, currentDate, calculatorFacade, setLoadingDebounced]);
+  }, [events, currentDate, calculatorFacade, setLoadingDebounced]); // Dependencies are correct
 
   // Extract breakdown data for the visualization
   const getCompensationData = useCallback((): CompensationData[] => {
