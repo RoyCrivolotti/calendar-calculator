@@ -132,38 +132,31 @@ export class CompensationService {
   /**
    * Calculate monthly compensation breakdown from events and sub-events
    */
-  calculateMonthlyCompensation(events: CalendarEvent[], subEvents: SubEvent[], date: Date, monthKeyFromFacade: string): CompensationBreakdown[] {
-    const monthKeyFromDate = getMonthKey(date); // Cache key and internal filter key
+  calculateMonthlyCompensation(events: CalendarEvent[], subEvents: SubEvent[], date: Date): CompensationBreakdown[] {
+    const monthKey = getMonthKey(date);
     
-    if (monthKeyFromDate !== monthKeyFromFacade) {
-        logger.warn(`[CompensationService] Mismatch between monthKey from date (${monthKeyFromDate}) and monthKeyFromFacade (${monthKeyFromFacade}). Using monthKeyFromFacade for stamping breakdown items.`);
-    }
-    const effectiveMonthKeyForStamping = monthKeyFromFacade;
-
-    const cacheKey = this.generateCacheKey(events, subEvents, monthKeyFromDate);
+    // Generate a simple cache key based on events and sub-events
+    const cacheKey = this.generateCacheKey(events, subEvents, monthKey);
+    
+    // Check if we have a valid cached result
     const cachedResult = this.cache.get(cacheKey);
     if (cachedResult && (Date.now() - cachedResult.timestamp) < this.CACHE_TTL_MS) {
-      logger.debug(`Using cached compensation data for ${monthKeyFromDate}`);
-      // Stamp monthKey on cached results if they don't have it (for backward compatibility during transition)
-      return cachedResult.data.map(item => ({ ...item, monthKey: item.monthKey || effectiveMonthKeyForStamping }));
+      logger.debug(`Using cached compensation data for ${monthKey}`);
+      return cachedResult.data;
     }
     
-    logger.info(`Calculating compensation for month: ${monthKeyFromDate}`);
+    logger.info(`Calculating compensation for month: ${monthKey}`);
     
+    // Filter events for the current month
     const monthEvents = events.filter(event => {
-      const eventStartMonthKey = getMonthKey(new Date(event.start));
-      const eventEndMonthKey = getMonthKey(new Date(event.end));
-      // Event is relevant if it starts in the month OR ends in the month OR spans over the month
-      const firstDayOfTargetMonth = createMonthDate(date);
-      const firstDayOfNextMonth = new Date(firstDayOfTargetMonth); // Create a new Date instance
-      firstDayOfNextMonth.setMonth(firstDayOfTargetMonth.getMonth() + 1);
-
-      return eventStartMonthKey === monthKeyFromDate || 
-             eventEndMonthKey === monthKeyFromDate || 
-             (new Date(event.start) < firstDayOfTargetMonth && new Date(event.end) >= firstDayOfNextMonth);
+      const eventDate = new Date(event.start);
+      const eventMonthKey = getMonthKey(eventDate);
+      const isInMonth = eventMonthKey === monthKey;
+      logger.info(`Event ${event.id} (${event.type}): ${eventDate.toISOString()} is in month ${monthKey}: ${isInMonth}`);
+      return isInMonth;
     });
     
-    logger.info(`Found ${monthEvents.length} events for month ${monthKeyFromDate}`);
+    logger.info(`Found ${monthEvents.length} events for month ${monthKey}`);
     
     // Get all parent event IDs for the month
     const monthEventIds = monthEvents.map(event => event.id);
@@ -174,7 +167,7 @@ export class CompensationService {
       monthEventIds.includes(subEvent.parentEventId)
     );
     
-    logger.info(`Found ${monthSubEvents.length} sub-events for month ${monthKeyFromDate}`);
+    logger.info(`Found ${monthSubEvents.length} sub-events for month ${monthKey}`);
     
     // Debug output for each sub-event if needed (but limit for brevity)
     if (monthSubEvents.length <= 10) {
@@ -335,7 +328,6 @@ export class CompensationService {
         count: oncallEvents.length,
         description: `On-call shifts (${totalWeekdayOnCallHours.toFixed(1)}h weekday, ${totalWeekendOnCallHours.toFixed(1)}h weekend)`,
         month: monthDate,
-        monthKey: effectiveMonthKeyForStamping,
         events: oncallEvents.map(event => {
           // Find if any sub-events for this event are holidays
           const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
@@ -360,7 +352,6 @@ export class CompensationService {
         count: incidentEvents.length,
         description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night, ${totalWeekendNightShiftHours}h weekend night)`,
         month: monthDate,
-        monthKey: effectiveMonthKeyForStamping,
         events: incidentEvents.map(event => {
           // Find if any sub-events for this event are holidays
           const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
@@ -383,7 +374,6 @@ export class CompensationService {
         count: monthEvents.length,
         description: 'Total compensation',
         month: monthDate,
-        monthKey: effectiveMonthKeyForStamping,
         events: monthEvents.map(event => {
           // Find if any sub-events for this event are holidays
           const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
@@ -405,7 +395,6 @@ export class CompensationService {
         count: monthEvents.length,
         description: 'No compensation calculated',
         month: monthDate,
-        monthKey: effectiveMonthKeyForStamping,
         events: monthEvents.map(event => {
           // Find if any sub-events for this event are holidays
           const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
@@ -420,7 +409,7 @@ export class CompensationService {
       });
     }
 
-    logger.debug(`Compensation breakdown for ${monthKeyFromDate}:`, breakdown.map(b => ({
+    logger.debug(`Compensation breakdown for ${monthKey}:`, breakdown.map(b => ({
       type: b.type,
       amount: b.amount,
       month: b.month ? b.month.toISOString() : 'undefined'

@@ -139,6 +139,7 @@ export class CompensationCalculatorFacade {
       const monthKey = getMonthKey(date);
       logger.info(`Calculating compensation via facade for month: ${monthKey}`);
       
+      // Filter events that belong to the current month (either start or end in this month)
       const relevantEvents = events.filter(event => this.eventBelongsToMonth(event, monthKey));
       
       if (relevantEvents.length === 0) {
@@ -146,31 +147,41 @@ export class CompensationCalculatorFacade {
         return [];
       }
       
+      // Process events to handle cross-month events
       const monthEvents: CalendarEvent[] = [];
+      
       for (const event of relevantEvents) {
         if (this.eventSpansAcrossMonths(event)) {
-          monthEvents.push(this.splitEventForMonth(event, monthKey));
+          logger.info(`Event ${event.id} spans across months, splitting for month ${monthKey}`);
+          const splitEvent = this.splitEventForMonth(event, monthKey);
+          monthEvents.push(splitEvent);
         } else {
           monthEvents.push(event);
         }
       }
       
-      logger.info(`Processed ${monthEvents.length} events for month ${monthKey}. Using provided ${allSubEvents.length} sub-events.`);
+      logger.info(`Processed ${monthEvents.length} events for month ${monthKey}`);
       
-      // Filter from the provided allSubEvents based on current monthEvents' IDs AND monthKey
-      const monthEventIds = monthEvents.map(event => event.id);
+      logger.info(`Using provided ${allSubEvents.length} sub-events for calculation.`);
+      
+      // Get relevant event IDs
+      const eventIds = monthEvents.map(event => event.id);
+      
+      // First filter sub-events by parent event ID
       const eventSubEvents = allSubEvents.filter(subEvent => 
-        monthEventIds.includes(subEvent.parentEventId)
+        eventIds.includes(subEvent.parentEventId)
       );
-      const relevantSubEventsForMonth = this.filterSubEventsByMonth(eventSubEvents, monthKey); // filterSubEventsByMonth uses monthKey
       
-      logger.info(`Found ${relevantSubEventsForMonth.length} relevant sub-events for month ${monthKey} from provided list.`);
+      // Then filter sub-events by month
+      const relevantSubEvents = this.filterSubEventsByMonth(eventSubEvents, monthKey);
       
+      logger.info(`Found ${relevantSubEvents.length} relevant sub-events for month ${monthKey}`);
+      
+      // Calculate compensation
       const breakdown = this.compensationService.calculateMonthlyCompensation(
         monthEvents, 
-        relevantSubEventsForMonth, // Pass only the sub-events relevant to this month's events
-        date,
-        monthKey // Pass monthKey for stamping
+        relevantSubEvents,
+        date
       );
       
       return breakdown;

@@ -67,21 +67,6 @@ const calendarSlice = createSlice({
     setEvents: (state, action: PayloadAction<CalendarEventProps[]>) => {
       state.events = action.payload;
     },
-    optimisticallyAddEvent: (state, action: PayloadAction<CalendarEventProps>) => {
-      if (!state.events.find(e => e.id === action.payload.id)) {
-        state.events.push(action.payload);
-      }
-    },
-    finalizeOptimisticEvent: (state, action: PayloadAction<{ tempId: string; finalEvent: CalendarEventProps }>) => {
-      const index = state.events.findIndex(event => event.id === action.payload.tempId);
-      if (index !== -1) {
-        state.events[index] = action.payload.finalEvent;
-      } else {
-        if (!state.events.find(e => e.id === action.payload.finalEvent.id)) {
-            state.events.push(action.payload.finalEvent);
-        }
-      }
-    },
     setCurrentDate: (state, action: PayloadAction<string>) => {
       state.currentDate = action.payload;
     },
@@ -101,15 +86,7 @@ const calendarSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(createEventAsync.fulfilled, (state, action) => {
-        // Instead of just pushing, we now expect 'finalizeOptimisticEvent' 
-        // to be dispatched by the component after this thunk succeeds.
-        // The thunk itself just returns the created event data.
-        // The calling code in Calendar.tsx will handle dispatching finalizeOptimisticEvent.
-        // So, we might not need to do anything directly here if the calling code handles it.
-        // However, if the optimistic add didn't happen, we might want to ensure it's added.
-        // For now, let's assume the component handles replacement via finalizeOptimisticEvent.
-        // Let's remove the direct push to avoid duplicates if finalizeOptimisticEvent is used.
-        // state.events.push(action.payload); 
+        state.events.push(action.payload);
       })
       .addCase(updateEventAsync.fulfilled, (state, action) => {
         const index = state.events.findIndex(event => event.id === action.payload.id);
@@ -125,8 +102,6 @@ const calendarSlice = createSlice({
 
 export const {
   setEvents,
-  optimisticallyAddEvent,
-  finalizeOptimisticEvent,
   setCurrentDate,
   setSelectedEvent,
   setShowEventModal,
