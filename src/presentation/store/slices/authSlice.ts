@@ -4,7 +4,7 @@ import { User as FirebaseUser } from 'firebase/auth'; // Firebase User type
 // Define a serializable User type for the Redux store if needed
 // For simplicity, we can store the relevant parts or the whole FirebaseUser if serializable
 // Or define your own simpler User interface
-interface User {
+export interface User {
   uid: string;
   email: string | null;
   displayName: string | null;

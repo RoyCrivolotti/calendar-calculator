@@ -1,9 +1,14 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import styled from '@emotion/styled';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
-import { storageService } from '../../services/storage';
 import { logger } from '../../../utils/logger';
 import { trackOperation } from '../../../utils/errorHandler';
+import { container } from '../../../config/container';
+import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
+import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
+// ADD: Import for Redux state to get current user (optional, as repos handle it, but good for consistency)
+import { useAppSelector } from '../../store/hooks'; // Assuming standard hook setup
+import { RootState } from '../../store'; // Assuming RootState is exported from store
 import { 
   ChevronRightIcon, 
   DollarIcon,
@@ -115,15 +120,21 @@ interface MonthData {
 
 interface MonthlyCompensationSummaryProps {
   data: CompensationBreakdown[];
+  onDataChange?: () => void; // ADD: Callback for data refresh
 }
 
-const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
+const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data, onDataChange }) => { // ADD: onDataChange to destructuring
   useEffect(() => {
     logger.debug(`MonthlyCompensationSummary received data with ${data.length} items`);
     if (data.length > 0) {
       logger.debug(`Sample data: ${JSON.stringify(data[0])}`);
     }
   }, [data]);
+
+  // ADD: Get repositories and current user
+  const calendarEventRepository = useMemo(() => container.get<CalendarEventRepository>('calendarEventRepository'), []);
+  const subEventRepository = useMemo(() => container.get<SubEventRepository>('subEventRepository'), []);
+  const currentUser = useAppSelector((state: RootState) => state.auth.currentUser); // Get currentUser from Redux
 
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -246,29 +257,57 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   }, []);
 
   const handleConfirmClear = useCallback(async () => {
+    if (!currentUser?.uid) {
+      logger.error('[MonthlySummary] Cannot clear data: User not authenticated.');
+      alert('Error: You must be logged in to clear data.');
+      setShowConfirmModal(false);
+      return;
+    }
+
+    logger.info(`[MonthlySummary] User ${currentUser.uid} initiated clearing of ALL calendar data.`);
+    // ADD: Loading state if this operation is long
+    // setLoading(true); 
+
     try {
       await trackOperation(
-        'ClearAllData',
+        'ClearAllUserData',
         async () => {
-          logger.info('Starting to clear all data');
-      await storageService.clearAllData();
-          logger.info('Successfully cleared all calendar data');
-          return { success: true };
+          const allEvents = await calendarEventRepository.getAll(); // Fetches for current user due to repo design
+          logger.info(`[MonthlySummary] Found ${allEvents.length} events to delete for user ${currentUser.uid}.`);
+
+          if (allEvents.length === 0) {
+            logger.info('[MonthlySummary] No events to delete.');
+            return { success: true, itemsCleared: 0 };
+          }
+
+          // Consider batching these deletes in the repository for performance if many events
+          for (const event of allEvents) {
+            await subEventRepository.deleteByParentId(event.id); // Delete associated sub-events
+            await calendarEventRepository.delete(event.id);     // Delete the main event
+            logger.debug(`[MonthlySummary] Deleted event ${event.id} and its sub-events.`);
+          }
+          
+          logger.info(`[MonthlySummary] Successfully cleared ${allEvents.length} events and their sub-events for user ${currentUser.uid}.`);
+          if (onDataChange) {
+            onDataChange(); // Notify parent to refresh data
+          }
+          return { success: true, itemsCleared: allEvents.length };
         },
-        { 
-          operation: 'data_clearing',
-          userTriggered: true 
+        {
+          source: 'MonthlyCompensationSummary.ClearAll',
+          userId: currentUser.uid
         }
       );
-      
-      window.location.reload();
+      alert('All your calendar data has been successfully cleared.');
     } catch (error) {
-      logger.error('Failed to clear calendar data:', error);
-      alert('Failed to clear data. See console for details.');
+      logger.error('[MonthlySummary] Error clearing all user data:', error);
+      alert('An error occurred while clearing your data. Please try again.');
     } finally {
+      // setLoading(false);
       setShowConfirmModal(false);
+      setSelectedMonth(null); // Reset selected month as data context has changed
     }
-  }, []);
+  }, [currentUser, calendarEventRepository, subEventRepository, onDataChange, trackOperation]);
 
   const handleCancelClear = useCallback(() => {
     setShowConfirmModal(false);
@@ -535,76 +574,85 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return monthsWithData.findIndex(m => m.date.getTime() === selectedMonth.getTime());
   }, [selectedMonth, monthsWithData]);
 
-  const handleDeleteMonth = useCallback(async () => {
-    if (!selectedMonth) return;
-    
-    const monthName = formatMonthYear(selectedMonth);
-    logger.info(`Attempting to delete all events for month: ${monthName}`);
-    
-    try {
-      await trackOperation(
-        `DeleteMonth(${monthName})`,
-        async () => {
-          const allEvents = await storageService.loadEvents();
-          const allSubEvents = await storageService.loadSubEvents();
-          
-          const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
-          const endOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59);
-          
-          const eventsToDelete = allEvents.filter(event => {
-            const eventStart = new Date(event.start);
-            const eventEnd = new Date(event.end);
-            return (
-              (eventStart >= startOfMonth && eventStart <= endOfMonth) ||
-              (eventEnd >= startOfMonth && eventEnd <= endOfMonth) ||
-              (eventStart <= startOfMonth && eventEnd >= endOfMonth)
-            );
-          });
-          
-          const deletedEventIds = eventsToDelete.map(event => event.id);
-          logger.debug(`Found ${deletedEventIds.length} events to delete for month ${monthName}`);
-          
-          const remainingEvents = allEvents.filter(event => !deletedEventIds.includes(event.id));
-          await storageService.saveEvents(remainingEvents);
-          
-          const subEventsToDelete = allSubEvents.filter(subEvent => 
-            deletedEventIds.includes(subEvent.parentEventId)
-          );
-          
-          const deletedSubEventsCount = subEventsToDelete.length;
-          logger.debug(`Found ${deletedSubEventsCount} sub-events to delete`);
-          
-          const remainingSubEvents = allSubEvents.filter(subEvent => 
-            !deletedEventIds.includes(subEvent.parentEventId)
-          );
-          await storageService.saveSubEvents(remainingSubEvents);
-          
-          return { deletedEvents: deletedEventIds.length, deletedSubEvents: deletedSubEventsCount };
-        },
-        {
-          monthName,
-          monthDate: selectedMonth.toISOString(),
-          operation: 'month_deletion'
-        }
-      );
-      
-      setShowDeleteMonthModal(false);
-      window.location.reload();
-    } catch (error) {
-      logger.error('Failed to delete month events:', error);
-      alert(`Failed to delete events for ${monthName}. See console for details.`);
-      setShowDeleteMonthModal(false);
+  const handleDeleteMonthData = useCallback(async () => {
+    if (!selectedMonth) {
+      logger.warn('No month selected for deletion attempt.');
+      return;
     }
-  }, [selectedMonth]);
-
-  const handleOpenDeleteMonthModal = useCallback(() => {
-    if (!selectedMonth) return;
-    logger.info(`Opening delete confirmation modal for month: ${formatMonthYear(selectedMonth)}`);
     setShowDeleteMonthModal(true);
   }, [selectedMonth]);
 
-  const handleCloseDeleteMonthModal = useCallback(() => {
-    logger.info('User cancelled month deletion');
+  const handleConfirmDeleteMonth = useCallback(async () => {
+    if (!selectedMonth) {
+      logger.error('[MonthlySummary] Confirmation to delete month data, but no month is selected.');
+      setShowDeleteMonthModal(false);
+      return;
+    }
+    if (!currentUser?.uid) {
+      logger.error('[MonthlySummary] Cannot delete month data: User not authenticated.');
+      alert('Error: You must be logged in to delete data.');
+      setShowDeleteMonthModal(false);
+      return;
+    }
+
+    const monthToClear = new Date(selectedMonth);
+    logger.info(`[MonthlySummary] User ${currentUser.uid} initiated deletion of data for month: ${formatMonthYear(monthToClear)}.`);
+    // ADD: Loading state if this operation is long
+    // setLoading(true);
+
+    try {
+      await trackOperation(
+        'DeleteMonthUserData',
+        async () => {
+          const allUserEvents = await calendarEventRepository.getAll(); // Fetches for current user
+
+          const monthStart = new Date(monthToClear.getFullYear(), monthToClear.getMonth(), 1, 0, 0, 0, 0);
+          const monthEnd = new Date(monthToClear.getFullYear(), monthToClear.getMonth() + 1, 0, 23, 59, 59, 999);
+
+          const eventsToDelete = allUserEvents.filter(event => {
+            const eventStart = event.start; // Already Date objects from Firestore repository
+            const eventEnd = event.end;     // Already Date objects
+            // Check if event overlaps with the selected month
+            return eventStart <= monthEnd && eventEnd >= monthStart;
+          });
+
+          logger.info(`[MonthlySummary] Found ${eventsToDelete.length} events in ${formatMonthYear(monthToClear)} to delete for user ${currentUser.uid}.`);
+
+          if (eventsToDelete.length === 0) {
+            logger.info(`[MonthlySummary] No events to delete in ${formatMonthYear(monthToClear)}.`);
+            return { success: true, itemsCleared: 0 };
+          }
+
+          for (const event of eventsToDelete) {
+            await subEventRepository.deleteByParentId(event.id);
+            await calendarEventRepository.delete(event.id);
+            logger.debug(`[MonthlySummary] Deleted event ${event.id} (month: ${formatMonthYear(monthToClear)}) and its sub-events.`);
+          }
+
+          logger.info(`[MonthlySummary] Successfully cleared ${eventsToDelete.length} events for month ${formatMonthYear(monthToClear)} for user ${currentUser.uid}.`);
+          if (onDataChange) {
+            onDataChange(); // Notify parent to refresh data
+          }
+          return { success: true, itemsCleared: eventsToDelete.length };
+        },
+        {
+          source: 'MonthlyCompensationSummary.DeleteMonth',
+          userId: currentUser.uid,
+          month: formatMonthYear(monthToClear)
+        }
+      );
+      alert(`Successfully deleted all events for ${formatMonthYear(monthToClear)}.`);
+    } catch (error) {
+      logger.error(`[MonthlySummary] Error deleting data for month ${formatMonthYear(monthToClear)}:`, error);
+      alert(`An error occurred while deleting data for ${formatMonthYear(monthToClear)}. Please try again.`);
+    } finally {
+      // setLoading(false);
+      setShowDeleteMonthModal(false);
+      setSelectedMonth(null); // Reset selected month as data context has changed
+    }
+  }, [selectedMonth, currentUser, calendarEventRepository, subEventRepository, onDataChange, trackOperation]);
+
+  const handleCancelDeleteMonth = useCallback(() => {
     setShowDeleteMonthModal(false);
   }, []);
 
@@ -816,7 +864,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <p style={{ color: '#64748b', margin: '0 0 1rem 0', fontSize: '0.875rem' }}>
                 Remove all events for this month, including events that overlap with other months.
               </p>
-              <Button style={{ width: 'fit-content' }} variant="danger" onClick={handleOpenDeleteMonthModal}>
+              <Button style={{ width: 'fit-content' }} variant="danger" onClick={handleDeleteMonthData}>
                 Remove All Events for {formatMonthYear(selectedMonth)}
               </Button>
             </DeleteMonthSection>
@@ -843,7 +891,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       )}
 
       {showDeleteMonthModal && selectedMonth && (
-        <Modal isOpen={showDeleteMonthModal} onClose={handleCloseDeleteMonthModal}>
+        <Modal isOpen={showDeleteMonthModal} onClose={handleCancelDeleteMonth}>
           <ModalHeader>
             <ModalTitle>Remove All Events for {formatMonthYear(selectedMonth)}?</ModalTitle>
           </ModalHeader>
@@ -855,10 +903,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             </p>
           </ModalBody>
           <ModalFooter>
-            <Button variant="secondary" onClick={handleCloseDeleteMonthModal}>
+            <Button variant="secondary" onClick={handleCancelDeleteMonth}>
                 Cancel
             </Button>
-            <Button variant="danger" onClick={handleDeleteMonth}>
+            <Button variant="danger" onClick={handleConfirmDeleteMonth}>
                 Remove Events
             </Button>
           </ModalFooter>

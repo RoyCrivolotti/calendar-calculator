@@ -1,45 +1,44 @@
-import { db, auth } from '../../firebaseConfig'; // Corrected path
+import { db, auth } from '../../firebaseConfig';
 import {
   collection,
   doc,
-  // addDoc, // addDoc is not used if IDs are predefined from CalendarEvent
   setDoc,
-  // getDoc, // getDoc is not used if getAll fetches all and filters client-side, or specific queries are used
   getDocs,
   deleteDoc,
-  query,
-  // where, // where is not used in the current basic getAll implementation
   Timestamp,
   writeBatch,
 } from 'firebase/firestore';
-import { CalendarEvent, CalendarEventProps } from '../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent } from '../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../domain/calendar/repositories/CalendarEventRepository';
-import { logger } from '../../utils/logger'; // Corrected path
+import { logger } from '../../utils/logger';
 
-// Helper to get current user UID
 const getCurrentUserId = (): string | null => {
   return auth.currentUser ? auth.currentUser.uid : null;
 };
 
-// Firestore data converters (optional but good practice for complex objects)
 const calendarEventConverter = {
-  toFirestore: (event: CalendarEvent): any => { // Return type can be more generic for Firestore
-    const jsonData = event.toJSON(); // Gets start/end as ISO strings
-    return {
-      ...jsonData,
-      start: Timestamp.fromDate(new Date(jsonData.start as string)), // Convert ISO string to Date, then to Timestamp
-      end: Timestamp.fromDate(new Date(jsonData.end as string)),     // Convert ISO string to Date, then to Timestamp
+  toFirestore: (event: CalendarEvent): any => {
+    const jsonData = event.toJSON();
+    const firestoreData: any = {
+      id: jsonData.id,
+      start: Timestamp.fromDate(new Date(jsonData.start as string)),
+      end: Timestamp.fromDate(new Date(jsonData.end as string)),
+      type: jsonData.type,
     };
+    if (jsonData.title !== undefined) {
+      firestoreData.title = jsonData.title;
+    } else {
+    }
+
+    return firestoreData;
   },
   fromFirestore: (
-    snapshot: any, // firebase.firestore.QueryDocumentSnapshot
-    options: any   // firebase.firestore.SnapshotOptions
+    snapshot: any,
+    options: any
   ): CalendarEvent => {
     const data = snapshot.data(options);
-    // Firestore returns Timestamps; CalendarEvent constructor expects Date | string
-    // So, convert Timestamps to Date objects
     return new CalendarEvent({
-      id: snapshot.id, // Use document ID as event ID
+      id: snapshot.id,
       type: data.type,
       title: data.title,
       start: (data.start as Timestamp).toDate(),
@@ -51,7 +50,6 @@ const calendarEventConverter = {
 export class FirestoreCalendarEventRepository implements CalendarEventRepository {
   private getEventsCollection(userId: string) {
     if (!userId) throw new Error('User ID is required to access events collection.');
-    // Apply the converter at the collection level
     return collection(db, `users/${userId}/events`).withConverter(calendarEventConverter);
   }
 
@@ -64,13 +62,9 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
     if (!events || events.length === 0) return;
 
     const batch = writeBatch(db);
-    // No need to get eventsCollection here, doc refs can be created with converter directly
-    // const eventsCollection = this.getEventsCollection(userId); 
-
+    
     events.forEach(event => {
-      // Create a doc ref with the specific user's collection path and event ID, applying the converter
       const eventRef = doc(db, `users/${userId}/events/${event.id}`).withConverter(calendarEventConverter);
-      // The 'event' object is automatically converted by toFirestore via withConverter
       batch.set(eventRef, event, { merge: true }); 
     });
 
@@ -93,7 +87,6 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
 
     try {
       const querySnapshot = await getDocs(eventsCollectionWithConverter);
-      // Data is automatically converted by fromFirestore via withConverter
       const events = querySnapshot.docs.map(docSnap => docSnap.data());
       logger.info(`[FirestoreRepo] Fetched ${events.length} events for user ${userId}`);
       return events;
@@ -109,7 +102,6 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       logger.error('[FirestoreRepo] User not authenticated to delete event.');
       throw new Error('User not authenticated.');
     }
-    // Create a doc ref with the specific user's collection path and event ID
     const eventRef = doc(db, `users/${userId}/events/${id}`);
     try {
       await deleteDoc(eventRef);
@@ -126,10 +118,8 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       logger.error('[FirestoreRepo] User not authenticated to update event.');
       throw new Error('User not authenticated.');
     }
-    // Create a doc ref with the specific user's collection path and event ID, applying the converter
     const eventRef = doc(db, `users/${userId}/events/${event.id}`).withConverter(calendarEventConverter);
     try {
-      // The 'event' object is automatically converted by toFirestore via withConverter
       await setDoc(eventRef, event, { merge: true }); 
       logger.info(`[FirestoreRepo] Updated event ${event.id} for user ${userId}`);
     } catch (error) {

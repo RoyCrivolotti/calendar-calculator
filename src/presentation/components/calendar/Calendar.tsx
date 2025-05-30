@@ -13,6 +13,7 @@ const EventDetailsModal = lazy(() => import('./EventDetailsModal'));
 const HolidayConflictModal = lazy(() => import('./HolidayConflictModal'));
 const HolidayDeleteModal = lazy(() => import('./HolidayDeleteModal'));
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { RootState } from '../../store';
 import {
   setCurrentDate,
   setSelectedEvent,
@@ -20,14 +21,18 @@ import {
   setEvents,
   createEventAsync,
   updateEventAsync,
-  deleteEventAsync
+  deleteEventAsync,
 } from '../../store/slices/calendarSlice';
-import { storageService } from '../../services/storage';
+import { User } from '../../store/slices/authSlice';
+import { container } from '../../../config/container';
+import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
+import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
 import { logger } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { trackOperation } from '../../../utils/errorHandler';
+import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
 
 const CalendarContainer = styled.div`
   display: flex;
@@ -53,11 +58,12 @@ const ModalLoadingFallback = styled.div`
 const Calendar: React.FC = () => {
   const dispatch = useAppDispatch();
   const {
-    events,
+    events: currentEventsFromStore,
     currentDate,
     selectedEvent,
     showEventModal,
-  } = useAppSelector(state => state.calendar);
+  } = useAppSelector((state: RootState) => state.calendar);
+  const currentUser = useAppSelector((state: RootState) => state.auth.currentUser);
   const [compensationData, setCompensationData] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -66,7 +72,10 @@ const Calendar: React.FC = () => {
   const [pendingEventSave, setPendingEventSave] = useState<CalendarEvent | null>(null);
   const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
   const [isHolidayConflict, setIsHolidayConflict] = useState(false);
-  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
+  const calculatorFacade = useMemo(() => {
+    const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+    return CompensationCalculatorFacade.getInstance(subEventRepo);
+  }, []);
   
   // Create a ref to store the timeout ID for debouncing
   const updateCompensationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -82,17 +91,39 @@ const Calendar: React.FC = () => {
   }, [setCompensationData]);
 
   useEffect(() => {
-    const loadEvents = async () => {
-      const loadedEvents = await storageService.loadEvents();
-      dispatch(setEvents(loadedEvents.map(event => event.toJSON())));
+    const loadEventsFromFirestore = async () => {
+      if (!currentUser || !currentUser.uid) {
+        logger.info('[Calendar] No authenticated user or UID. Skipping Firestore event load.');
+        dispatch(setEvents([]));
+        return;
+      }
+
+      logger.info(`[Calendar] Authenticated user ${currentUser.uid}. Loading events from Firestore...`);
+      try {
+        const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
+        const firestoreEvents = await eventRepo.getAll();
+        dispatch(setEvents(firestoreEvents.map(event => event.toJSON())));
+        logger.info(`[Calendar] Loaded ${firestoreEvents.length} events from Firestore.`);
+
+        // Example: If sub-events were also loaded globally for the calendar (adjust as per your app logic)
+        // const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+        // const firestoreSubEvents = await subEventRepo.getAll(); // Or based on current user
+        // dispatch(setSubEvents(firestoreSubEvents.map(subEvent => subEvent.toJSON()))); // Assuming a setSubEvents action
+        // logger.info(`[Calendar] Loaded ${firestoreSubEvents.length} sub-events from Firestore.`);
+
+      } catch (error) {
+        logger.error('[Calendar] Error loading events from Firestore:', error);
+        dispatch(setEvents([]));
+      }
     };
-    loadEvents();
-  }, [dispatch]);
+
+    loadEventsFromFirestore();
+  }, [dispatch, currentUser]);
   
   const updateCompensationData = useCallback(async () => {
-    logger.info('Events available for compensation calculation:', events.length);
+    logger.info('Events available for compensation calculation:', currentEventsFromStore.length);
     
-    if (events.length === 0) {
+    if (currentEventsFromStore.length === 0) {
       logger.info('No events available for compensation calculation');
       setCompensationDataRef.current([]);
       return;
@@ -105,7 +136,7 @@ const Calendar: React.FC = () => {
       const months = new Set<string>();
       
       // Scan through all events to find all months, including events that span across months
-      events.forEach(event => {
+      currentEventsFromStore.forEach(event => {
         const startDate = new Date(event.start);
         const endDate = new Date(event.end);
         
@@ -133,7 +164,7 @@ const Calendar: React.FC = () => {
       const allData: CompensationBreakdown[] = [];
       
       // Convert events to CalendarEvent objects for the facade
-      const calendarEvents = events.map(event => new CalendarEvent(event));
+      const calendarEvents = currentEventsFromStore.map(event => new CalendarEvent(event));
       
       // For each month with events, calculate compensation using the facade
       for (const monthKey of Array.from(months)) {
@@ -166,7 +197,7 @@ const Calendar: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [events, calculatorFacade, getMonthKey, logger]);
+  }, [currentEventsFromStore, calculatorFacade, getMonthKey, logger]);
   
   // Debounced version of updateCompensationData to prevent flickering
   const debouncedUpdateCompensationData = useCallback(() => {
@@ -198,7 +229,7 @@ const Calendar: React.FC = () => {
       }
     );
 
-    const eventToUpdate = events.find(e => e.id === eventDataFromWrapper.id);
+    const eventToUpdate = currentEventsFromStore.find(e => e.id === eventDataFromWrapper.id);
     if (!eventToUpdate) {
       logger.warn(`[Calendar] Event with ID ${eventDataFromWrapper.id} not found for update.`);
       return;
@@ -273,21 +304,21 @@ const Calendar: React.FC = () => {
     );
     dispatch(updateEventAsync(updatedEventProps));
 
-  }, [dispatch, events, logger]);
+  }, [dispatch, currentEventsFromStore, logger]);
 
   // Update compensation data when events or current date changes
   useEffect(() => {
     debouncedUpdateCompensationData();
-  }, [events, currentDate, debouncedUpdateCompensationData]);
+  }, [currentEventsFromStore, currentDate, debouncedUpdateCompensationData]);
 
   const handleEventClick = useCallback((clickInfo: EventClickArg) => {
-    const event = events.find(e => e.id === clickInfo.event.id);
+    const event = currentEventsFromStore.find(e => e.id === clickInfo.event.id);
     if (event) {
       logger.info(`User clicked event: ${event.id} (${event.type})`);
       dispatch(setSelectedEvent(event));
       dispatch(setShowEventModal(true));
     }
-  }, [events, dispatch]);
+  }, [currentEventsFromStore, dispatch]);
 
   const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
     let effectiveStart = new Date(selectInfo.start);
@@ -369,7 +400,7 @@ const Calendar: React.FC = () => {
       const calendarApi = calendarRef.current.getApi();
       calendarApi.unselect();
     }
-  }, [dispatch, events, logger, calendarRef]);
+  }, [dispatch, currentEventsFromStore, logger, calendarRef]);
 
   const handleViewChange = useCallback((info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => {
     logger.info(`Calendar view changed to: ${info.start.toISOString()} - ${info.end.toISOString()}`);
@@ -405,74 +436,67 @@ const Calendar: React.FC = () => {
    * @param skipHolidaySave if true, assumes the holiday is already saved and doesn't save it again
    */
   const regenerateConflictingSubEvents = async (
-    holidayEvent: CalendarEvent, 
-    conflictingEvents: CalendarEventProps[],
+    holidayEvent: CalendarEvent,
+    conflictingEventsProps: CalendarEventProps[],
     skipHolidaySave: boolean = false
   ): Promise<void> => {
-    try {
-      logger.info(`Regenerating sub-events for ${conflictingEvents.length} events that conflict with holiday ${holidayEvent.id}`);
-      
-      // First, ensure the holiday is saved and fully available in the events list
-      // This is critical - we need to make sure the holiday event is in the events array
-      // before regenerating sub-events that depend on it
-      
-      const holidayProps = holidayEvent.toJSON();
-      const holidayExists = events.some(e => e.id === holidayEvent.id);
-      
-      if (!holidayExists && !skipHolidaySave) {
-        logger.info(`Holiday ${holidayEvent.id} not found in events array, adding it first`);
-        
-        // We need to add the holiday to the local events array first to ensure
-        // the HolidayChecker can find it when regenerating sub-events
-        const updatedEvents = [...events, holidayProps];
-        
-        // Update the Redux store
-        dispatch(setEvents(updatedEvents));
-        
-        // NOTE: We no longer save to storage here - we'll let the caller handle that
-        // This prevents duplicate creation of the same holiday
-      } else {
-        logger.info(`Holiday ${holidayEvent.id} already exists or skipHolidaySave is true, skipping save`);
-      }
-      
-      // Give the system a moment to commit the holiday update
-      // This small delay helps ensure the holiday is available in the events array
-      // before we attempt to regenerate sub-events
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Make sure the holiday is in the events array when we regenerate sub-events
-      const allCurrentEvents = [...events];
-      if (!holidayExists && !allCurrentEvents.some(e => e.id === holidayEvent.id)) {
-        allCurrentEvents.push(holidayProps);
-        logger.info(`Added holiday to local events array for sub-event regeneration`);
-      }
-      
-      // For each conflicting event, we need to "update" it to regenerate sub-events
-      // This will trigger the UpdateEventUseCase which recreates sub-events with the new holiday consideration
-      for (const eventProps of conflictingEvents) {
-        // Skip if it's a holiday itself - we don't need to adjust holidays
-        if (eventProps.type === 'holiday') continue;
-        
-        logger.info(`Regenerating sub-events for ${eventProps.type} event ${eventProps.id}`);
-        
-        // Simply dispatch the update action with the same event properties
-        // The sub-events will be regenerated considering the new holiday
-        dispatch(updateEventAsync({
-          ...eventProps,
-          title: eventProps.title || (eventProps.type === 'oncall' ? 'On-Call Shift' : eventProps.type === 'incident' ? 'Incident' : 'Holiday')
-        }));
-      }
-      
-      // Ensure compensation data is updated after regeneration
-      setTimeout(() => {
-        logger.info('Updating compensation data after holiday-related changes');
-        updateCompensationData();
-      }, 500);
-      
-    } catch (error) {
-      logger.error('Error regenerating conflicting sub-events:', error);
-      alert('There was an error adjusting events. Compensation calculations may be affected.');
+    if (!currentUser) {
+      logger.error('[regenerateConflictingSubEvents] User not authenticated. Aborting.');
+      throw new Error('User not authenticated');
     }
+    logger.info('[regenerateConflictingSubEvents] Starting regeneration...', { holidayEventId: holidayEvent.id, conflictingCount: conflictingEventsProps.length });
+
+    const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
+    const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+    const subEventFactory = container.get<SubEventFactory>('subEventFactory');
+
+    const allCurrentDomainEvents = currentEventsFromStore.map(props => new CalendarEvent(props));
+    const holidayEventIndex = allCurrentDomainEvents.findIndex(e => e.id === holidayEvent.id);
+    if (holidayEventIndex !== -1) {
+      allCurrentDomainEvents[holidayEventIndex] = holidayEvent;
+    } else {
+      allCurrentDomainEvents.push(holidayEvent);
+    }
+
+    const allModifiedSubEvents: SubEvent[] = [];
+    let holidaySubEvents: SubEvent[] = [];
+
+    logger.debug(`[regenerateConflictingSubEvents] Deleting existing sub-events for holiday ${holidayEvent.id}`);
+    await subEventRepo.deleteByParentId(holidayEvent.id);
+    holidaySubEvents = subEventFactory.generateSubEvents(holidayEvent, allCurrentDomainEvents);
+    holidaySubEvents.forEach((sub: SubEvent) => sub.markAsHoliday());
+    allModifiedSubEvents.push(...holidaySubEvents);
+    logger.debug(`[regenerateConflictingSubEvents] Regenerated ${holidaySubEvents.length} sub-events for holiday ${holidayEvent.id}`);
+
+    for (const conflictingEventProps of conflictingEventsProps) {
+      const conflictingEvent = new CalendarEvent(conflictingEventProps);
+      logger.debug(`[regenerateConflictingSubEvents] Processing conflicting event ${conflictingEvent.id}`);
+      
+      await subEventRepo.deleteByParentId(conflictingEvent.id);
+      let newSubEvents = subEventFactory.generateSubEvents(conflictingEvent, allCurrentDomainEvents);
+      
+      newSubEvents.forEach((sub: SubEvent) => {
+        if (sub.start < holidayEvent.end && sub.end > holidayEvent.start) {
+          if(sub.isWeekday){
+            sub.markAsHoliday(); 
+            logger.debug(`[regenerateConflictingSubEvents] Sub-event ${sub.id} for event ${conflictingEvent.id} marked as holiday due to overlap.`);
+          }
+        }
+      });
+      allModifiedSubEvents.push(...newSubEvents);
+      logger.debug(`[regenerateConflictingSubEvents] Regenerated ${newSubEvents.length} sub-events for conflicting event ${conflictingEvent.id}`);
+    }
+
+    if (allModifiedSubEvents.length > 0) {
+      logger.info(`[regenerateConflictingSubEvents] Saving ${allModifiedSubEvents.length} modified sub-events to Firestore...`);
+      await subEventRepo.save(allModifiedSubEvents);
+    }
+
+    if (!skipHolidaySave) {
+      logger.info(`[regenerateConflictingSubEvents] Saving holiday event ${holidayEvent.id} to Firestore...`);
+      await eventRepo.update(holidayEvent);
+    }
+    logger.info('[regenerateConflictingSubEvents] Regeneration complete.');
   };
 
   const saveEventWithoutConflictCheck = useCallback((event: CalendarEvent) => {
@@ -568,7 +592,7 @@ const Calendar: React.FC = () => {
     }
   
     // Find all conflicting events
-    const allConflictingEvents = findConflictingEvents(event, events);
+    const allConflictingEvents = findConflictingEvents(event, currentEventsFromStore);
     logger.info(`Found ${allConflictingEvents.length} total conflicting events`);
     
     if (allConflictingEvents.length > 0) {
@@ -610,7 +634,7 @@ const Calendar: React.FC = () => {
 
     // No relevant conflicts, proceed with save
     saveEventWithoutConflictCheck(event);
-  }, [events, findConflictingEvents, setPendingEventSave, setShowConflictModal, setConflictingEvents, setIsHolidayConflict, saveEventWithoutConflictCheck]);
+  }, [currentEventsFromStore, findConflictingEvents, setPendingEventSave, setShowConflictModal, setConflictingEvents, setIsHolidayConflict, saveEventWithoutConflictCheck]);
 
   const handleConflictModalAdjust = useCallback(async () => {
     // This function adjusts the conflicting events to accommodate the new event
@@ -730,7 +754,7 @@ const Calendar: React.FC = () => {
     // Check if it's a holiday that might affect other events
     if (event.type === 'holiday') {
       // Find all events that conflict with this holiday
-      const allConflictingEvents = findConflictingEvents(event, events);
+      const allConflictingEvents = findConflictingEvents(event, currentEventsFromStore);
       
       // For holidays, filter out other holidays as they don't need regeneration
       const affectedEvents = allConflictingEvents.filter(e => e.type !== 'holiday');
@@ -888,7 +912,7 @@ const Calendar: React.FC = () => {
     logger.debug(`Starting holiday detection analysis for ${dateString}`);
     
     // 1. Check if any holiday events exist for this date
-    const holidayEvents = events.filter(event => {
+    const holidayEvents = currentEventsFromStore.filter(event => {
       if (event.type !== 'holiday') return false;
       
       const eventStart = new Date(event.start);
@@ -913,70 +937,71 @@ const Calendar: React.FC = () => {
     }
     
     // 2. Find all events with sub-events on this date
-    const allSubEvents = storageService.loadSubEvents();
+    // const allSubEvents = storageService.loadSubEvents(); // DEPRECATED USAGE REMOVED
     
     // Wait for the Promise to resolve
-    allSubEvents.then(subEvents => {
+    // allSubEvents.then(subEvents => { // DEPRECATED USAGE REMOVED
       // Filter for sub-events on this date
-      const targetDateCopy = new Date(dateToAnalyze);
-      targetDateCopy.setHours(0, 0, 0, 0);
+      // const targetDateCopy = new Date(dateToAnalyze);
+      // targetDateCopy.setHours(0, 0, 0, 0);
       
-      const relevantSubEvents = subEvents.filter(subEvent => {
-        const subEventDate = new Date(subEvent.start);
-        subEventDate.setHours(0, 0, 0, 0);
-        return subEventDate.getTime() === targetDateCopy.getTime();
-      });
+      // const relevantSubEvents = subEvents.filter(subEvent => {
+      //   const subEventDate = new Date(subEvent.start);
+      //   subEventDate.setHours(0, 0, 0, 0);
+      //   return subEventDate.getTime() === targetDateCopy.getTime();
+      // });
       
-      if (relevantSubEvents.length === 0) {
-        logger.debug(`No sub-events found for ${dateString}`);
-        console.groupEnd();
-        return;
-      }
+      // if (relevantSubEvents.length === 0) {
+      //   logger.debug(`No sub-events found for ${dateString}`);
+      //   console.groupEnd();
+      //   return;
+      // }
       
-      logger.debug(`Found ${relevantSubEvents.length} sub-events for ${dateString}`);
+      // logger.debug(`Found ${relevantSubEvents.length} sub-events for ${dateString}`);
       
       // Group by parent event
-      const subEventsByParent: Record<string, SubEvent[]> = {};
-      relevantSubEvents.forEach(subEvent => {
-        if (!subEventsByParent[subEvent.parentEventId]) {
-          subEventsByParent[subEvent.parentEventId] = [];
-        }
-        subEventsByParent[subEvent.parentEventId].push(subEvent);
-      });
+      // const subEventsByParent: Record<string, SubEvent[]> = {};
+      // relevantSubEvents.forEach(subEvent => {
+      //   if (!subEventsByParent[subEvent.parentEventId]) {
+      //     subEventsByParent[subEvent.parentEventId] = [];
+      //   }
+      //   subEventsByParent[subEvent.parentEventId].push(subEvent);
+      // });
       
       // Analyze each parent event's sub-events
-      Object.entries(subEventsByParent).forEach(([parentId, subEvents]) => {
-        const parentEvent = events.find(e => e.id === parentId);
-        if (!parentEvent) {
-          logger.debug(`Sub-events found for unknown parent: ${parentId}`);
-          return;
-        }
+      // Object.entries(subEventsByParent).forEach(([parentId, subEvents]) => {
+      //   const parentEvent = currentEventsFromStore.find(e => e.id === parentId);
+      //   if (!parentEvent) {
+      //     logger.debug(`Sub-events found for unknown parent: ${parentId}`);
+      //     return;
+      //   }
         
-        logger.debug(`Event: ${parentEvent.id} (${parentEvent.type})`);
+      //   logger.debug(`Event: ${parentEvent.id} (${parentEvent.type})`);
         
-        // Count how many sub-events have holiday flag set
-        const holidaySubEvents = subEvents.filter(se => se.isHoliday);
-        const weekendSubEvents = subEvents.filter(se => se.isWeekend);
+      //   // Count how many sub-events have holiday flag set
+      //   const holidaySubEvents = subEvents.filter(se => se.isHoliday);
+      //   const weekendSubEvents = subEvents.filter(se => se.isWeekend);
         
-        logger.debug(`- ${subEvents.length} total sub-events`);
-        logger.debug(`- ${holidaySubEvents.length} marked as holiday`);
-        logger.debug(`- ${weekendSubEvents.length} marked as weekend`);
+      //   logger.debug(`- ${subEvents.length} total sub-events`);
+      //   logger.debug(`- ${holidaySubEvents.length} marked as holiday`);
+      //   logger.debug(`- ${weekendSubEvents.length} marked as weekend`);
         
-        if (holidayEvents.length > 0 && holidaySubEvents.length === 0) {
-          logger.warn(`⚠️ ISSUE DETECTED: Event has no holiday sub-events despite holiday existing on ${dateString}`);
-        }
-      });
+      //   if (holidayEvents.length > 0 && holidaySubEvents.length === 0) {
+      //     logger.warn(`⚠️ ISSUE DETECTED: Event has no holiday sub-events despite holiday existing on ${dateString}`);
+      //   }
+      // });
       
       // End the log group
-      console.groupEnd();
-    });
+      // console.groupEnd();
+    logger.warn("Sub-event analysis based on deprecated storageService has been removed from analyzeHolidayDetection.");
+    console.groupEnd();
   };
 
   return (
     <CalendarContainer>
       <CalendarWrapper
         ref={calendarRef}
-        events={events.map(event => new CalendarEvent(event))}
+        events={currentEventsFromStore.map(event => new CalendarEvent(event))}
         onEventClick={handleEventClick}
         onDateSelect={(selectInfo, type) => handleDateSelect(selectInfo, type)}
         onViewChange={handleViewChange}
@@ -984,7 +1009,7 @@ const Calendar: React.FC = () => {
         onEventUpdate={handleEventUpdate}
       />
       <CompensationSection
-        events={events.map(event => new CalendarEvent(event))}
+        events={currentEventsFromStore.map(event => new CalendarEvent(event))}
         currentDate={new Date(currentDate)}
         onDateChange={(date: Date) => dispatch(setCurrentDate(date.toISOString()))}
       />

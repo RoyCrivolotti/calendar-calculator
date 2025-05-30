@@ -5,6 +5,8 @@ import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { logger } from '../../../utils/logger';
+import { container } from '../../../config/container';
+import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { 
   ChevronRightIcon, 
   ListIcon, 
@@ -241,7 +243,10 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
-  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
+  const calculatorFacade = useMemo(() => {
+    const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+    return CompensationCalculatorFacade.getInstance(subEventRepo);
+  }, []);
   
   // Use useSidePanel hook
   const { 
