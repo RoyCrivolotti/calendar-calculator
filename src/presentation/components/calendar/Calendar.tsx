@@ -22,6 +22,8 @@ import {
   createEventAsync,
   updateEventAsync,
   deleteEventAsync,
+  optimisticallyAddEvent,
+  finalizeOptimisticEvent,
 } from '../../store/slices/calendarSlice';
 import { User } from '../../store/slices/authSlice';
 import { container } from '../../../config/container';
@@ -502,77 +504,82 @@ const Calendar: React.FC = () => {
 
   const saveEventWithoutConflictCheck = useCallback((event: CalendarEvent) => {
     const isNewEvent = event.id.startsWith('temp-');
+    const tempId = isNewEvent ? event.id : null;
+
     logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
-    logger.debug(`Event times: ${event.start.toISOString()} - ${event.end.toISOString()}`);
-    logger.debug(`Event title: ${event.title}`);
+    // For existing events or new ones, clear caches before any async operation begins
+    calculatorFacade.clearCaches(); 
     
-    // Clear caches before operation
-    calculatorFacade.clearCaches();
-    
-    // Track the async operation being performed
     let savePromise;
     
-    // New event with a temporary ID, create a new one
-    if (isNewEvent) {
-      const permanentId = crypto.randomUUID();
-      logger.debug(`Converting temp ID ${event.id} to permanent ID ${permanentId}`);
-      
-      const eventToCreateJson = event.toJSON();
-      
-      const eventWithoutTempId = createCalendarEvent({
-        ...eventToCreateJson,
-        id: permanentId
-      });
-      
-      if (!eventWithoutTempId.title) {
-        const defaultTitle = eventWithoutTempId.type === 'oncall' ? 'On-Call Shift' : 
-                            eventWithoutTempId.type === 'incident' ? 'Incident' : 'Holiday';
-        logger.debug(`Setting default title for event: ${defaultTitle}`);
-        eventWithoutTempId.title = defaultTitle;
-      }
-      
-      savePromise = dispatch(createEventAsync(eventWithoutTempId.toJSON())).unwrap();
-    } else {
-      if (!event.title) {
-        const defaultTitle = event.type === 'oncall' ? 'On-Call Shift' : 
-                           event.type === 'incident' ? 'Incident' : 'Holiday';
-        logger.debug(`Setting default title for event: ${defaultTitle}`);
-        event.title = defaultTitle;
-      }
-      
+    if (isNewEvent && tempId) {
+      // 1. Optimistically add to Redux store for quick UI update
+      const optimisticEventProps = event.toJSON();
+      dispatch(optimisticallyAddEvent(optimisticEventProps));
+      logger.info(`Optimistically added event ${tempId} to store.`);
+
+      // 2. Prepare data for backend (no tempId, title should be handled by use case or be present)
+      const eventDataForCreation = {
+        start: event.start.toISOString(),
+        end: event.end.toISOString(),
+        type: event.type,
+        title: event.title, 
+      } as CalendarEventProps; 
+      savePromise = dispatch(createEventAsync(eventDataForCreation)).unwrap();
+    } else { // Existing event update
       const eventToUpdateJson = event.toJSON();
       savePromise = dispatch(updateEventAsync(eventToUpdateJson)).unwrap();
     }
     
-    // Clear modals immediately for better UX
+    // Close modal immediately
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    // After the save completes, ensure compensation data is refreshed
-    savePromise.then(() => {
-      logger.info(`Event ${event.id} saved successfully, updating compensation data`);
+    // Handle promise resolution
+    savePromise.then((resultEventProps: CalendarEventProps) => { // resultEventProps is from createEventAsync or updateEventAsync
+      if (isNewEvent && tempId) {
+        // 3. Finalize the optimistic event with server data
+        logger.info(`Backend save for ${tempId} (now ${resultEventProps.id}) successful.`);
+        dispatch(finalizeOptimisticEvent({ tempId, finalEvent: resultEventProps }));
+        logger.info(`Finalized optimistic event ${tempId} with server data ${resultEventProps.id}.`);
+      } else {
+        // For updates, updateEventAsync.fulfilled reducer handles the store.
+        logger.info(`Event ${resultEventProps.id} updated successfully.`);
+      }
       
-      // Force refresh all calculations
-      calculatorFacade.clearCaches();
-      
-      // Ensure we calculate for all affected months
-      // This is particularly important for events that span across months
+      // 4. Trigger full compensation update and UI refresh AFTER backend confirmation & store finalization
+      //    This uses the existing debounced mechanism which eventually calls updateCompensationData.
+      //    A small delay helps ensure Redux state has propagated before compensation calc.
+      logger.info(`Queueing full compensation update and FullCalendar refresh for event: ${resultEventProps.id}`);
+      calculatorFacade.clearCaches(); // Clear again right before the scheduled update
       setTimeout(() => {
-        updateCompensationData();
-        
-        // Also update the current month view to refresh the display
+        // updateCompensationData(); // This will be called by debouncedUpdateCompensationData triggered by store change
+        // The change in currentEventsFromStore (due to finalizeOptimisticEvent or updateEventAsync.fulfilled)
+        // will trigger the main useEffect, which calls debouncedUpdateCompensationData.
+        // We just need to ensure FullCalendar also sees the changes if it hasn't already.
         if (calendarRef.current) {
-          const calendarApi = calendarRef.current.getApi();
-          calendarApi.refetchEvents();
+          calendarRef.current.getApi().refetchEvents();
+          logger.info('[Calendar] Explicitly refetched FullCalendar events post-save confirmation.');
         }
-      }, 100); // Small delay to ensure state updates have propagated
-      
+        // To be absolutely sure compensation recalculates with latest, explicitly call the debounced version.
+        // This will become the primary trigger for compensation post-CRUD, as the main useEffect 
+        // for currentEventsFromStore will handle it correctly.
+        debouncedUpdateCompensationData();
+      }, 100); 
+
     }).catch(error => {
-      logger.error(`Failed to save event ${event.id}:`, error);
-      // Try to update compensation data anyway
-      setTimeout(updateCompensationData, 100);
+      logger.error(`Failed to save/update event ${event.id}:`, error);
+      if (isNewEvent && tempId) {
+        // Rollback optimistic add on failure by removing the temp event
+        logger.warn(`Rolling back optimistic add for ${tempId} due to save failure.`);
+        // Dispatching deleteEventAsync for a tempId that never made it to backend is fine;
+        // its reducer will just filter it out from the Redux store.
+        dispatch(deleteEventAsync(tempId)); 
+      }
+      // Optionally, still trigger a compensation update/UI refresh on error to ensure consistency
+      setTimeout(() => debouncedUpdateCompensationData(), 100);
     });
-  }, [dispatch, calculatorFacade, updateCompensationData, calendarRef, logger]);
+  }, [dispatch, calculatorFacade, debouncedUpdateCompensationData, logger, calendarRef]);
 
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     // Check for conflicts with other events when updating or creating
@@ -773,26 +780,29 @@ const Calendar: React.FC = () => {
   };
   
   const deleteEventWithoutConfirmation = useCallback((event: CalendarEvent) => {
-    // Clear caches before deleting to ensure fresh calculations
     calculatorFacade.clearCaches();
-    
-    dispatch(deleteEventAsync(event.id));
+    const eventIdToDelete = event.id;
+
+    dispatch(deleteEventAsync(eventIdToDelete)).unwrap().then(() => {
+      logger.info(`Event ${eventIdToDelete} deleted successfully.`);
+      // deleteEventAsync.fulfilled reducer updates the store.
+      // The main useEffect watching currentEventsFromStore will trigger debouncedUpdateCompensationData.
+      // Explicitly call debounced for good measure and FullCalendar refresh.
+      setTimeout(() => {
+        if (calendarRef.current) {
+          calendarRef.current.getApi().refetchEvents();
+          logger.info('[Calendar] Explicitly refetched FullCalendar events post-delete confirmation.');
+        }
+        debouncedUpdateCompensationData();
+      }, 100);
+    }).catch(error => {
+      logger.error(`Failed to delete event ${eventIdToDelete}:`, error);
+      setTimeout(() => debouncedUpdateCompensationData(), 100);
+    });
+
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
-    
-    // Force immediate recalculation of compensation data with a small delay
-    // to ensure state updates have propagated
-    setTimeout(() => {
-      logger.info(`Event ${event.id} deleted, updating compensation data`);
-      updateCompensationData();
-      
-      // Also update the calendar display
-      if (calendarRef.current) {
-        const calendarApi = calendarRef.current.getApi();
-        calendarApi.refetchEvents();
-      }
-    }, 100);
-  }, [dispatch, calculatorFacade, updateCompensationData, calendarRef, logger]);
+  }, [dispatch, calculatorFacade, debouncedUpdateCompensationData, calendarRef, logger]);
   
   const handleDeleteWithRegeneration = async (shouldRegenerateEvents: boolean) => {
     if (!pendingEventDelete || !pendingEventDelete.id) return;

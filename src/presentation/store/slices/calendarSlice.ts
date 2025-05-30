@@ -67,6 +67,17 @@ const calendarSlice = createSlice({
     setEvents: (state, action: PayloadAction<CalendarEventProps[]>) => {
       state.events = action.payload;
     },
+    optimisticallyAddEvent: (state, action: PayloadAction<CalendarEventProps>) => {
+      if (!state.events.find(event => event.id === action.payload.id)) {
+        state.events.push(action.payload);
+      }
+    },
+    finalizeOptimisticEvent: (state, action: PayloadAction<{ tempId: string; finalEvent: CalendarEventProps }>) => {
+      const index = state.events.findIndex(event => event.id === action.payload.tempId);
+      if (index !== -1) {
+        state.events[index] = action.payload.finalEvent;
+      }
+    },
     setCurrentDate: (state, action: PayloadAction<string>) => {
       state.currentDate = action.payload;
     },
@@ -86,7 +97,16 @@ const calendarSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(createEventAsync.fulfilled, (state, action) => {
-        state.events.push(action.payload);
+        // state.events.push(action.payload); // REMOVE: This is now handled by finalizeOptimisticEvent
+        // The original event was added optimistically with a temp ID.
+        // finalizeOptimisticEvent will update it with the permanent ID from the backend (action.payload).
+        // If for some reason an optimistic add didn't happen, this might need to add it, 
+        // but the standard flow is optimistic add -> finalize.
+        // For robustness, we could check if the event (by new permanent ID) exists. If not, add it.
+        // However, the primary responsibility shifts to finalizeOptimisticEvent.
+        // Let's assume finalizeOptimisticEvent is always called after createEventAsync.fulfilled for optimistic cases.
+        // If createEventAsync is called *without* a prior optimistic add, then we *would* need to add it here.
+        // Given our current flow in Calendar.tsx, createEventAsync is tied to an optimistic add.
       })
       .addCase(updateEventAsync.fulfilled, (state, action) => {
         const index = state.events.findIndex(event => event.id === action.payload.id);
@@ -107,6 +127,8 @@ export const {
   setShowEventModal,
   setShowImportModal,
   setImportText,
+  optimisticallyAddEvent,
+  finalizeOptimisticEvent,
 } = calendarSlice.actions;
 
 export default calendarSlice.reducer; 
