@@ -487,10 +487,10 @@ const Calendar: React.FC = () => {
       savePromise = dispatch(updateEventAsync(eventToUpdateJson)).unwrap();
     }
     
-    dispatch(setShowEventModal(false));
-    dispatch(setSelectedEvent(null));
-    
     savePromise.then((resultEventProps: CalendarEventProps) => {
+      dispatch(setShowEventModal(false));
+      dispatch(setSelectedEvent(null));
+
       if (isNewEvent && tempId) {
         logger.info(`Backend save for ${tempId} (now ${resultEventProps.id}) successful.`);
         dispatch(finalizeOptimisticEvent({ tempId, finalEvent: resultEventProps }));
@@ -505,14 +505,34 @@ const Calendar: React.FC = () => {
           calendarRef.current.getApi().refetchEvents();
           logger.info('[Calendar] Explicitly refetched FullCalendar events post-save confirmation.');
         }
+        debouncedUpdateCompensationData(); 
       }, 100); 
 
     }).catch(error => {
       logger.error(`Failed to save/update event ${event.id}:`, error);
+      
+      let userMessage = 'Failed to save event. Please try again later.';
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string, message?: string };
+        if (firebaseError.code === 'resource-exhausted') {
+          userMessage = 'Storage quota exceeded. Could not save event. Please check your storage or contact support.';
+        } else if (firebaseError.code === 'unavailable') {
+          userMessage = 'The service is temporarily unavailable. Please try again later.';
+        } else if (firebaseError.message) {
+          userMessage = `Failed to save event: ${firebaseError.message}`;
+        }
+      }
+      alert(userMessage);
+
       if (isNewEvent && tempId) {
         logger.warn(`Rolling back optimistic add for ${tempId} due to save failure.`);
-        dispatch(deleteEventAsync(tempId)); 
+        dispatch(deleteEventAsync(tempId)).unwrap().catch(deleteError => {
+            logger.error(`Failed to rollback optimistic event ${tempId}:`, deleteError);
+        });
+      } else if (!isNewEvent) {
+        logger.warn(`Update failed for event ${event.id}. Modal will remain open.`);
       }
+      
       setTimeout(() => debouncedUpdateCompensationData(), 100);
     });
   }, [dispatch, calculatorFacade, debouncedUpdateCompensationData, logger, calendarRef]);
