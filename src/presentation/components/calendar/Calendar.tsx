@@ -25,7 +25,6 @@ import {
   optimisticallyAddEvent,
   finalizeOptimisticEvent,
 } from '../../store/slices/calendarSlice';
-import { User } from '../../store/slices/authSlice';
 import { container } from '../../../config/container';
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
@@ -35,6 +34,7 @@ import { getMonthKey } from '../../../utils/calendarUtils';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { trackOperation } from '../../../utils/errorHandler';
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
+import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, Button as SharedButton } from '../common/ui';
 
 const CalendarContainer = styled.div`
   display: flex;
@@ -44,7 +44,6 @@ const CalendarContainer = styled.div`
   gap: 1rem;
 `;
 
-// Simple loading fallback for modals
 const ModalLoadingFallback = styled.div`
   background: rgba(255, 255, 255, 0.9);
   border-radius: 8px;
@@ -75,6 +74,11 @@ const Calendar: React.FC = () => {
   const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
   const [isHolidayConflict, setIsHolidayConflict] = useState(false);
   const [compensationSectionKey, setCompensationSectionKey] = useState(0);
+
+  const [notificationVisible, setNotificationVisible] = useState(false);
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+
   const calculatorFacade = useMemo(() => {
     const subEventRepo = container.get<SubEventRepository>('subEventRepository');
     return CompensationCalculatorFacade.getInstance(subEventRepo);
@@ -511,18 +515,23 @@ const Calendar: React.FC = () => {
     }).catch(error => {
       logger.error(`Failed to save/update event ${event.id}:`, error);
       
-      let userMessage = 'Failed to save event. Please try again later.';
+      let title = 'Save Error';
+      let message = 'Failed to save event. Please try again later.';
       if (error && typeof error === 'object' && 'code' in error) {
         const firebaseError = error as { code: string, message?: string };
         if (firebaseError.code === 'resource-exhausted') {
-          userMessage = 'Storage quota exceeded. Could not save event. Please check your storage or contact support.';
+          title = 'Quota Exceeded';
+          message = 'Storage quota exceeded. Could not save event. Please check your storage or contact support.';
         } else if (firebaseError.code === 'unavailable') {
-          userMessage = 'The service is temporarily unavailable. Please try again later.';
+          title = 'Service Unavailable';
+          message = 'The service is temporarily unavailable. Please try again later.';
         } else if (firebaseError.message) {
-          userMessage = `Failed to save event: ${firebaseError.message}`;
+          message = `Failed to save event: ${firebaseError.message}`;
         }
       }
-      alert(userMessage);
+      setNotificationTitle(title);
+      setNotificationMessage(message);
+      setNotificationVisible(true);
 
       if (isNewEvent && tempId) {
         logger.warn(`Rolling back optimistic add for ${tempId} due to save failure.`);
@@ -799,6 +808,7 @@ const Calendar: React.FC = () => {
   const handleCloseModal = useCallback(() => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
+    setNotificationVisible(false); 
   }, [dispatch]);
 
   const analyzeHolidayDetection = (targetDate?: Date) => {
@@ -895,6 +905,16 @@ const Calendar: React.FC = () => {
             onCancel={handleCancelDelete}
           />
         </Suspense>
+      )}
+      
+      {notificationVisible && (
+        <Modal isOpen={notificationVisible} onClose={() => setNotificationVisible(false)} preventBackdropClose={true}>
+          <ModalHeader><ModalTitle>{notificationTitle}</ModalTitle></ModalHeader>
+          <ModalBody><p>{notificationMessage}</p></ModalBody>
+          <ModalFooter>
+            <SharedButton variant="primary" onClick={() => setNotificationVisible(false)}>OK</SharedButton>
+          </ModalFooter>
+        </Modal>
       )}
     </CalendarContainer>
   );
