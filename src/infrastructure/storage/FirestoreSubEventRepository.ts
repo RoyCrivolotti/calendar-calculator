@@ -14,12 +14,10 @@ import { SubEvent, SubEventProps } from '../../domain/calendar/entities/SubEvent
 import { SubEventRepository } from '../../domain/calendar/repositories/SubEventRepository';
 import { logger } from '../../utils/logger';
 
-// Helper to get current user UID
 const getCurrentUserId = (): string | null => {
   return auth.currentUser ? auth.currentUser.uid : null;
 };
 
-// Firestore data converter for SubEvent
 const subEventConverter = {
   toFirestore: (subEvent: SubEvent): any => {
     const jsonData = subEvent.toJSON();
@@ -30,8 +28,8 @@ const subEventConverter = {
     };
   },
   fromFirestore: (
-    snapshot: any, // firebase.firestore.QueryDocumentSnapshot
-    options: any   // firebase.firestore.SnapshotOptions
+    snapshot: any,
+    options: any
   ): SubEvent => {
     const data = snapshot.data(options);
     return new SubEvent({
@@ -125,7 +123,6 @@ export class FirestoreSubEventRepository implements SubEventRepository {
       throw new Error('User not authenticated.');
     }
 
-    // First, fetch all subEvents for the parentId to get their individual IDs
     const subEventsToDelete = await this.getByParentId(parentId);
     if (subEventsToDelete.length === 0) {
       logger.info(`[FirestoreSubRepo] No subEvents found to delete for parent ${parentId} for user ${userId}`);
@@ -133,7 +130,7 @@ export class FirestoreSubEventRepository implements SubEventRepository {
     }
 
     const batch = writeBatch(db);
-    const subEventsCollectionPath = `users/${userId}/subEvents`; // Path without converter for generic doc ref
+    const subEventsCollectionPath = `users/${userId}/subEvents`;
 
     subEventsToDelete.forEach(subEvent => {
       const subEventRef = doc(db, subEventsCollectionPath, subEvent.id);
@@ -149,7 +146,6 @@ export class FirestoreSubEventRepository implements SubEventRepository {
     }
   }
 
-  // ADD: New method for batch deleting sub-events by multiple parent IDs
   async deleteMultipleByParentIds(parentIds: string[]): Promise<void> {
     const userId = getCurrentUserId();
     if (!userId) {
@@ -161,41 +157,66 @@ export class FirestoreSubEventRepository implements SubEventRepository {
       return;
     }
 
-    // Firestore 'in' query supports up to 30 elements. If more, we need to batch the queries.
-    // However, for simplicity here, we assume parentIds.length will be manageable or
-    // this can be a point of future optimization if parentIds arrays are very large.
-    // A more robust solution for very large arrays would be multiple 'in' queries.
-    const subEventsCollection = this.getSubEventsCollection(userId);
-    const q = query(subEventsCollection, where('parentEventId', 'in', parentIds));
+    const FIRESTORE_IN_QUERY_LIMIT = 30; 
+    const FIRESTORE_WRITE_BATCH_LIMIT = 500;
 
+    const subEventsCollection = this.getSubEventsCollection(userId);
+    const subEventsCollectionPath = `users/${userId}/subEvents`;
     let allSubEventsToDelete: SubEvent[] = [];
-    try {
-      const querySnapshot = await getDocs(q);
-      allSubEventsToDelete = querySnapshot.docs.map(docSnap => docSnap.data());
-    } catch (error) {
-      logger.error(`[FirestoreSubRepo] Error fetching subEvents for parentIds ${parentIds.join(', ')}:`, error);
-      throw error; // Rethrow to stop if we can't fetch the subEvents to delete
+
+    logger.debug(`[FirestoreSubRepo] Initiating batch deletion for ${parentIds.length} parent IDs. Fetching subEvents in chunks of up to ${FIRESTORE_IN_QUERY_LIMIT} parent IDs. Deleting subEvents in batches of up to ${FIRESTORE_WRITE_BATCH_LIMIT}.`);
+
+    for (let i = 0; i < parentIds.length; i += FIRESTORE_IN_QUERY_LIMIT) {
+      const parentIdChunk = parentIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT);
+      
+      const q = query(subEventsCollection, where('parentEventId', 'in', parentIdChunk));
+      try {
+        const querySnapshot = await getDocs(q);
+        const subEventsInChunk = querySnapshot.docs.map(docSnap => docSnap.data()); 
+        allSubEventsToDelete.push(...subEventsInChunk);
+        logger.debug(`[FirestoreSubRepo] Fetched ${subEventsInChunk.length} subEvents for parentId chunk ${Math.floor(i / FIRESTORE_IN_QUERY_LIMIT) + 1}/${Math.ceil(parentIds.length / FIRESTORE_IN_QUERY_LIMIT)} (Parent IDs: ${parentIdChunk.join(', ')})`);
+      } catch (error) {
+        logger.error(`[FirestoreSubRepo] Error fetching subEvents for parentId chunk (Parent IDs: ${parentIdChunk.join(', ')}):`, error);
+        throw error;
+      }
     }
 
     if (allSubEventsToDelete.length === 0) {
-      logger.info(`[FirestoreSubRepo] No subEvents found to delete for parent IDs: ${parentIds.join(', ')}`);
+      logger.info(`[FirestoreSubRepo] No subEvents found to delete for the provided parent IDs: ${parentIds.join(', ')}`);
       return;
     }
+    logger.info(`[FirestoreSubRepo] Fetched a total of ${allSubEventsToDelete.length} subEvents across ${parentIds.length} parent event IDs. Proceeding with deletion.`);
 
-    const batch = writeBatch(db);
-    const subEventsCollectionPath = `users/${userId}/subEvents`;
+    let totalSuccessfullyDeletedCount = 0;
+    for (let i = 0; i < allSubEventsToDelete.length; i += FIRESTORE_WRITE_BATCH_LIMIT) {
+      const batch = writeBatch(db);
+      const subEventChunkToDelete = allSubEventsToDelete.slice(i, i + FIRESTORE_WRITE_BATCH_LIMIT);
+      let operationsInCurrentBatch = 0;
 
-    allSubEventsToDelete.forEach(subEvent => {
-      const subEventRef = doc(db, subEventsCollectionPath, subEvent.id);
-      batch.delete(subEventRef);
-    });
-
-    try {
-      await batch.commit();
-      logger.info(`[FirestoreSubRepo] Batch deleted ${allSubEventsToDelete.length} subEvents for ${parentIds.length} parent events. Parent IDs: ${parentIds.join(', ')}`);
-    } catch (error) {
-      logger.error(`[FirestoreSubRepo] Error batch deleting subEvents for parent IDs ${parentIds.join(', ')}:`, error);
-      throw error;
+      subEventChunkToDelete.forEach(subEvent => {
+        if (subEvent && typeof subEvent.id === 'string' && subEvent.id.length > 0) {
+          const subEventRef = doc(db, subEventsCollectionPath, subEvent.id);
+          batch.delete(subEventRef);
+          operationsInCurrentBatch++;
+        } else {
+          logger.warn('[FirestoreSubRepo] Skipped invalid subEvent (missing or invalid ID) during batch delete. Details:', { subEventData: subEvent });
+        }
+      });
+      
+      if (operationsInCurrentBatch > 0) {
+        try {
+          await batch.commit();
+          totalSuccessfullyDeletedCount += operationsInCurrentBatch;
+          logger.debug(`[FirestoreSubRepo] Committed delete batch ${Math.floor(i / FIRESTORE_WRITE_BATCH_LIMIT) + 1}/${Math.ceil(allSubEventsToDelete.length / FIRESTORE_WRITE_BATCH_LIMIT)}, deleting ${operationsInCurrentBatch} subEvents.`);
+        } catch (error) {
+          logger.error(`[FirestoreSubRepo] Error committing delete batch (attempted ${operationsInCurrentBatch} deletions). Batch ${Math.floor(i / FIRESTORE_WRITE_BATCH_LIMIT) + 1}:`, error);
+          throw error;
+        }
+      } else if (subEventChunkToDelete.length > 0) {
+          logger.debug(`[FirestoreSubRepo] Delete batch ${Math.floor(i / FIRESTORE_WRITE_BATCH_LIMIT) + 1}/${Math.ceil(allSubEventsToDelete.length / FIRESTORE_WRITE_BATCH_LIMIT)} was skipped as it contained no valid operations (chunk size: ${subEventChunkToDelete.length}).`);
+      }
     }
+
+    logger.info(`[FirestoreSubRepo] Batch deletion process completed. Successfully deleted ${totalSuccessfullyDeletedCount} subEvents (out of ${allSubEventsToDelete.length} fetched) related to parent IDs: ${parentIds.join(', ')}.`);
   }
 } 
