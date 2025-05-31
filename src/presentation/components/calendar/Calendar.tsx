@@ -80,20 +80,15 @@ const Calendar: React.FC = () => {
     return CompensationCalculatorFacade.getInstance(subEventRepo);
   }, []);
   
-  // Create a ref to store the timeout ID for debouncing
   const updateCompensationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+  const latestCalculationIdRef = useRef<number>(0);
   const calendarRef = useRef<FullCalendar>(null);
-
-  // Make sure we have a clean, non-stale reference to setCompensationData
   const setCompensationDataRef = useRef(setCompensationData);
   
-  // Update the ref when the function changes
   useEffect(() => {
     setCompensationDataRef.current = setCompensationData;
   }, [setCompensationData]);
 
-  // ADD: Extracted function for loading events
   const refreshCalendarEvents = useCallback(async () => {
     if (!currentUser || !currentUser.uid) {
       logger.info('[Calendar] No authenticated user or UID. Skipping Firestore event load.');
@@ -108,19 +103,24 @@ const Calendar: React.FC = () => {
       logger.info(`[Calendar] Loaded ${firestoreEvents.length} events from Firestore after refresh.`);
     } catch (error) {
       logger.error('[Calendar] Error refreshing events from Firestore:', error);
-      dispatch(setEvents([])); // Clear events on error
+      dispatch(setEvents([]));
     }
   }, [dispatch, currentUser]);
 
   useEffect(() => {
-    refreshCalendarEvents(); // Call the extracted function on initial load/user change
-  }, [refreshCalendarEvents]); // Dependency on the memoized refresh function
+    refreshCalendarEvents();
+  }, [refreshCalendarEvents]);
   
-  const updateCompensationData = useCallback(async () => {
-    logger.info('Events available for compensation calculation:', currentEventsFromStore.length);
+  const updateCompensationData = useCallback(async (calculationId: number) => {
+    logger.info(`updateCompensationData triggered (calcId: ${calculationId})`); 
     
+    if (latestCalculationIdRef.current !== calculationId) {
+      logger.warn(`Stale compensation calculation (id: ${calculationId}), bailing.`);
+      return;
+    }
+
     if (currentEventsFromStore.length === 0) {
-      logger.info('No events available for compensation calculation');
+      logger.info('No events for compensation calculation.');
       setCompensationDataRef.current([]);
       return;
     }
@@ -128,70 +128,61 @@ const Calendar: React.FC = () => {
     setLoading(true);
     
     try {
-      // Get unique months from events
       const months = new Set<string>();
-      
-      // Scan through all events to find all months, including events that span across months
       currentEventsFromStore.forEach(event => {
         const startDate = new Date(event.start);
         const endDate = new Date(event.end);
-        
-        // Check if event spans across months
         if (getMonthKey(startDate) !== getMonthKey(endDate)) {
-          // For events spanning multiple months, add all months in the range
-          let currentDate = new Date(startDate);
-          while (currentDate <= endDate) {
-            const monthKey = getMonthKey(currentDate);
-            months.add(monthKey);
-            // Move to the next month
-            currentDate.setMonth(currentDate.getMonth() + 1);
+          let currentDateIter = new Date(startDate);
+          while (currentDateIter <= endDate) {
+            months.add(getMonthKey(currentDateIter));
+            currentDateIter.setMonth(currentDateIter.getMonth() + 1);
           }
         } else {
-          // For single-month events, just add that month
-          const monthKey = getMonthKey(startDate);
-          months.add(monthKey);
+          months.add(getMonthKey(startDate));
         }
-        
-        logger.debug(`Found event in month(s): ${Array.from(months).join(', ')}`);
       });
       
-      logger.info(`Found ${months.size} unique months with events`);
-      
       const allData: CompensationBreakdown[] = [];
-      
-      // Convert events to CalendarEvent objects for the facade
       const calendarEvents = currentEventsFromStore.map(event => new CalendarEvent(event));
       
-      // For each month with events, calculate compensation using the facade
       for (const monthKey of Array.from(months)) {
+        if (latestCalculationIdRef.current !== calculationId) {
+          logger.warn(`Stale calculation detected mid-process (id: ${calculationId}), bailing.`);
+          setLoading(false);
+          return;
+        }
         const [year, month] = monthKey.split('-').map(Number);
-        const monthDate = new Date(year, month - 1, 1); // Month is 0-indexed in Date constructor
-        monthDate.setHours(0, 0, 0, 0); // Reset time to midnight
+        const monthDate = new Date(year, month - 1, 1);
+        monthDate.setHours(0, 0, 0, 0);
         
-        logger.info(`Calculating compensation for month: ${year}-${month}`);
-        
-        // Use the facade for consistent calculation
         try {
           const monthData = await calculatorFacade.calculateMonthlyCompensation(calendarEvents, monthDate);
           if (monthData.length > 0) {
             allData.push(...monthData);
           }
         } catch (error) {
-          logger.error(`Error calculating compensation for month ${year}-${month}:`, error);
+          logger.error(`Error calculating compensation for month ${monthKey}:`, error);
         }
       }
       
-      logger.debug('All compensation data:', allData);
-      logger.info(`Generated ${allData.length} compensation data items`);
-      
-      // Use the ref to avoid closure issues
-      setCompensationDataRef.current(allData);
+      if (latestCalculationIdRef.current === calculationId) {
+        logger.info(`Compensation data updated (calcId: ${calculationId}, ${allData.length} items).`);
+        setCompensationDataRef.current(allData);
+      } else {
+        logger.warn(`Stale calculation (id: ${calculationId}) before final set state, bailing.`);
+      }
       
     } catch (error) {
-      logger.error('Error in compensation calculation:', error);
-      setCompensationDataRef.current([]);
+      logger.error(`Error in updateCompensationData (calcId: ${calculationId}):`, error);
+      if (latestCalculationIdRef.current === calculationId) {
+        setCompensationDataRef.current([]);
+      }
     } finally {
-      setLoading(false);
+      if (latestCalculationIdRef.current === calculationId || currentEventsFromStore.length === 0) {
+        setLoading(false);
+      }
+      logger.info(`updateCompensationData finished (calcId: ${calculationId})`); 
     }
   }, [currentEventsFromStore, calculatorFacade, getMonthKey, logger]);
   
@@ -199,27 +190,26 @@ const Calendar: React.FC = () => {
     if (updateCompensationTimeoutRef.current) {
       clearTimeout(updateCompensationTimeoutRef.current);
     }
+    latestCalculationIdRef.current += 1;
+    const currentCalculationId = latestCalculationIdRef.current;
     calculatorFacade.clearCaches();
+    
     updateCompensationTimeoutRef.current = setTimeout(() => {
-      updateCompensationData();
+      updateCompensationData(currentCalculationId);
     }, 300);
   }, [calculatorFacade, updateCompensationData]);
 
-  // ADD: Handler for onDataChange from MonthlyCompensationSummary
   const handleDataRefresh = useCallback(async () => {
     logger.info('[Calendar] Data changed in summary, triggering full refresh.');
     await refreshCalendarEvents();
     debouncedUpdateCompensationData();
-    // ADD: Explicitly refetch events for FullCalendar instance
     if (calendarRef.current) {
       const calendarApi = calendarRef.current.getApi();
       calendarApi.refetchEvents();
       logger.info('[Calendar] Explicitly refetched FullCalendar events after data refresh.');
     }
-    setCompensationSectionKey(prev => prev + 1);
   }, [refreshCalendarEvents, debouncedUpdateCompensationData, calendarRef]);
 
-  // Add this new simple handler for onEventUpdate
   const handleEventUpdate = useCallback((eventDataFromWrapper: { id: string; start: Date; end: Date | null; viewType: string }) => {
     logger.info(
       `%c[Calendar] handleEventUpdate for [${eventDataFromWrapper.viewType}] view, event ID: ${eventDataFromWrapper.id}`,
@@ -256,41 +246,34 @@ const Calendar: React.FC = () => {
     
     logger.info(`[Calendar] Original event type: ${eventToUpdate.type}. Before logic - Parsed newStart: ${newStart.toISOString()}, Parsed newEnd: ${newEnd.toISOString()}`);
 
-    // --- Apply Business Logic based on viewType and eventType ---
     if (eventDataFromWrapper.viewType === 'dayGridMonth') {
       logger.info('[Calendar] Applying DAY_GRID_MONTH logic');
       if (eventToUpdate.type === 'holiday') {
-        // Holidays in month view: FullCalendar gives 00:00 on start day to 00:00 on day *after* end day.
-        // We want start of first day to end of last day.
         newStart.setHours(0, 0, 0, 0);
-        newEnd = new Date(newEnd.setDate(newEnd.getDate() -1)); // Make end inclusive of the last day cell dropped on
+        newEnd = new Date(newEnd.setDate(newEnd.getDate() -1));
         newEnd.setHours(23, 59, 59, 999);
         logger.info(`  Holiday in Month: Set to full days. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
       } else if (eventToUpdate.type === 'oncall') {
-        // On-Call in Month View: Start at 9 AM on the new start day, maintain original duration.
         const originalEventStart = new Date(eventToUpdate.start);
         const originalEventEnd = new Date(eventToUpdate.end);
         const durationMs = originalEventEnd.getTime() - originalEventStart.getTime();
         
-        newStart.setHours(9, 0, 0, 0); // Set to 9 AM on the (FullCalendar-provided) start day
+        newStart.setHours(9, 0, 0, 0);
         newEnd = new Date(newStart.getTime() + durationMs);
         logger.info(`  On-Call in Month: Set to 9AM start, maintained duration. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
       } else if (eventToUpdate.type === 'incident') {
-        // Incident in Month View: Maintain original time of day and duration, shift to new start date.
         const originalEventStart = new Date(eventToUpdate.start);
         const originalEventEnd = new Date(eventToUpdate.end);
         const durationMs = originalEventEnd.getTime() - originalEventStart.getTime();
         const originalStartHour = originalEventStart.getHours();
         const originalStartMinutes = originalEventStart.getMinutes();
 
-        newStart.setHours(originalStartHour, originalStartMinutes, 0, 0); // Apply original time to new date
+        newStart.setHours(originalStartHour, originalStartMinutes, 0, 0);
         newEnd = new Date(newStart.getTime() + durationMs);
         logger.info(`  Incident in Month: Maintained time/duration. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
       }
     } else if (eventDataFromWrapper.viewType === 'timeGridWeek') {
       logger.info('[Calendar] Applying TIME_GRID_WEEK logic - using precise times from FC.');
-      // For on-call and incidents, we use the precise times from FC (already in newStart, newEnd)
-      // No changes needed here as this was the part that worked perfectly.
     } else {
       logger.warn(`[Calendar] Unknown viewType: ${eventDataFromWrapper.viewType} - using direct times.`);
     }
@@ -309,7 +292,6 @@ const Calendar: React.FC = () => {
 
   }, [dispatch, currentEventsFromStore, logger]);
 
-  // Update compensation data when events or current date changes
   useEffect(() => {
     debouncedUpdateCompensationData();
   }, [currentEventsFromStore, currentDate, debouncedUpdateCompensationData]);
@@ -325,42 +307,27 @@ const Calendar: React.FC = () => {
 
   const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
     let effectiveStart = new Date(selectInfo.start);
-    let effectiveEnd = new Date(selectInfo.end); // This is exclusive from FullCalendar
+    let effectiveEnd = new Date(selectInfo.end);
     
     if (type === 'holiday') {
       effectiveStart.setHours(0, 0, 0, 0);
-      // selectInfo.end is exclusive (e.g., start of the day AFTER the selection ends).
-      // To make it inclusive (end of the last selected day), we subtract 1 millisecond.
       effectiveEnd = new Date(effectiveEnd.getTime() - 1);
-      effectiveEnd.setHours(23, 59, 59, 999); // Ensure it's the very end of that day
+      effectiveEnd.setHours(23, 59, 59, 999);
     } else if (type === 'oncall') {
       const calendarApi = calendarRef.current?.getApi();
       const viewType = calendarApi?.view.type;
 
       if (viewType === 'dayGridMonth' || selectInfo.allDay) { 
-        effectiveStart.setHours(0, 0, 0, 0);
-        // effectiveEnd from selectInfo.end is already exclusive (start of next day),
-        // which is correct for an on-call shift that runs 00:00 to 00:00.
-        // No change to effectiveEnd needed here if it's already what we want for 00:00 next day.
-      } else { // Week view (timed selection) - default to full day(s)
+      } else {
         effectiveStart.setHours(0, 0, 0, 0);
       
-        // If it's a single day selection in week view, make it end 00:00 next day
-        // FullCalendar's selectInfo.end for a timed selection will be the *exact* end time.
-        // If start and end are on different days, FC's selectInfo.end might already be 00:00 of next day if dragged to midnight.
-        // Let's make it simpler: if it's a oncall selection, set it to full days selected.
         let inclusiveEndDay = new Date(selectInfo.end);
-        // If end is 00:00:00, it means it's the start of that day.
-        // If it's something like 03:00, we want the end of *that* day for our inclusive calculation.
         if (inclusiveEndDay.getHours() === 0 && inclusiveEndDay.getMinutes() === 0 && inclusiveEndDay.getSeconds() === 0 && inclusiveEndDay.getMilliseconds() === 0) {
-            // If it's exactly midnight, it means it's the *start* of the exclusive end day.
-            // So, to get the end of the *previous* (selected) day, subtract 1ms.
             inclusiveEndDay = new Date(inclusiveEndDay.getTime() - 1);
         }
-        // Now inclusiveEndDay is definitely within the last selected day.
         effectiveEnd = new Date(inclusiveEndDay);
-        effectiveEnd.setDate(inclusiveEndDay.getDate() + 1); // Go to start of next day
-        effectiveEnd.setHours(0, 0, 0, 0); // Set to 00:00
+        effectiveEnd.setDate(inclusiveEndDay.getDate() + 1);
+        effectiveEnd.setHours(0, 0, 0, 0);
       }
     } else if (type === 'incident') {
       const calendarApi = calendarRef.current?.getApi();
@@ -370,27 +337,26 @@ const Calendar: React.FC = () => {
         effectiveStart.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
       
         let inclusiveEndDay = new Date(selectInfo.end);
-        inclusiveEndDay = new Date(inclusiveEndDay.getTime() - 1); // Get actual last day of selection
+        inclusiveEndDay = new Date(inclusiveEndDay.getTime() - 1);
 
         effectiveEnd = new Date(inclusiveEndDay);
         effectiveEnd.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
 
-        if (selectInfo.start.toDateString() === inclusiveEndDay.toDateString()) { // Single day selection
+        if (selectInfo.start.toDateString() === inclusiveEndDay.toDateString()) {
           effectiveEnd = new Date(effectiveStart);
-          effectiveEnd.setHours(effectiveStart.getHours() + 1); // Default 1 hour duration
+          effectiveEnd.setHours(effectiveStart.getHours() + 1);
         }
-      } else { // Week view - use precise times from selection
-        if (selectInfo.start.getTime() === selectInfo.end.getTime()) { // Click, not drag
-          effectiveEnd.setHours(effectiveStart.getHours() + 1); // Default 1 hour
+      } else {
+        if (selectInfo.start.getTime() === selectInfo.end.getTime()) {
+          effectiveEnd.setHours(effectiveStart.getHours() + 1);
         }
-        // For drag in week view, effectiveStart/End are already the precise times.
       }
     }
 
     const newEvent = createCalendarEvent({
       id: `temp-${crypto.randomUUID()}`, 
-      start: effectiveStart, // Pass Date object
-      end: effectiveEnd,   // Pass Date object
+      start: effectiveStart,
+      end: effectiveEnd,  
       type,
       title: type === 'oncall' ? 'On-Call Shift' : type === 'incident' ? 'Incident' : 'Holiday'
     });
@@ -398,7 +364,6 @@ const Calendar: React.FC = () => {
     dispatch(setSelectedEvent(newEvent.toJSON()));
     dispatch(setShowEventModal(true));
 
-    // Unselect the dates on the calendar UI
     if (calendarRef.current) {
       const calendarApi = calendarRef.current.getApi();
       calendarApi.unselect();
@@ -410,9 +375,6 @@ const Calendar: React.FC = () => {
     dispatch(setCurrentDate(info.start.toISOString()));
   }, [dispatch]);
 
-  /**
-   * Check if two events overlap in time
-   */
   const eventsOverlap = (event1: CalendarEvent, event2: CalendarEvent): boolean => {
     const start1 = new Date(event1.start).getTime();
     const end1 = new Date(event1.end).getTime();
@@ -422,22 +384,13 @@ const Calendar: React.FC = () => {
     return (start1 < end2 && end1 > start2);
   };
 
-  /**
-   * Find events that conflict with the given event
-   */
   const findConflictingEvents = (event: CalendarEvent, allEvents: CalendarEventProps[]): CalendarEventProps[] => {
-    // Skip checking against itself if it already exists
     return allEvents.filter(existingEvent => 
       existingEvent.id !== event.id && 
       eventsOverlap(event, new CalendarEvent(existingEvent))
     );
   };
 
-  /**
-   * Regenerate sub-events for all events that conflict with a holiday
-   * This function ensures all events are properly regenerated with the latest holiday information
-   * @param skipHolidaySave if true, assumes the holiday is already saved and doesn't save it again
-   */
   const regenerateConflictingSubEvents = async (
     holidayEvent: CalendarEvent,
     conflictingEventsProps: CalendarEventProps[],
@@ -507,18 +460,15 @@ const Calendar: React.FC = () => {
     const tempId = isNewEvent ? event.id : null;
 
     logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
-    // For existing events or new ones, clear caches before any async operation begins
     calculatorFacade.clearCaches(); 
     
     let savePromise;
     
     if (isNewEvent && tempId) {
-      // 1. Optimistically add to Redux store for quick UI update
       const optimisticEventProps = event.toJSON();
       dispatch(optimisticallyAddEvent(optimisticEventProps));
       logger.info(`Optimistically added event ${tempId} to store.`);
 
-      // 2. Prepare data for backend (no tempId, title should be handled by use case or be present)
       const eventDataForCreation = {
         start: event.start.toISOString(),
         end: event.end.toISOString(),
@@ -526,67 +476,44 @@ const Calendar: React.FC = () => {
         title: event.title, 
       } as CalendarEventProps; 
       savePromise = dispatch(createEventAsync(eventDataForCreation)).unwrap();
-    } else { // Existing event update
+    } else {
       const eventToUpdateJson = event.toJSON();
       savePromise = dispatch(updateEventAsync(eventToUpdateJson)).unwrap();
     }
     
-    // Close modal immediately
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
-    // Handle promise resolution
-    savePromise.then((resultEventProps: CalendarEventProps) => { // resultEventProps is from createEventAsync or updateEventAsync
+    savePromise.then((resultEventProps: CalendarEventProps) => {
       if (isNewEvent && tempId) {
-        // 3. Finalize the optimistic event with server data
         logger.info(`Backend save for ${tempId} (now ${resultEventProps.id}) successful.`);
         dispatch(finalizeOptimisticEvent({ tempId, finalEvent: resultEventProps }));
         logger.info(`Finalized optimistic event ${tempId} with server data ${resultEventProps.id}.`);
       } else {
-        // For updates, updateEventAsync.fulfilled reducer handles the store.
         logger.info(`Event ${resultEventProps.id} updated successfully.`);
       }
       
-      // 4. Trigger full compensation update and UI refresh AFTER backend confirmation & store finalization
-      //    This uses the existing debounced mechanism which eventually calls updateCompensationData.
-      //    A small delay helps ensure Redux state has propagated before compensation calc.
-      logger.info(`Queueing full compensation update and FullCalendar refresh for event: ${resultEventProps.id}`);
-      calculatorFacade.clearCaches(); // Clear again right before the scheduled update
+      logger.info(`Queueing FullCalendar refresh for event: ${resultEventProps.id}`);
       setTimeout(() => {
-        // updateCompensationData(); // This will be called by debouncedUpdateCompensationData triggered by store change
-        // The change in currentEventsFromStore (due to finalizeOptimisticEvent or updateEventAsync.fulfilled)
-        // will trigger the main useEffect, which calls debouncedUpdateCompensationData.
-        // We just need to ensure FullCalendar also sees the changes if it hasn't already.
         if (calendarRef.current) {
           calendarRef.current.getApi().refetchEvents();
           logger.info('[Calendar] Explicitly refetched FullCalendar events post-save confirmation.');
         }
-        // To be absolutely sure compensation recalculates with latest, explicitly call the debounced version.
-        // This will become the primary trigger for compensation post-CRUD, as the main useEffect 
-        // for currentEventsFromStore will handle it correctly.
-        debouncedUpdateCompensationData();
       }, 100); 
 
     }).catch(error => {
       logger.error(`Failed to save/update event ${event.id}:`, error);
       if (isNewEvent && tempId) {
-        // Rollback optimistic add on failure by removing the temp event
         logger.warn(`Rolling back optimistic add for ${tempId} due to save failure.`);
-        // Dispatching deleteEventAsync for a tempId that never made it to backend is fine;
-        // its reducer will just filter it out from the Redux store.
         dispatch(deleteEventAsync(tempId)); 
       }
-      // Optionally, still trigger a compensation update/UI refresh on error to ensure consistency
       setTimeout(() => debouncedUpdateCompensationData(), 100);
     });
   }, [dispatch, calculatorFacade, debouncedUpdateCompensationData, logger, calendarRef]);
 
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
-    // Check for conflicts with other events when updating or creating
-    const isNewEvent = event.id.startsWith('temp-');
-    logger.info(`Checking conflicts for ${isNewEvent ? 'new' : 'existing'} ${event.type} event: ${event.id}`);
+    logger.info(`Checking conflicts for ${event.type} event: ${event.id}`);
   
-    // Ensure holidays are always full-day when saved from the modal
     if (event.type === 'holiday') {
       logger.info(`[Calendar] handleSaveEvent - Adjusting holiday ${event.id} to full day.`);
       const startDate = new Date(event.start);
@@ -599,23 +526,19 @@ const Calendar: React.FC = () => {
       logger.info(`  Adjusted holiday times: Start: ${event.start.toISOString()}, End: ${event.end.toISOString()}`);
     }
   
-    // Find all conflicting events
     const allConflictingEvents = findConflictingEvents(event, currentEventsFromStore);
     logger.info(`Found ${allConflictingEvents.length} total conflicting events`);
     
     if (allConflictingEvents.length > 0) {
-      // Log conflicting event types for debugging
       const conflictTypes = allConflictingEvents.map(e => e.type);
       logger.info(`Conflict types: ${conflictTypes.join(', ')}`);
     }
     
-    // If we're adding a holiday, any conflict is important
     if (event.type === 'holiday') {
       const conflictingEventsExist = allConflictingEvents.length > 0;
       
       if (conflictingEventsExist) {
         logger.info(`Holiday conflicts with ${allConflictingEvents.length} events - showing conflict modal`);
-        // Show the confirmation dialog for holiday conflicts
         setPendingEventSave(event);
         setConflictingEvents(allConflictingEvents);
         setIsHolidayConflict(true);
@@ -623,13 +546,11 @@ const Calendar: React.FC = () => {
         return;
       }
     } else {
-      // For non-holiday events, we only care about conflicts with holidays
       const conflictingHolidays = allConflictingEvents.filter(e => e.type === 'holiday');
       const hasHolidayConflicts = conflictingHolidays.length > 0;
       
       if (hasHolidayConflicts) {
         logger.info(`Event conflicts with ${conflictingHolidays.length} holidays - showing conflict modal`);
-        // Show the confirmation dialog for non-holiday events conflicting with holidays
         setPendingEventSave(event);
         setConflictingEvents(conflictingHolidays);
         setIsHolidayConflict(false);
@@ -640,26 +561,21 @@ const Calendar: React.FC = () => {
       }
     }
 
-    // No relevant conflicts, proceed with save
     saveEventWithoutConflictCheck(event);
   }, [currentEventsFromStore, findConflictingEvents, setPendingEventSave, setShowConflictModal, setConflictingEvents, setIsHolidayConflict, saveEventWithoutConflictCheck]);
 
   const handleConflictModalAdjust = useCallback(async () => {
-    // This function adjusts the conflicting events to accommodate the new event
     if (!pendingEventSave) return;
 
     try {
       await trackOperation(
         `RegenerateConflictingSubEvents(${pendingEventSave.id})`,
         async () => {
-          // First determine if this is a new event (with temp ID) that needs proper saving
           const isNewEvent = pendingEventSave.id.startsWith('temp-');
           
-          // If it's a new holiday, we'll need to create it with a permanent ID first
           let eventToSave = pendingEventSave;
           
           if (isNewEvent) {
-            // Create a new event with a permanent ID
             eventToSave = createCalendarEvent({
               ...pendingEventSave.toJSON(),
               id: crypto.randomUUID()
@@ -668,49 +584,28 @@ const Calendar: React.FC = () => {
             logger.info(`Generated permanent ID for new holiday: ${eventToSave.id}`);
           }
           
-          // First, save the holiday event to storage
-          // This MUST happen before regenerating sub-events 
-          // to ensure the holiday exists in the database
           logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} holiday: ${eventToSave.id}`);
           
           if (isNewEvent) {
-            // For new events, we need to use createEventAsync to properly create it in storage
             await dispatch(createEventAsync(eventToSave.toJSON())).unwrap();
             logger.info(`Holiday ${eventToSave.id} saved to storage via createEventAsync`);
           } else {
-            // For existing events, use updateEventAsync
             await dispatch(updateEventAsync(eventToSave.toJSON())).unwrap();
             logger.info(`Holiday ${eventToSave.id} updated in storage via updateEventAsync`);
           }
           
-          // Now regenerate the sub-events with skipHolidaySave=true since we already saved it
           logger.info(`Now regenerating sub-events for events that conflict with holiday ${eventToSave.id}`);
           await regenerateConflictingSubEvents(eventToSave, conflictingEvents, true);
           
-          // Clear modals
           dispatch(setShowEventModal(false));
           dispatch(setSelectedEvent(null));
           
-          // Close the modal
           setShowConflictModal(false);
           setPendingEventSave(null);
           setConflictingEvents([]);
           
-          // Clear caches to ensure fresh calculations
-          calculatorFacade.clearCaches();
-          
-          // Force a complete refresh of all compensation data with a small delay
-          // to ensure state updates have propagated
-          setTimeout(() => {
-            logger.info(`Conflict resolved, updating compensation data`);
-            updateCompensationData();
-            
-            // Also update the calendar display
-            if (calendarRef.current) {
-              const calendarApi = calendarRef.current.getApi();
-              calendarApi.refetchEvents();
-            }
-          }, 100);
+          logger.info(`Conflict resolved, updating compensation data`);
+          updateCompensationData(latestCalculationIdRef.current);
           
           return { 
             success: true, 
@@ -738,33 +633,26 @@ const Calendar: React.FC = () => {
     setConflictingEvents, 
     calculatorFacade, 
     updateCompensationData,
-    calendarRef,
     logger,
     trackOperation
   ]);
 
   const handleConflictModalCancel = () => {
-    // Just close the modal without saving anything
     setShowConflictModal(false);
     setPendingEventSave(null);
     setConflictingEvents([]);
   };
 
   const handleConflictModalContinue = () => {
-    // This function is now deprecated but we keep it for compatibility
-    // Redirect to handleConflictModalAdjust since we always want to adjust events
     handleConflictModalAdjust();
   };
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
     logger.info(`Attempting to delete event: ${event.id} (${event.type})`);
     
-    // Check if it's a holiday that might affect other events
     if (event.type === 'holiday') {
-      // Find all events that conflict with this holiday
       const allConflictingEvents = findConflictingEvents(event, currentEventsFromStore);
       
-      // For holidays, filter out other holidays as they don't need regeneration
       const affectedEvents = allConflictingEvents.filter(e => e.type !== 'holiday');
       
       if (affectedEvents.length > 0) {
@@ -785,15 +673,11 @@ const Calendar: React.FC = () => {
 
     dispatch(deleteEventAsync(eventIdToDelete)).unwrap().then(() => {
       logger.info(`Event ${eventIdToDelete} deleted successfully.`);
-      // deleteEventAsync.fulfilled reducer updates the store.
-      // The main useEffect watching currentEventsFromStore will trigger debouncedUpdateCompensationData.
-      // Explicitly call debounced for good measure and FullCalendar refresh.
       setTimeout(() => {
         if (calendarRef.current) {
           calendarRef.current.getApi().refetchEvents();
           logger.info('[Calendar] Explicitly refetched FullCalendar events post-delete confirmation.');
         }
-        debouncedUpdateCompensationData();
       }, 100);
     }).catch(error => {
       logger.error(`Failed to delete event ${eventIdToDelete}:`, error);
@@ -809,11 +693,9 @@ const Calendar: React.FC = () => {
     
     const holidayId = pendingEventDelete.id;
     
-    // Group logging for this operation - fallback to console.group
     console.group(`Deleting holiday: ${holidayId}`);
     logger.info(`Deleting holiday: ${holidayId}`);
     
-    // If there are conflicting events, we should always regenerate
     const mustRegenerateEvents = conflictingEvents.length > 0;
     if (mustRegenerateEvents) {
       logger.info(`Must regenerate ${conflictingEvents.length} events affected by holiday deletion`);
@@ -822,79 +704,63 @@ const Calendar: React.FC = () => {
     
     logger.debug(`Regeneration enabled: ${shouldRegenerateEvents}`);
     
-    // Clear caches immediately to ensure stale data isn't used
     calculatorFacade.clearCaches();
     
-    // Delete the holiday first
     await dispatch(deleteEventAsync(pendingEventDelete.id)).unwrap();
     logger.info(`Holiday ${holidayId} deleted successfully`);
     
-    // If there are conflicting events, always regenerate them
     let updatedEvents = 0;
     if (shouldRegenerateEvents && conflictingEvents.length > 0) {
       try {
         logger.debug(`Regenerating ${conflictingEvents.length} events affected by holiday deletion`);
         
-        // Wait a moment for the deletion to propagate
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // For each affected event, we need to "update" it to regenerate sub-events
         const updatePromises = [];
         for (const eventProps of conflictingEvents) {
-          // Skip if it's a holiday itself - we don't need to adjust holidays
           if (eventProps.type === 'holiday') continue;
           
           logger.debug(`Regenerating sub-events for ${eventProps.type} event ${eventProps.id}`);
           
-          // Update with the same event properties
-          // The sub-events will be regenerated without considering the deleted holiday
           const updatePromise = dispatch(updateEventAsync({
             ...eventProps,
             title: eventProps.title || (eventProps.type === 'oncall' ? 'On-Call Shift' : eventProps.type === 'incident' ? 'Incident' : 'Holiday')
-          })).unwrap(); // Wait for each update to complete
+          })).unwrap();
           
           updatePromises.push(updatePromise);
           updatedEvents++;
         }
         
-        // Wait for all updates to complete
         if (updatePromises.length > 0) {
           await Promise.all(updatePromises);
           logger.info(`Successfully updated ${updatedEvents} events after holiday deletion`);
         }
         
-        // Clear the cache again to ensure we get fresh calculations
         calculatorFacade.clearCaches();
         
-        // Force immediate compensation recalculation
-        updateCompensationData();
+        updateCompensationData(latestCalculationIdRef.current);
         logger.info('Compensation data updated after holiday deletion');
         
       } catch (error) {
         logger.error('Error regenerating events after holiday deletion:', error);
         alert('Holiday deleted, but there was an error recalculating affected events. Compensation calculations may be affected.');
         
-        // Try to update compensation data anyway
-        updateCompensationData();
+        updateCompensationData(latestCalculationIdRef.current);
       }
     } else {
-      // Even if we don't regenerate events, we should update compensation data
-      updateCompensationData();
+      updateCompensationData(latestCalculationIdRef.current);
       logger.info('Compensation data updated after holiday deletion (no regeneration needed)');
     }
     
-    // Reset all modal state
     setShowDeleteModal(false);
     setPendingEventDelete(null);
     setConflictingEvents([]);
     
-    // Also close the event details modal
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     
     console.groupEnd();
     
-    // Run diagnostic after a delay
     setTimeout(() => analyzeHolidayDetection(), 1000);
   };
   
@@ -909,20 +775,13 @@ const Calendar: React.FC = () => {
     dispatch(setSelectedEvent(null));
   }, [dispatch]);
 
-  /**
-   * Diagnostic function to analyze event sub-events and verify holiday detection
-   * This is for debugging purposes only and can be removed in production
-   */
   const analyzeHolidayDetection = (targetDate?: Date) => {
-    // Use current date as default if none provided
     const dateToAnalyze = targetDate || new Date();
     const dateString = dateToAnalyze.toLocaleDateString();
     
-    // Start a log group for the analysis - fallback to console.group
     console.group(`Holiday Detection Analysis: ${dateString}`);
     logger.debug(`Starting holiday detection analysis for ${dateString}`);
     
-    // 1. Check if any holiday events exist for this date
     const holidayEvents = currentEventsFromStore.filter(event => {
       if (event.type !== 'holiday') return false;
       
@@ -947,63 +806,6 @@ const Calendar: React.FC = () => {
       });
     }
     
-    // 2. Find all events with sub-events on this date
-    // const allSubEvents = storageService.loadSubEvents(); // DEPRECATED USAGE REMOVED
-    
-    // Wait for the Promise to resolve
-    // allSubEvents.then(subEvents => { // DEPRECATED USAGE REMOVED
-      // Filter for sub-events on this date
-      // const targetDateCopy = new Date(dateToAnalyze);
-      // targetDateCopy.setHours(0, 0, 0, 0);
-      
-      // const relevantSubEvents = subEvents.filter(subEvent => {
-      //   const subEventDate = new Date(subEvent.start);
-      //   subEventDate.setHours(0, 0, 0, 0);
-      //   return subEventDate.getTime() === targetDateCopy.getTime();
-      // });
-      
-      // if (relevantSubEvents.length === 0) {
-      //   logger.debug(`No sub-events found for ${dateString}`);
-      //   console.groupEnd();
-      //   return;
-      // }
-      
-      // logger.debug(`Found ${relevantSubEvents.length} sub-events for ${dateString}`);
-      
-      // Group by parent event
-      // const subEventsByParent: Record<string, SubEvent[]> = {};
-      // relevantSubEvents.forEach(subEvent => {
-      //   if (!subEventsByParent[subEvent.parentEventId]) {
-      //     subEventsByParent[subEvent.parentEventId] = [];
-      //   }
-      //   subEventsByParent[subEvent.parentEventId].push(subEvent);
-      // });
-      
-      // Analyze each parent event's sub-events
-      // Object.entries(subEventsByParent).forEach(([parentId, subEvents]) => {
-      //   const parentEvent = currentEventsFromStore.find(e => e.id === parentId);
-      //   if (!parentEvent) {
-      //     logger.debug(`Sub-events found for unknown parent: ${parentId}`);
-      //     return;
-      //   }
-        
-      //   logger.debug(`Event: ${parentEvent.id} (${parentEvent.type})`);
-        
-      //   // Count how many sub-events have holiday flag set
-      //   const holidaySubEvents = subEvents.filter(se => se.isHoliday);
-      //   const weekendSubEvents = subEvents.filter(se => se.isWeekend);
-        
-      //   logger.debug(`- ${subEvents.length} total sub-events`);
-      //   logger.debug(`- ${holidaySubEvents.length} marked as holiday`);
-      //   logger.debug(`- ${weekendSubEvents.length} marked as weekend`);
-        
-      //   if (holidayEvents.length > 0 && holidaySubEvents.length === 0) {
-      //     logger.warn(`⚠️ ISSUE DETECTED: Event has no holiday sub-events despite holiday existing on ${dateString}`);
-      //   }
-      // });
-      
-      // End the log group
-      // console.groupEnd();
     logger.warn("Sub-event analysis based on deprecated storageService has been removed from analyzeHolidayDetection.");
     console.groupEnd();
   };
@@ -1033,7 +835,6 @@ const Calendar: React.FC = () => {
         />
       )}
       
-      {/* Lazy-loaded modals with Suspense */}
       {showEventModal && selectedEvent && (
         <Suspense fallback={<ModalLoadingFallback>Loading...</ModalLoadingFallback>}>
           <EventDetailsModal
@@ -1073,5 +874,4 @@ const Calendar: React.FC = () => {
   );
 };
 
-// Export with React.memo for performance optimization
 export default React.memo(Calendar); 
