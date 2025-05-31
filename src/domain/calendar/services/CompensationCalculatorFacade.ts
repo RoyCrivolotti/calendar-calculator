@@ -2,7 +2,7 @@ import { CompensationBreakdown } from '../types/CompensationBreakdown';
 import { CalendarEvent } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
 import { CompensationService } from './CompensationService';
-import { storageService } from '../../../presentation/services/storage';
+import { SubEventRepository } from '../repositories/SubEventRepository';
 import { logger } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { EventCompensationService } from './EventCompensationService';
@@ -17,18 +17,23 @@ export class CompensationCalculatorFacade {
   private static instance: CompensationCalculatorFacade;
   private compensationService: CompensationService;
   private eventCompensationService: EventCompensationService;
+  private subEventRepository: SubEventRepository;
   
-  private constructor() {
+  private constructor(subEventRepository: SubEventRepository) {
     this.compensationService = new CompensationService();
     this.eventCompensationService = EventCompensationService.getInstance();
+    this.subEventRepository = subEventRepository;
   }
   
   /**
    * Get the singleton instance of the facade
    */
-  public static getInstance(): CompensationCalculatorFacade {
+  public static getInstance(subEventRepository: SubEventRepository): CompensationCalculatorFacade {
     if (!this.instance) {
-      this.instance = new CompensationCalculatorFacade();
+      this.instance = new CompensationCalculatorFacade(subEventRepository);
+    } else if (this.instance.subEventRepository !== subEventRepository) {
+      logger.warn('CompensationCalculatorFacade.getInstance called with a new SubEventRepository. Re-initializing.');
+      this.instance = new CompensationCalculatorFacade(subEventRepository);
     }
     return this.instance;
   }
@@ -156,9 +161,9 @@ export class CompensationCalculatorFacade {
       
       logger.info(`Processed ${monthEvents.length} events for month ${monthKey}`);
       
-      // Load all sub-events from storage
-      const allSubEvents = await storageService.loadSubEvents();
-      logger.info(`Loaded ${allSubEvents.length} sub-events for calculation`);
+      // Load all sub-events using the repository
+      const allSubEvents = await this.subEventRepository.getAll();
+      logger.info(`Loaded ${allSubEvents.length} sub-events for calculation from Firestore`);
       
       // Get relevant event IDs
       const eventIds = monthEvents.map(event => event.id);
@@ -196,15 +201,10 @@ export class CompensationCalculatorFacade {
     try {
       logger.info(`Calculating detailed compensation for event ${event.id}`);
       
-      // Load all sub-events from storage
-      const allSubEvents = await storageService.loadSubEvents();
+      // Load sub-events for the specific parent event ID
+      const eventSubEvents = await this.subEventRepository.getByParentId(event.id);
       
-      // Filter sub-events for this event
-      const eventSubEvents = allSubEvents.filter(subEvent => 
-        subEvent.parentEventId === event.id
-      );
-      
-      logger.info(`Found ${eventSubEvents.length} sub-events for event ${event.id}`);
+      logger.info(`Found ${eventSubEvents.length} sub-events for event ${event.id} from Firestore`);
       
       // Calculate compensation summary
       const summary = this.eventCompensationService.calculateEventCompensation(

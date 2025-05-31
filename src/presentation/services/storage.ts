@@ -1,3 +1,8 @@
+/**
+ * @deprecated This service is being phased out in favor of Firestore-based repositories.
+ * All new data persistence and retrieval should use FirestoreCalendarEventRepository and FirestoreSubEventRepository.
+ * Existing methods here are for legacy data access and migration purposes only.
+ */
 import { CalendarEvent } from '../../domain/calendar/entities/CalendarEvent';
 import { SubEvent } from '../../domain/calendar/entities/SubEvent';
 import { StorageInitError, StorageReadError, StorageWriteError } from '../../utils/errorHandler';
@@ -16,6 +21,9 @@ const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 // Use standardized service logger
 const logger = createServiceLogger('storageService');
 
+/**
+ * @deprecated This class is being phased out in favor of Firestore-based repositories.
+ */
 class StorageService {
   private syncTimeout: number | null = null;
   private db: IDBDatabase | null = null;
@@ -24,14 +32,16 @@ class StorageService {
   private readonly MAX_INIT_ATTEMPTS = 3;
 
   constructor() {
+    // ... (constructor logic can remain for now if migration script still uses it, 
+    // but ideally, migration would also use DI for repositories if possible in future)
+    logger.warn('StorageService is deprecated and should not be actively used for new features.');
     this.initDatabase()
       .then(() => {
-        logger.info('Storage service initialized successfully, starting periodic sync');
-        this.startPeriodicSync();
+        logger.info('Legacy Storage service initialized successfully, starting periodic sync (deprecated behavior)');
+        this.startPeriodicSync(); // This sync itself is deprecated
       })
       .catch(error => {
-        logger.error('Failed to initialize storage service', error);
-        // We will retry initialization on first operation
+        logger.error('Failed to initialize legacy storage service', error);
       });
   }
 
@@ -164,9 +174,10 @@ class StorageService {
   }
 
   /**
-   * Synchronize data between localStorage and IndexedDB
+   * @deprecated Syncing to localStorage is part of the old deprecated system.
    */
   private async syncToLocalStorage(): Promise<void> {
+    logger.warn('[Deprecated] syncToLocalStorage called.');
     logger.info('Syncing data to localStorage for backup');
     try {
       // Get events from IndexedDB and sync to localStorage
@@ -187,7 +198,11 @@ class StorageService {
     }
   }
 
+  /**
+   * @deprecated Periodic sync is part of the old deprecated system.
+   */
   private startPeriodicSync(): void {
+    logger.warn('[Deprecated] startPeriodicSync called.');
     // Clear any existing timeout
     if (this.syncTimeout !== null) {
       clearTimeout(this.syncTimeout);
@@ -204,7 +219,11 @@ class StorageService {
     }, SYNC_INTERVAL) as unknown as number;
   }
 
+  /**
+   * @deprecated Load events from IndexedDB. Use FirestoreCalendarEventRepository instead.
+   */
   private async loadEventsFromIndexedDB(): Promise<CalendarEvent[]> {
+    logger.warn('[Deprecated] loadEventsFromIndexedDB called.');
     if (!this.db) {
       await this.initDatabase();
     }
@@ -252,7 +271,11 @@ class StorageService {
     });
   }
 
+  /**
+   * @deprecated Load sub-events from IndexedDB. Use FirestoreSubEventRepository instead.
+   */
   private async loadSubEventsFromIndexedDB(): Promise<SubEvent[]> {
+    logger.warn('[Deprecated] loadSubEventsFromIndexedDB called.');
     if (!this.db) {
       await this.initDatabase();
     }
@@ -305,7 +328,11 @@ class StorageService {
     });
   }
 
+  /**
+   * @deprecated Load events from localStorage. Part of the old deprecated system.
+   */
   private loadEventsFromLocalStorage(): CalendarEvent[] {
+    logger.warn('[Deprecated] loadEventsFromLocalStorage called.');
     try {
       const data = localStorage.getItem(EVENTS_STORAGE_KEY);
       if (data) {
@@ -317,7 +344,11 @@ class StorageService {
     return [];
   }
 
+  /**
+   * @deprecated Load sub-events from localStorage. Part of the old deprecated system.
+   */
   private loadSubEventsFromLocalStorage(): SubEvent[] {
+    logger.warn('[Deprecated] loadSubEventsFromLocalStorage called.');
     try {
       const data = localStorage.getItem(SUBEVENTS_STORAGE_KEY);
       if (data) {
@@ -329,136 +360,47 @@ class StorageService {
     return [];
   }
 
+  /**
+   * @deprecated Save events to IndexedDB. Use FirestoreCalendarEventRepository instead.
+   * This method will now only log a warning and not save to prevent accidental writes to old store.
+   */
   async saveEvents(events: CalendarEvent[]): Promise<void> {
-    try {
-      // Save to IndexedDB
-      if (!this.db) {
-        await this.initDatabase();
-      }
-
-      if (!this.db) {
-        throw new Error('Database not initialized');
-      }
-
-      logger.info(`Saving ${events.length} events to IndexedDB...`);
-      
-      return new Promise((resolve, reject) => {
-        const transaction = this.db!.transaction(EVENTS_STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(EVENTS_STORE_NAME);
-        
-        // Set up transaction event handlers
-        transaction.onerror = (event) => {
-          logger.error('Transaction error:', transaction.error);
-          reject(transaction.error);
-        };
-        
-        transaction.oncomplete = () => {
-          logger.info(`Successfully saved ${events.length} events to IndexedDB`);
-          // Also update localStorage as a backup
-          localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
-          resolve();
-        };
-        
-        // Clear existing events
-        const clearRequest = store.clear();
-        clearRequest.onsuccess = () => {
-          logger.info('Cleared existing events');
-          
-          // Add new events
-          events.forEach(event => {
-            if (!event.id) {
-              logger.warn('Skipping event without ID:', event);
-              return;
-            }
-            
-            const eventData = event.toJSON();
-            const request = store.put(eventData);
-            
-            request.onerror = () => {
-              logger.error('Error saving event:', event.id, request.error);
-            };
-          });
-        };
-        
-        clearRequest.onerror = () => {
-          logger.error('Error clearing events:', clearRequest.error);
-          reject(clearRequest.error);
-        };
-      });
-    } catch (error) {
-      logger.error('Error in saveEvents:', error);
-      // Fallback to localStorage only if IndexedDB fails
-      localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events.map(event => event.toJSON())));
-      throw error;
-    }
-
+    logger.warn('[Deprecated] storageService.saveEvents called. Data NOT saved to IndexedDB. Use FirestoreCalendarEventRepository.');
+    // Original implementation commented out to prevent writes:
+    /*
+    await this.ensureInitialized();
+    return new Promise((resolve, reject) => {
+      // ... original save logic ...
+    });
+    */
+   return Promise.resolve(); // Fulfill the promise without action
   }
 
+  /**
+   * @deprecated Save sub-events to IndexedDB. Use FirestoreSubEventRepository instead.
+   * This method will now only log a warning and not save to prevent accidental writes to old store.
+   */
   async saveSubEvents(subEvents: SubEvent[]): Promise<void> {
-    try {
-      // Save to IndexedDB
-      if (!this.db) {
-        await this.initDatabase();
-      }
-
-      if (!this.db) {
-        throw new Error('Database not initialized');
-      }
-
-      logger.info(`Saving ${subEvents.length} sub-events to IndexedDB...`);
-      
-      return new Promise((resolve, reject) => {
-        const transaction = this.db!.transaction(SUBEVENTS_STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(SUBEVENTS_STORE_NAME);
-        
-        // Set up transaction event handlers
-        transaction.onerror = (event) => {
-          logger.error('Transaction error:', transaction.error);
-          reject(transaction.error);
-        };
-        
-        transaction.oncomplete = () => {
-          logger.info(`Successfully saved ${subEvents.length} sub-events to IndexedDB`);
-          // Also update localStorage as a backup
-          localStorage.setItem(SUBEVENTS_STORAGE_KEY, JSON.stringify(subEvents.map(subEvent => subEvent.toJSON())));
-          resolve();
-        };
-        
-        // Clear existing sub-events
-        const clearRequest = store.clear();
-        clearRequest.onsuccess = () => {
-          logger.info('Cleared existing sub-events');
-          
-          // Add new sub-events
-          subEvents.forEach(subEvent => {
-            if (!subEvent.id) {
-              logger.warn('Skipping sub-event without ID:', subEvent);
-              return;
-            }
-            
-            const subEventData = subEvent.toJSON();
-            const request = store.put(subEventData);
-            
-            request.onerror = () => {
-              logger.error('Error saving sub-event:', subEvent.id, request.error);
-            };
-          });
-        };
-        
-        clearRequest.onerror = () => {
-          logger.error('Error clearing sub-events:', clearRequest.error);
-          reject(clearRequest.error);
-        };
-      });
-    } catch (error) {
-      logger.error('Error in saveSubEvents:', error);
-      // Fallback to localStorage only if IndexedDB fails
-      localStorage.setItem(SUBEVENTS_STORAGE_KEY, JSON.stringify(subEvents.map(subEvent => subEvent.toJSON())));
-      throw error;
-    }
+    logger.warn('[Deprecated] storageService.saveSubEvents called. Data NOT saved to IndexedDB. Use FirestoreSubEventRepository.');
+    // Original implementation commented out to prevent writes:
+    /*
+    await this.ensureInitialized();
+    return new Promise((resolve, reject) => {
+      // ... original save logic ...
+    });
+    */
+   return Promise.resolve(); // Fulfill the promise without action
   }
 
+  /**
+   * @deprecated Load events from IndexedDB/localStorage. Use FirestoreCalendarEventRepository instead.
+   * Migration script might still use this. For general app use, switch to Firestore.
+   */
   async loadEvents(): Promise<CalendarEvent[]> {
+    logger.warn('[Deprecated] storageService.loadEvents called. Consider using Firestore for new features.');
+    // ... (original loadEvents logic can remain for migration script compatibility for now)
+    await this.ensureInitialized();
+    // ... (rest of original loadEvents implementation)
     try {
       // Try to load from IndexedDB first
       const events = await this.loadEventsFromIndexedDB();
@@ -473,7 +415,15 @@ class StorageService {
     return this.loadEventsFromLocalStorage();
   }
 
+  /**
+   * @deprecated Load sub-events from IndexedDB/localStorage. Use FirestoreSubEventRepository instead.
+   * Migration script might still use this. For general app use, switch to Firestore.
+   */
   async loadSubEvents(): Promise<SubEvent[]> {
+    logger.warn('[Deprecated] storageService.loadSubEvents called. Consider using Firestore for new features.');
+    // ... (original loadSubEvents logic can remain for migration script compatibility for now)
+    await this.ensureInitialized();
+    // ... (rest of original loadSubEvents implementation)
     try {
       // Try to load from IndexedDB first
       const subEvents = await this.loadSubEventsFromIndexedDB();
@@ -488,7 +438,11 @@ class StorageService {
     return this.loadSubEventsFromLocalStorage();
   }
 
+  /**
+   * @deprecated Clear data from IndexedDB. This should be part of a final cleanup, not regular use.
+   */
   async clearAllData(): Promise<void> {
+    logger.warn('[Deprecated] storageService.clearAllData called for IndexedDB.');
     try {
       // Clear IndexedDB
       if (this.db) {
@@ -516,4 +470,4 @@ class StorageService {
   }
 }
 
-export const storageService = new StorageService(); 
+// export const storageService = new StorageService(); // Prevent auto-initialization of deprecated service

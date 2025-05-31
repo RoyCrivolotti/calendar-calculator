@@ -1,10 +1,22 @@
-import React from 'react';
-import { Provider } from 'react-redux';
+import React, { useEffect } from 'react';
+import { Provider, useSelector } from 'react-redux';
 import { store } from './presentation/store/store';
 import Calendar from './presentation/components/calendar/Calendar';
 import { Global, css } from '@emotion/react';
 import ErrorBoundary from './presentation/components/ErrorBoundary';
 import { getLogger } from './utils/logger';
+
+import { firebaseAuthService } from './infrastructure/auth/FirebaseAuthService';
+import { 
+  setCurrentUser, 
+  setAuthLoading,
+  selectCurrentUser,
+  selectIsAuthLoading
+} from './presentation/store/slices/authSlice';
+import { User as FirebaseUser } from 'firebase/auth';
+
+import LoginComponent from './presentation/components/auth/LoginComponent';
+import { RootState } from './presentation/store/store';
 
 const logger = getLogger('app');
 
@@ -72,6 +84,45 @@ const globalStyles = css`
   }
 `;
 
+const AppContent: React.FC = () => {
+  const currentUser = useSelector((state: RootState) => selectCurrentUser(state));
+  const isAuthLoading = useSelector((state: RootState) => selectIsAuthLoading(state));
+
+  useEffect(() => {
+    store.dispatch(setAuthLoading(true));
+    const unsubscribe = firebaseAuthService.onAuthStateChangedListener((firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        store.dispatch(setCurrentUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+        }));
+      } else {
+        store.dispatch(setCurrentUser(null));
+      }
+      store.dispatch(setAuthLoading(false));
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (isAuthLoading) {
+    return <div style={{ textAlign: 'center', padding: '50px', fontSize: '1.2em' }}>Loading Application...</div>;
+  }
+
+  return (
+    <>
+      <Global styles={globalStyles} />
+      <LoginComponent />
+      {currentUser ? (
+        <Calendar />
+      ) : (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#555' }}>
+        </div>
+      )}
+    </>
+  );
+};
+
 const App: React.FC = () => {
   return (
     <ErrorBoundary
@@ -82,8 +133,7 @@ const App: React.FC = () => {
       }}
     >
       <Provider store={store}>
-        <Global styles={globalStyles} />
-        <Calendar />
+        <AppContent />
       </Provider>
     </ErrorBoundary>
   );
