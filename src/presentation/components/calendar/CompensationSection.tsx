@@ -301,7 +301,10 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     confirmDeleteMonth,
     cancelDeleteMonth,
     getNotificationProps,
-  } = useMonthDeletionHandler({ onDeletionSuccess: onDataChange });
+  } = useMonthDeletionHandler({ 
+    onDeletionSuccess: onDataChange,
+    onBeforeSuccessNotification: closeSidePanelHook
+  });
 
   const monthDeletionNotification = getNotificationProps();
   

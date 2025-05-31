@@ -10,6 +10,7 @@ import { RootState } from '../store';
 
 interface UseMonthDeletionHandlerProps {
   onDeletionSuccess?: () => void;
+  onBeforeSuccessNotification?: () => void;
 }
 
 interface UseMonthDeletionHandlerReturn {
@@ -29,6 +30,7 @@ interface UseMonthDeletionHandlerReturn {
 
 export const useMonthDeletionHandler = ({
   onDeletionSuccess,
+  onBeforeSuccessNotification,
 }: UseMonthDeletionHandlerProps = {}): UseMonthDeletionHandlerReturn => {
   const calendarEventRepository = useMemo(() => container.get<CalendarEventRepository>('calendarEventRepository'), []);
   const subEventRepository = useMemo(() => container.get<SubEventRepository>('subEventRepository'), []);
@@ -65,6 +67,7 @@ export const useMonthDeletionHandler = ({
     }
     if (!currentUser?.uid) {
       logger.error('[useMonthDeletionHandler] Cannot delete month data: User not authenticated.');
+      onBeforeSuccessNotification?.();
       setNotificationTitle('Authentication Error');
       setNotificationMessage('You must be logged in to delete data.');
       setNotificationVisible(true);
@@ -91,6 +94,7 @@ export const useMonthDeletionHandler = ({
 
           if (eventsToDelete.length === 0) {
             logger.info(`[useMonthDeletionHandler] No events to delete in ${formatMonthYear(monthToClear)}.`);
+            onBeforeSuccessNotification?.();
             setNotificationTitle('No Data');
             setNotificationMessage(`No events found to delete for ${formatMonthYear(monthToClear)}.`);
             setNotificationVisible(true);
@@ -103,6 +107,9 @@ export const useMonthDeletionHandler = ({
           await calendarEventRepository.deleteMultipleByIds(eventIdsToDelete);
           
           logger.info(`[useMonthDeletionHandler] Successfully batch cleared data for month ${formatMonthYear(monthToClear)}.`);
+          
+          onBeforeSuccessNotification?.();
+
           setNotificationTitle('Success');
           setNotificationMessage(`Successfully deleted all events for ${formatMonthYear(monthToClear)}.`);
           setNotificationVisible(true);
@@ -119,6 +126,7 @@ export const useMonthDeletionHandler = ({
       );
     } catch (error) {
       logger.error(`[useMonthDeletionHandler] Error deleting data for month ${formatMonthYear(monthToClear)}:`, error);
+      onBeforeSuccessNotification?.();
       setNotificationTitle('Error');
       setNotificationMessage(`An error occurred while deleting data for ${formatMonthYear(monthToClear)}. Please try again.`);
       setNotificationVisible(true);
@@ -127,7 +135,7 @@ export const useMonthDeletionHandler = ({
       setShowConfirmDeleteMonthModal(false);
       // Do not reset monthPendingDeletion here, allow UI to use it for modal title if needed until cancel/close
     }
-  }, [monthPendingDeletion, currentUser, calendarEventRepository, subEventRepository, onDeletionSuccess, trackOperation]);
+  }, [monthPendingDeletion, currentUser, calendarEventRepository, subEventRepository, onDeletionSuccess, onBeforeSuccessNotification, trackOperation]);
 
   const getNotificationProps = useCallback(() => {
     if (!notificationVisible) return null;

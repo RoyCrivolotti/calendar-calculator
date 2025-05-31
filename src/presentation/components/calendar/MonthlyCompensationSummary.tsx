@@ -153,6 +153,12 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
   
+  const handleCloseModal = useCallback(() => {
+    setSelectedMonth(null);
+    closeSidePanel();
+    hideTooltip();
+  }, [closeSidePanel, hideTooltip]);
+  
   const {
     isDeletingMonth,
     showConfirmDeleteMonthModal,
@@ -161,7 +167,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     confirmDeleteMonth,
     cancelDeleteMonth,
     getNotificationProps,
-  } = useMonthDeletionHandler({ onDeletionSuccess: onDataChange });
+  } = useMonthDeletionHandler({ 
+    onDeletionSuccess: onDataChange,
+    onBeforeSuccessNotification: handleCloseModal
+  });
   
   const monthDeletionHookNotification = getNotificationProps();
 
@@ -255,12 +264,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
       });
     });
   }, []);
-
-  const handleCloseModal = useCallback(() => {
-    setSelectedMonth(null);
-    closeSidePanel();
-    hideTooltip();
-  }, [closeSidePanel, hideTooltip]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {

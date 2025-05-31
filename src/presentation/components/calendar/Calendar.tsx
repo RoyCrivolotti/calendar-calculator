@@ -158,9 +158,15 @@ const Calendar: React.FC = () => {
         
         try {
           const monthData = await calculatorFacade.calculateMonthlyCompensation(calendarEvents, monthDate);
-          if (monthData.length > 0) {
+          
+          const hasMeaningfulData = monthData.some(item => item.amount > 0);
+
+          if (hasMeaningfulData) {
             allData.push(...monthData);
+          } else if (monthData.length > 0) {
+            logger.info(`Month ${monthKey} calculated with no positive compensation amounts. Not including in summary.`);
           }
+
         } catch (error) {
           logger.error(`Error calculating compensation for month ${monthKey}:`, error);
         }
