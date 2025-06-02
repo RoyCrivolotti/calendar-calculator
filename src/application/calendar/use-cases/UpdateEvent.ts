@@ -32,15 +32,12 @@ export class UpdateEventUseCase {
 
     await this.eventRepository.update(event);
 
-    // Delete old sub-events and create new ones
     await this.subEventRepository.deleteByParentId(event.id);
     
-    const allEvents = await this.eventRepository.getAll();
-    const subEvents = this.subEventFactory.generateSubEvents(event, allEvents);
+    const holidayEvents = await this.eventRepository.getHolidayEvents();
+    const subEvents = this.subEventFactory.generateSubEvents(event, holidayEvents);
     if (subEvents.length > 0) {
-      const allSubEvents = await this.subEventRepository.getAll();
-      const filteredSubEvents = allSubEvents.filter(subEvent => subEvent.parentEventId !== event.id);
-      await this.subEventRepository.save([...filteredSubEvents, ...subEvents]);
+      await this.subEventRepository.save(subEvents);
     }
 
     return event;

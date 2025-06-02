@@ -58,22 +58,14 @@ export class CreateEventUseCase {
           });
           logger.info(`Created event with ID ${event.id}`);
 
-          // Get all existing events for holiday checking during sub-event generation
-          const allExistingEventsProps = await this.eventRepository.getAll();
-          const allExistingDomainEvents = allExistingEventsProps.map(props => new CalendarEvent(props));
+          const holidayEvents = await this.eventRepository.getHolidayEvents();
 
-          // Generate sub-events using SubEventFactory
-          const subEvents = this.subEventFactory.generateSubEvents(event, allExistingDomainEvents);
+          const subEvents = this.subEventFactory.generateSubEvents(event, holidayEvents);
           
           logger.info(`Generated ${subEvents.length} sub-events for event ${event.id}`);
 
-          // Assuming SubEventFactory now correctly handles marking holidays on sub-events internally
-          // No explicit holiday marking step here in the use case.
-
-          // 4. Save the main event
           await this.eventRepository.save([event]);
 
-          // 5. Save the sub-events
           if (subEvents.length > 0) {
              await this.subEventRepository.save(subEvents);
           }
@@ -85,7 +77,7 @@ export class CreateEventUseCase {
 
           return event;
         } catch (error) {
-          logger.error('Failed to create event', error); // This is the key log we want to see
+          logger.error('Failed to create event', error);
           
           if (!(error instanceof BaseError)) {
             throw new ApplicationError(

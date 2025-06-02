@@ -7,6 +7,8 @@ import {
   deleteDoc,
   Timestamp,
   writeBatch,
+  query,
+  where
 } from 'firebase/firestore';
 import { CalendarEvent } from '../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../domain/calendar/repositories/CalendarEventRepository';
@@ -92,6 +94,26 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       return events;
     } catch (error) {
       logger.error('[FirestoreRepo] Error fetching all events:', error);
+      throw error;
+    }
+  }
+
+  async getHolidayEvents(): Promise<CalendarEvent[]> {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      logger.warn('[FirestoreRepo] User not authenticated to get holiday events, returning empty.');
+      return [];
+    }
+    const eventsCollectionWithConverter = this.getEventsCollection(userId);
+    const q = query(eventsCollectionWithConverter, where('type', '==', 'holiday'));
+
+    try {
+      const querySnapshot = await getDocs(q);
+      const events = querySnapshot.docs.map(docSnap => docSnap.data());
+      logger.info(`[FirestoreRepo] Fetched ${events.length} holiday events for user ${userId}`);
+      return events;
+    } catch (error) {
+      logger.error('[FirestoreRepo] Error fetching holiday events:', error);
       throw error;
     }
   }
