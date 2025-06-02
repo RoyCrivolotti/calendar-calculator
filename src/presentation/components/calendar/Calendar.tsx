@@ -89,11 +89,11 @@ const Calendar: React.FC = () => {
   const updateCompensationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const latestCalculationIdRef = useRef<number>(0);
   const calendarRef = useRef<FullCalendar>(null);
-  const setCompensationDataRef = useRef(setCompensationData);
+  // const setCompensationDataRef = useRef(setCompensationData); // Keep this if used elsewhere, or remove if only for the pattern below
   
-  useEffect(() => {
-    setCompensationDataRef.current = setCompensationData;
-  }, [setCompensationData]);
+  // useEffect(() => {
+  //   setCompensationDataRef.current = setCompensationData;
+  // }, [setCompensationData]);
 
   const refreshCalendarEvents = useCallback(async () => {
     if (!currentUser || !currentUser.uid) {
@@ -127,7 +127,7 @@ const Calendar: React.FC = () => {
 
     if (currentEventsFromStore.length === 0) {
       logger.info('No events for compensation calculation.');
-      setCompensationDataRef.current([]);
+      setCompensationData([]);
       return;
     }
     
@@ -142,17 +142,19 @@ const Calendar: React.FC = () => {
       currentEventsFromStore.forEach(event => {
         const startDate = new Date(event.start);
         const endDate = new Date(event.end);
-        if (getMonthKey(startDate) !== getMonthKey(endDate)) {
-          let currentDateIter = new Date(startDate);
-          while (currentDateIter <= endDate) {
-            months.add(getMonthKey(currentDateIter));
-            currentDateIter.setMonth(currentDateIter.getMonth() + 1);
-          }
-        } else {
-          months.add(getMonthKey(startDate));
+        
+        let currentIterDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        const finalMonthDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+
+        while (currentIterDate <= finalMonthDate) {
+          months.add(getMonthKey(currentIterDate));
+          // Move to the first day of the next month
+          currentIterDate.setMonth(currentIterDate.getMonth() + 1);
         }
       });
       
+      logger.info(`[updateCompensationData] Unique months for summary: ${Array.from(months).join(', ')}`);
+
       const allData: CompensationBreakdown[] = [];
       const calendarEvents = currentEventsFromStore.map(event => new CalendarEvent(event));
       
@@ -184,7 +186,7 @@ const Calendar: React.FC = () => {
       
       if (latestCalculationIdRef.current === calculationId) {
         logger.info(`Compensation data updated (calcId: ${calculationId}, ${allData.length} items).`);
-        setCompensationDataRef.current(allData);
+        setCompensationData(allData);
       } else {
         logger.warn(`Stale calculation (id: ${calculationId}) before final set state, bailing.`);
       }
@@ -192,7 +194,7 @@ const Calendar: React.FC = () => {
     } catch (error) {
       logger.error(`Error in updateCompensationData (calcId: ${calculationId}):`, error);
       if (latestCalculationIdRef.current === calculationId) {
-        setCompensationDataRef.current([]);
+        setCompensationData([]);
       }
     } finally {
       if (latestCalculationIdRef.current === calculationId || currentEventsFromStore.length === 0) {
@@ -200,8 +202,13 @@ const Calendar: React.FC = () => {
       }
       logger.info(`updateCompensationData finished (calcId: ${calculationId})`); 
     }
-  }, [currentEventsFromStore, calculatorFacade, getMonthKey, logger]);
+  }, [currentEventsFromStore, calculatorFacade, getMonthKey]); // Removed logger from deps as it's stable
   
+  const updateCompensationDataRef = useRef(updateCompensationData);
+  useEffect(() => {
+    updateCompensationDataRef.current = updateCompensationData;
+  }, [updateCompensationData]);
+
   const debouncedUpdateCompensationData = useCallback(() => {
     if (updateCompensationTimeoutRef.current) {
       clearTimeout(updateCompensationTimeoutRef.current);
@@ -211,9 +218,15 @@ const Calendar: React.FC = () => {
     calculatorFacade.clearCaches();
     
     updateCompensationTimeoutRef.current = setTimeout(() => {
-      updateCompensationData(currentCalculationId);
+      updateCompensationDataRef.current(currentCalculationId);
     }, 300);
-  }, [calculatorFacade, updateCompensationData]);
+  }, [calculatorFacade]); // updateCompensationData removed from deps, uses ref now
+
+  // Main useEffect for triggering summary updates
+  useEffect(() => {
+    logger.debug('[Calendar] useEffect for summary re-calculation. Events count: ' + currentEventsFromStore.length + '. Triggering debounce.');
+    debouncedUpdateCompensationData();
+  }, [currentEventsFromStore, debouncedUpdateCompensationData]);
 
   const handleDataRefresh = useCallback(async () => {
     logger.info('[Calendar] Data changed in summary, triggering full refresh.');
