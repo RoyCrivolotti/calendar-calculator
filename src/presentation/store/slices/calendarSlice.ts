@@ -93,6 +93,9 @@ const calendarSlice = createSlice({
     setImportText: (state, action: PayloadAction<string>) => {
       state.importText = action.payload;
     },
+    revertOptimisticAdd: (state, action: PayloadAction<string>) => {
+      state.events = state.events.filter(event => event.id !== action.payload);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -129,6 +132,7 @@ export const {
   setImportText,
   optimisticallyAddEvent,
   finalizeOptimisticEvent,
+  revertOptimisticAdd,
 } = calendarSlice.actions;
 
 export default calendarSlice.reducer; 

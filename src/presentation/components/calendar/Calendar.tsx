@@ -24,6 +24,7 @@ import {
   deleteEventAsync,
   optimisticallyAddEvent,
   finalizeOptimisticEvent,
+  revertOptimisticAdd,
 } from '../../store/slices/calendarSlice';
 import { container } from '../../../config/container';
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
@@ -465,86 +466,61 @@ const Calendar: React.FC = () => {
     logger.info('[regenerateConflictingSubEvents] Regeneration complete.');
   };
 
-  const saveEventWithoutConflictCheck = useCallback((event: CalendarEvent) => {
+  const saveEventWithoutConflictCheck = useCallback(async (event: CalendarEvent) => {
     const isNewEvent = event.id.startsWith('temp-');
     const tempId = isNewEvent ? event.id : null;
 
     logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
-    calculatorFacade.clearCaches(); 
-    
-    let savePromise;
-    
-    if (isNewEvent && tempId) {
-      const optimisticEventProps = event.toJSON();
-      dispatch(optimisticallyAddEvent(optimisticEventProps));
-      logger.info(`Optimistically added event ${tempId} to store.`);
+    calculatorFacade.clearCaches();
 
-      const eventDataForCreation = {
-        start: event.start.toISOString(),
-        end: event.end.toISOString(),
-        type: event.type,
-        title: event.title, 
-      } as CalendarEventProps; 
-      savePromise = dispatch(createEventAsync(eventDataForCreation)).unwrap();
-    } else {
-      const eventToUpdateJson = event.toJSON();
-      savePromise = dispatch(updateEventAsync(eventToUpdateJson)).unwrap();
-    }
-    
-    savePromise.then((resultEventProps: CalendarEventProps) => {
-      dispatch(setShowEventModal(false));
-      dispatch(setSelectedEvent(null));
+    let savedEventProps: CalendarEventProps | null = null;
 
+    try {
       if (isNewEvent && tempId) {
-        logger.info(`Backend save for ${tempId} (now ${resultEventProps.id}) successful.`);
-        dispatch(finalizeOptimisticEvent({ tempId, finalEvent: resultEventProps }));
-        logger.info(`Finalized optimistic event ${tempId} with server data ${resultEventProps.id}.`);
+        const optimisticEventProps = event.toJSON();
+        dispatch(optimisticallyAddEvent(optimisticEventProps));
+        logger.info(`Optimistically added event ${tempId} to store.`);
+
+        const eventDataForCreation = {
+          start: event.start.toISOString(),
+          end: event.end.toISOString(),
+          type: event.type,
+          title: event.title,
+        } as CalendarEventProps;
+        savedEventProps = await dispatch(createEventAsync(eventDataForCreation)).unwrap();
       } else {
-        logger.info(`Event ${resultEventProps.id} updated successfully.`);
+        const eventUpdates = event.toJSON();
+        savedEventProps = await dispatch(updateEventAsync(eventUpdates)).unwrap();
       }
-      
-      logger.info(`Queueing FullCalendar refresh for event: ${resultEventProps.id}`);
-      setTimeout(() => {
-        if (calendarRef.current) {
-          calendarRef.current.getApi().refetchEvents();
-          logger.info('[Calendar] Explicitly refetched FullCalendar events post-save confirmation.');
-        }
-        debouncedUpdateCompensationData(); 
-      }, 100); 
 
-    }).catch(error => {
-      logger.error(`Failed to save/update event ${event.id}:`, error);
-      
-      let title = 'Save Error';
-      let message = 'Failed to save event. Please try again later.';
-      if (error && typeof error === 'object' && 'code' in error) {
-        const firebaseError = error as { code: string, message?: string };
-        if (firebaseError.code === 'resource-exhausted') {
-          title = 'Quota Exceeded';
-          message = 'Storage quota exceeded. Could not save event. Please check your storage or contact support.';
-        } else if (firebaseError.code === 'unavailable') {
-          title = 'Service Unavailable';
-          message = 'The service is temporarily unavailable. Please try again later.';
-        } else if (firebaseError.message) {
-          message = `Failed to save event: ${firebaseError.message}`;
+      if (savedEventProps) {
+        logger.info(`Event ${savedEventProps.id} ${isNewEvent ? 'created' : 'updated'} successfully.`);
+        if (isNewEvent && tempId) {
+          dispatch(finalizeOptimisticEvent({ tempId, finalEvent: savedEventProps }));
+          logger.info(`Finalized optimistic event, replaced ${tempId} with ${savedEventProps.id}.`);
         }
+        dispatch(setShowEventModal(false));
+        dispatch(setSelectedEvent(null));
+        await refreshCalendarEvents();
+        debouncedUpdateCompensationData();
+      } else {
+        throw new Error("Save operation did not return event properties.");
       }
-      setNotificationTitle(title);
-      setNotificationMessage(message);
-      setNotificationVisible(true);
 
+    } catch (error: any) {
+      logger.error(`Failed to ${isNewEvent ? 'create' : 'update'} event ${event.id}:`, error);
       if (isNewEvent && tempId) {
-        logger.warn(`Rolling back optimistic add for ${tempId} due to save failure.`);
-        dispatch(deleteEventAsync(tempId)).unwrap().catch(deleteError => {
-            logger.error(`Failed to rollback optimistic event ${tempId}:`, deleteError);
-        });
-      } else if (!isNewEvent) {
-        logger.warn(`Update failed for event ${event.id}. Modal will remain open.`);
+        logger.warn(`Rolling back optimistic add for temp event ${tempId}`);
+        dispatch(revertOptimisticAdd(tempId));
       }
-      
-      setTimeout(() => debouncedUpdateCompensationData(), 100);
-    });
-  }, [dispatch, calculatorFacade, debouncedUpdateCompensationData, logger, calendarRef]);
+      setNotificationTitle('Save Failed');
+      setNotificationMessage(
+        `Failed to ${isNewEvent ? 'create new' : 'update'} event: ${error.message || 'Please try again.'}.` +
+        (error.message?.includes('Quota exceeded') ? ' Firestore quota may be exceeded.' : '')
+      );
+      setNotificationVisible(true);
+    }
+  }, [dispatch, calculatorFacade, refreshCalendarEvents, debouncedUpdateCompensationData]);
 
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     logger.info(`Checking conflicts for ${event.type} event: ${event.id}`);
@@ -805,7 +781,7 @@ const Calendar: React.FC = () => {
     setConflictingEvents([]);
   };
 
-  const handleCloseModal = useCallback(() => {
+  const handleCloseEventDetailsModal = useCallback(() => {
     dispatch(setShowEventModal(false));
     dispatch(setSelectedEvent(null));
     setNotificationVisible(false); 
@@ -877,7 +853,7 @@ const Calendar: React.FC = () => {
             event={new CalendarEvent(selectedEvent)}
             onSave={handleSaveEvent}
             onDelete={handleDeleteEvent}
-            onClose={handleCloseModal}
+            onClose={handleCloseEventDetailsModal}
           />
         </Suspense>
       )}
@@ -908,11 +884,27 @@ const Calendar: React.FC = () => {
       )}
       
       {notificationVisible && (
-        <Modal isOpen={notificationVisible} onClose={() => setNotificationVisible(false)} preventBackdropClose={true}>
+        <Modal isOpen={notificationVisible} onClose={() => {
+          setNotificationVisible(false);
+          if (showEventModal && selectedEvent && selectedEvent.id.startsWith('temp-')) {
+            const wasRolledBack = !currentEventsFromStore.some(e => e.id === selectedEvent.id);
+            if (wasRolledBack) {
+                handleCloseEventDetailsModal();
+            }
+          }
+        }} preventBackdropClose={true}>
           <ModalHeader><ModalTitle>{notificationTitle}</ModalTitle></ModalHeader>
           <ModalBody><p>{notificationMessage}</p></ModalBody>
           <ModalFooter>
-            <SharedButton variant="primary" onClick={() => setNotificationVisible(false)}>OK</SharedButton>
+            <SharedButton variant="primary" onClick={() => {
+              setNotificationVisible(false);
+              if (showEventModal && selectedEvent && selectedEvent.id.startsWith('temp-')) {
+                const wasRolledBack = !currentEventsFromStore.some(e => e.id === selectedEvent.id);
+                if (wasRolledBack) {
+                    handleCloseEventDetailsModal();
+                }
+              }
+            }}>OK</SharedButton>
           </ModalFooter>
         </Modal>
       )}
