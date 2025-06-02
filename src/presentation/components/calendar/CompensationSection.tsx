@@ -38,6 +38,7 @@ import {
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 import { useSidePanel, useTooltip } from '../../hooks';
 import { useMonthDeletionHandler } from '../../hooks/useMonthDeletionHandler';
+import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 
 const Section = styled.div`
   background: white;
@@ -247,8 +248,9 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
   const calculatorFacade = useMemo(() => {
+    const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
     const subEventRepo = container.get<SubEventRepository>('subEventRepository');
-    return CompensationCalculatorFacade.getInstance(subEventRepo);
+    return CompensationCalculatorFacade.getInstance(eventRepo, subEventRepo);
   }, []);
   
   // Use useSidePanel hook
@@ -319,7 +321,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       
       try {
         logger.info(`Calculating compensation for ${format(currentDate, 'MMMM yyyy')}`);
-        const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate);
+        const result = await calculatorFacade.calculateMonthlyCompensation(new Date(currentDate));
         
         // ALWAYS set the breakdown when events or currentDate change, as the event list in the panel depends on it.
         // The previous check (dataString !== previousData.current) was too simplistic as it only considered compensation amounts.
@@ -339,7 +341,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 
     calculateData();
     
-  }, [events, currentDate, calculatorFacade, setLoadingDebounced]); // Dependencies are correct
+  }, [currentDate, calculatorFacade, setLoadingDebounced]); // Dependencies are correct
 
   // Extract breakdown data for the visualization
   const getCompensationData = useCallback((): CompensationData[] => {

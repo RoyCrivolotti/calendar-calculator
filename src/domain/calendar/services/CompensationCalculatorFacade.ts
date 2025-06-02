@@ -3,6 +3,7 @@ import { CalendarEvent } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
 import { CompensationService } from './CompensationService';
 import { SubEventRepository } from '../repositories/SubEventRepository';
+import { CalendarEventRepository } from '../repositories/CalendarEventRepository';
 import { logger } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { EventCompensationService } from './EventCompensationService';
@@ -17,23 +18,29 @@ export class CompensationCalculatorFacade {
   private static instance: CompensationCalculatorFacade;
   private compensationService: CompensationService;
   private eventCompensationService: EventCompensationService;
+  private eventRepository: CalendarEventRepository;
   private subEventRepository: SubEventRepository;
   
-  private constructor(subEventRepository: SubEventRepository) {
+  private constructor(eventRepository: CalendarEventRepository, subEventRepository: SubEventRepository) {
     this.compensationService = new CompensationService();
     this.eventCompensationService = EventCompensationService.getInstance();
+    this.eventRepository = eventRepository;
     this.subEventRepository = subEventRepository;
   }
   
   /**
    * Get the singleton instance of the facade
    */
-  public static getInstance(subEventRepository: SubEventRepository): CompensationCalculatorFacade {
+  public static getInstance(
+    eventRepository: CalendarEventRepository,
+    subEventRepository: SubEventRepository
+  ): CompensationCalculatorFacade {
     if (!this.instance) {
-      this.instance = new CompensationCalculatorFacade(subEventRepository);
-    } else if (this.instance.subEventRepository !== subEventRepository) {
-      logger.warn('CompensationCalculatorFacade.getInstance called with a new SubEventRepository. Re-initializing.');
-      this.instance = new CompensationCalculatorFacade(subEventRepository);
+      this.instance = new CompensationCalculatorFacade(eventRepository, subEventRepository);
+    } else if (this.instance.subEventRepository !== subEventRepository || 
+               this.instance.eventRepository !== eventRepository) {
+      logger.warn('CompensationCalculatorFacade.getInstance called with new Repositories. Re-initializing.');
+      this.instance = new CompensationCalculatorFacade(eventRepository, subEventRepository);
     }
     return this.instance;
   }
@@ -131,58 +138,112 @@ export class CompensationCalculatorFacade {
    * and properly handles events that span across month boundaries
    */
   public async calculateMonthlyCompensation(
-    events: CalendarEvent[],
-    date: Date
+    date: Date | string, // Allow string for flexibility from callers
+    allDomainEvents?: CalendarEvent[],
+    allDomainSubEvents?: SubEvent[]
   ): Promise<CompensationBreakdown[]> {
     try {
-      const monthKey = getMonthKey(date);
-      logger.info(`Calculating compensation via facade for month: ${monthKey}`);
+      const actualDateObject = date instanceof Date ? date : new Date(date);
+      const monthKey = getMonthKey(actualDateObject);
+      logger.info(`Calculating compensation via facade for month: ${monthKey} (input date type: ${typeof date})`);
+
+      let eventsForMonthCalculation: CalendarEvent[];
+      let subEventsForCalculation: SubEvent[];
+
+      if (allDomainEvents && allDomainSubEvents) {
+        logger.debug(`Using pre-fetched domain events (${allDomainEvents.length}) and sub-events (${allDomainSubEvents.length}) for month ${monthKey}`);
+        // Filter pre-fetched events for the current month
+        eventsForMonthCalculation = allDomainEvents.filter(event => {
+          const calEvent = event instanceof CalendarEvent ? event : new CalendarEvent(event as any);
+          return this.eventBelongsToMonth(calEvent, monthKey);
+        });
+        
+        if (eventsForMonthCalculation.length === 0) {
+          logger.info(`No pre-fetched events belong to month ${monthKey}`);
+          return [];
+        }
+
+        const relevantParentEventIds = eventsForMonthCalculation.map(e => e.id);
+        // Filter pre-fetched sub-events by parent ID and then by month
+        const subEventsForRelevantParents = allDomainSubEvents.filter(subEvent => 
+          relevantParentEventIds.includes(subEvent.parentEventId)
+        );
+        subEventsForCalculation = this.filterSubEventsByMonth(subEventsForRelevantParents, monthKey);
+        logger.debug(`Filtered to ${eventsForMonthCalculation.length} parent events and ${subEventsForCalculation.length} sub-events for month ${monthKey} from pre-fetched data.`);
+
+      } else {
+        logger.debug(`Fetching events and sub-events from repositories for month ${monthKey}`);
+        const year = actualDateObject.getFullYear(); // Use actualDateObject
+        const month = actualDateObject.getMonth(); // Use actualDateObject
+        const firstDayOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
+        const lastDayOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+        logger.debug(`Fetching parent events for range: ${firstDayOfMonth.toISOString()} - ${lastDayOfMonth.toISOString()}`);
+        const fetchedParentEvents = await this.eventRepository.getEventsForDateRange(firstDayOfMonth, lastDayOfMonth);
+        logger.debug(`Fetched ${fetchedParentEvents.length} parent events for month ${monthKey}`);
+        
+        if (fetchedParentEvents.length === 0) {
+          logger.info(`No events found for month ${monthKey} via repository.`);
+          return [];
+        }
+        eventsForMonthCalculation = fetchedParentEvents;
+
+        const eventIds = eventsForMonthCalculation.map(event => event.id);
+        logger.debug(`Fetching sub-events for ${eventIds.length} parent event IDs.`);
+        subEventsForCalculation = await this.subEventRepository.getSubEventsForEventIds(eventIds);
+        logger.info(`Loaded ${subEventsForCalculation.length} sub-events for the fetched parent events.`);
+      }
       
-      // Filter events that belong to the current month (either start or end in this month)
-      const relevantEvents = events.filter(event => this.eventBelongsToMonth(event, monthKey));
-      
-      if (relevantEvents.length === 0) {
-        logger.info(`No events found for month ${monthKey}`);
+      // Process events to handle cross-month events (applies to both paths)
+      const processedMonthEvents: CalendarEvent[] = [];
+      for (const event of eventsForMonthCalculation) {
+        const calendarEventInstance = event instanceof CalendarEvent ? event : new CalendarEvent(event as any);
+        // Ensure dates are Date objects for eventSpansAcrossMonths and splitEventForMonth
+        calendarEventInstance.start = new Date(calendarEventInstance.start);
+        calendarEventInstance.end = new Date(calendarEventInstance.end);
+
+        if (this.eventSpansAcrossMonths(calendarEventInstance)) {
+          const eventStartMonthKey = getMonthKey(calendarEventInstance.start);
+          const eventEndMonthKey = getMonthKey(calendarEventInstance.end);
+          // Use actualDateObject for year/month of the *target* month for splitting range
+          const targetYear = actualDateObject.getFullYear();
+          const targetMonth = actualDateObject.getMonth();
+          const firstDayOfTargetMonth = new Date(targetYear, targetMonth, 1);
+          const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0);
+
+          // Check if the event actually overlaps with the target month before splitting
+          if (calendarEventInstance.start <= lastDayOfTargetMonth && calendarEventInstance.end >= firstDayOfTargetMonth) {
+            logger.info(`Event ${calendarEventInstance.id} spans across months, splitting for month ${monthKey}`);
+            const splitEvent = this.splitEventForMonth(calendarEventInstance, monthKey);
+            processedMonthEvents.push(splitEvent);
+          } else {
+            logger.warn(`Event ${calendarEventInstance.id} (originally from ${eventStartMonthKey} to ${eventEndMonthKey}) was considered but does not overlap with target month ${monthKey}, skipping.`);
+          }
+        } else {
+          const eventActualMonthKey = getMonthKey(calendarEventInstance.start);
+          if (eventActualMonthKey === monthKey) {
+            processedMonthEvents.push(calendarEventInstance);
+          } else {
+            logger.warn(`Non-spanning event ${calendarEventInstance.id} (month ${eventActualMonthKey}) is not in target month ${monthKey}, skipping.`);
+          }
+        }
+      }
+      logger.info(`Processed ${processedMonthEvents.length} events for month ${monthKey} after filtering/splitting.`);
+      if (processedMonthEvents.length === 0) {
+        logger.info(`No relevant events for month ${monthKey} after full processing.`);
         return [];
       }
       
-      // Process events to handle cross-month events
-      const monthEvents: CalendarEvent[] = [];
-      
-      for (const event of relevantEvents) {
-        if (this.eventSpansAcrossMonths(event)) {
-          logger.info(`Event ${event.id} spans across months, splitting for month ${monthKey}`);
-          const splitEvent = this.splitEventForMonth(event, monthKey);
-          monthEvents.push(splitEvent);
-        } else {
-          monthEvents.push(event);
-        }
-      }
-      
-      logger.info(`Processed ${monthEvents.length} events for month ${monthKey}`);
-      
-      // Load all sub-events using the repository
-      const allSubEvents = await this.subEventRepository.getAll();
-      logger.info(`Loaded ${allSubEvents.length} sub-events for calculation from Firestore`);
-      
-      // Get relevant event IDs
-      const eventIds = monthEvents.map(event => event.id);
-      
-      // First filter sub-events by parent event ID
-      const eventSubEvents = allSubEvents.filter(subEvent => 
-        eventIds.includes(subEvent.parentEventId)
-      );
-      
-      // Then filter sub-events by month
-      const relevantSubEvents = this.filterSubEventsByMonth(eventSubEvents, monthKey);
-      
-      logger.info(`Found ${relevantSubEvents.length} relevant sub-events for month ${monthKey}`);
-      
-      // Calculate compensation
+      // If using pre-fetched sub-events, they are already filtered by month and parent ID.
+      // If fetched from repo, subEventsForCalculation are for the parent events, but might need further month filtering 
+      // if a parent event (post-split) is shorter than its original sub-events extent.
+      // However, compensationService.calculateMonthlyCompensation takes the date and should handle this fine.
+      const finalSubEventsForService = subEventsForCalculation;
+
       const breakdown = this.compensationService.calculateMonthlyCompensation(
-        monthEvents, 
-        relevantSubEvents,
-        date
+        processedMonthEvents, 
+        finalSubEventsForService,
+        actualDateObject // Pass the Date object to the service
       );
       
       return breakdown;

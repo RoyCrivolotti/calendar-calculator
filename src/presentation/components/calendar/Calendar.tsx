@@ -81,8 +81,9 @@ const Calendar: React.FC = () => {
   const [notificationMessage, setNotificationMessage] = useState('');
 
   const calculatorFacade = useMemo(() => {
+    const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
     const subEventRepo = container.get<SubEventRepository>('subEventRepository');
-    return CompensationCalculatorFacade.getInstance(subEventRepo);
+    return CompensationCalculatorFacade.getInstance(eventRepo, subEventRepo);
   }, []);
   
   const updateCompensationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -133,6 +134,10 @@ const Calendar: React.FC = () => {
     setLoading(true);
     
     try {
+      const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+      const allDomainSubEvents = await subEventRepo.getAll();
+      logger.info(`[updateCompensationData] Fetched ${allDomainSubEvents.length} total sub-events for summary calculation.`);
+
       const months = new Set<string>();
       currentEventsFromStore.forEach(event => {
         const startDate = new Date(event.start);
@@ -162,7 +167,7 @@ const Calendar: React.FC = () => {
         monthDate.setHours(0, 0, 0, 0);
         
         try {
-          const monthData = await calculatorFacade.calculateMonthlyCompensation(calendarEvents, monthDate);
+          const monthData = await calculatorFacade.calculateMonthlyCompensation(monthDate, calendarEvents, allDomainSubEvents);
           
           const hasMeaningfulData = monthData.some(item => item.amount > 0);
 

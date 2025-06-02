@@ -219,4 +219,38 @@ export class FirestoreSubEventRepository implements SubEventRepository {
 
     logger.info(`[FirestoreSubRepo] Batch deletion process completed. Successfully deleted ${totalSuccessfullyDeletedCount} subEvents (out of ${allSubEventsToDelete.length} fetched) related to parent IDs: ${parentIds.join(', ')}.`);
   }
+
+  async getSubEventsForEventIds(eventIds: string[]): Promise<SubEvent[]> {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      logger.warn('[FirestoreSubRepo] User not authenticated, returning empty for getSubEventsForEventIds.');
+      return [];
+    }
+    if (!eventIds || eventIds.length === 0) {
+      logger.debug('[FirestoreSubRepo] No event IDs provided to getSubEventsForEventIds, returning empty.');
+      return [];
+    }
+
+    const subEventsCollection = this.getSubEventsCollection(userId);
+    const allFetchedSubEvents: SubEvent[] = [];
+    const FIRESTORE_IN_QUERY_LIMIT = 30;
+
+    for (let i = 0; i < eventIds.length; i += FIRESTORE_IN_QUERY_LIMIT) {
+      const chunk = eventIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT);
+      const q = query(subEventsCollection, where('parentEventId', 'in', chunk));
+      try {
+        const querySnapshot = await getDocs(q);
+        const subEventsInChunk = querySnapshot.docs.map(docSnap => docSnap.data());
+        allFetchedSubEvents.push(...subEventsInChunk);
+        logger.debug(`[FirestoreSubRepo] Fetched ${subEventsInChunk.length} subEvents for eventId chunk ${Math.floor(i / FIRESTORE_IN_QUERY_LIMIT) + 1} (Event IDs: ${chunk.join(', ')})`);
+      } catch (error) {
+        logger.error(`[FirestoreSubRepo] Error fetching subEvents for eventId chunk (Event IDs: ${chunk.join(', ')}):`, error);
+        // Depending on desired error handling, we might throw or continue to fetch other chunks
+        // For now, let's rethrow to be consistent with other methods.
+        throw error;
+      }
+    }
+    logger.info(`[FirestoreSubRepo] Fetched a total of ${allFetchedSubEvents.length} subEvents for ${eventIds.length} parent event IDs.`);
+    return allFetchedSubEvents;
+  }
 } 

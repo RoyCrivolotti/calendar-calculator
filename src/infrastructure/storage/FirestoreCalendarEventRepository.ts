@@ -8,7 +8,8 @@ import {
   Timestamp,
   writeBatch,
   query,
-  where
+  where,
+  getDoc
 } from 'firebase/firestore';
 import { CalendarEvent } from '../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../domain/calendar/repositories/CalendarEventRepository';
@@ -98,6 +99,37 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
     }
   }
 
+  async getEventsForDateRange(startDate: Date, endDate: Date): Promise<CalendarEvent[]> {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      logger.warn('[FirestoreRepo] User not authenticated for getEventsForDateRange, returning empty.');
+      return [];
+    }
+    const eventsCollectionWithConverter = this.getEventsCollection(userId);
+    
+    const q = query(
+      eventsCollectionWithConverter, 
+      where('start', '<=', Timestamp.fromDate(endDate))
+    );
+
+    try {
+      const querySnapshot = await getDocs(q);
+      const fetchedEvents = querySnapshot.docs.map(docSnap => docSnap.data());
+      
+      const overlappingEvents = fetchedEvents.filter(event => {
+        // Ensure event.end is a Date object for comparison
+        const eventEnd = event.end instanceof Date ? event.end : new Date(event.end);
+        return eventEnd >= startDate;
+      });
+
+      logger.info(`[FirestoreRepo] Fetched ${overlappingEvents.length} events (out of ${fetchedEvents.length} initially queried) for range ${startDate.toISOString()} - ${endDate.toISOString()} for user ${userId}`);
+      return overlappingEvents;
+    } catch (error) {
+      logger.error(`[FirestoreRepo] Error fetching events for date range ${startDate.toISOString()} - ${endDate.toISOString()}:`, error);
+      throw error;
+    }
+  }
+
   async getHolidayEvents(): Promise<CalendarEvent[]> {
     const userId = getCurrentUserId();
     if (!userId) {
@@ -174,6 +206,32 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       logger.info(`[FirestoreRepo] Batch deleted ${ids.length} events for user ${userId}. IDs: ${ids.join(', ')}`);
     } catch (error) {
       logger.error(`[FirestoreRepo] Error batch deleting events. IDs: ${ids.join(', ')}:`, error);
+      throw error;
+    }
+  }
+
+  async getById(id: string): Promise<CalendarEvent | null> {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      logger.warn('[FirestoreRepo] User not authenticated for getById, returning null.');
+      return null;
+    }
+    if (!id) {
+      logger.warn('[FirestoreRepo] No ID provided to getById, returning null.');
+      return null;
+    }
+    const eventRef = doc(db, `users/${userId}/events/${id}`).withConverter(calendarEventConverter);
+    try {
+      const docSnap = await getDoc(eventRef);
+      if (docSnap.exists()) {
+        logger.info(`[FirestoreRepo] Fetched event ${id} for user ${userId}`);
+        return docSnap.data();
+      } else {
+        logger.warn(`[FirestoreRepo] No event found with ID ${id} for user ${userId}`);
+        return null;
+      }
+    } catch (error) {
+      logger.error(`[FirestoreRepo] Error fetching event by ID ${id}:`, error);
       throw error;
     }
   }
