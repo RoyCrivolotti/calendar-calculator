@@ -329,23 +329,23 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           </SectionTitle>
           <TimeInputGrid>
             <TimeInputGroup>
-              <InputLabel htmlFor="start-time">Start Time</InputLabel>
+              <InputLabel htmlFor="startTime">Start Time</InputLabel>
               <TimeInput 
-                id="start-time"
                 type="datetime-local" 
-                value={startTime}
-                onChange={handleStartTimeChange}
-                required
+                id="startTime"
+                value={startTime} 
+                onChange={handleStartTimeChange} 
+                disabled={event.type === 'holiday'}
               />
             </TimeInputGroup>
             <TimeInputGroup>
-              <InputLabel htmlFor="end-time">End Time</InputLabel>
+              <InputLabel htmlFor="endTime">End Time</InputLabel>
               <TimeInput 
-                id="end-time"
                 type="datetime-local" 
-                value={endTime}
+                id="endTime"
+                value={endTime} 
                 onChange={handleEndTimeChange}
-                required
+                disabled={event.type === 'holiday'}
               />
             </TimeInputGroup>
           </TimeInputGrid>

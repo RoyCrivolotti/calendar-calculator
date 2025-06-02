@@ -209,7 +209,7 @@ export class CompensationCalculatorFacade {
           const targetYear = actualDateObject.getFullYear();
           const targetMonth = actualDateObject.getMonth();
           const firstDayOfTargetMonth = new Date(targetYear, targetMonth, 1);
-          const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0);
+          const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
 
           // Check if the event actually overlaps with the target month before splitting
           if (calendarEventInstance.start <= lastDayOfTargetMonth && calendarEventInstance.end >= firstDayOfTargetMonth) {
