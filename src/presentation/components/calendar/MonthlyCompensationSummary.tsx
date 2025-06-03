@@ -1,9 +1,13 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import styled from '@emotion/styled';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
-import { storageService } from '../../services/storage';
 import { logger } from '../../../utils/logger';
 import { trackOperation } from '../../../utils/errorHandler';
+import { container } from '../../../config/container';
+import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
+import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
+import { useAppSelector } from '../../store/hooks';
+import { RootState } from '../../store';
 import { 
   ChevronRightIcon, 
   DollarIcon,
@@ -11,7 +15,6 @@ import {
 } from '../../../assets/icons';
 import { extractHoursData } from '../../../utils/compensation/compensationUtils';
 import { formatMonthYear } from '../../../utils/formatting/formatters';
-// Import UI components
 import { 
   Button, 
   Modal, 
@@ -43,8 +46,8 @@ import {
   SharedWarningText
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
-// Import custom hooks
 import { useTooltip, useSidePanel } from '../../hooks';
+import { useMonthDeletionHandler } from '../../hooks/useMonthDeletionHandler';
 
 const ChartContainer = styled.div`
   margin: 2rem 0;
@@ -115,9 +118,10 @@ interface MonthData {
 
 interface MonthlyCompensationSummaryProps {
   data: CompensationBreakdown[];
+  onDataChange?: () => void;
 }
 
-const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data }) => {
+const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data, onDataChange }) => {
   useEffect(() => {
     logger.debug(`MonthlyCompensationSummary received data with ${data.length} items`);
     if (data.length > 0) {
@@ -125,9 +129,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     }
   }, [data]);
 
+  const calendarEventRepository = useMemo(() => container.get<CalendarEventRepository>('calendarEventRepository'), []);
+  const subEventRepository = useMemo(() => container.get<SubEventRepository>('subEventRepository'), []);
+  const currentUser = useAppSelector((state: RootState) => state.auth.currentUser);
+
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [showDeleteMonthModal, setShowDeleteMonthModal] = useState(false);
+  const [showConfirmClearAllModal, setShowConfirmClearAllModal] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
   const [isVisible, setIsVisible] = useState(false);
   
@@ -145,13 +153,43 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
   
+  const handleCloseModal = useCallback(() => {
+    setSelectedMonth(null);
+    closeSidePanel();
+    hideTooltip();
+  }, [closeSidePanel, hideTooltip]);
+  
+  const {
+    isDeletingMonth,
+    showConfirmDeleteMonthModal,
+    monthPendingDeletion,
+    initiateDeleteMonth,
+    confirmDeleteMonth,
+    cancelDeleteMonth,
+    getNotificationProps,
+  } = useMonthDeletionHandler({ 
+    onDeletionSuccess: onDataChange,
+    onBeforeSuccessNotification: handleCloseModal
+  });
+  
+  const monthDeletionHookNotification = getNotificationProps();
+
+  // ADD: Local state for "Clear All" operation notifications
+  const [clearAllNotificationVisible, setClearAllNotificationVisible] = useState(false);
+  const [clearAllNotificationTitle, setClearAllNotificationTitle] = useState('');
+  const [clearAllNotificationMessage, setClearAllNotificationMessage] = useState('');
+
   useEffect(() => {
     const handleEscapeKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showConfirmModal) {
-          setShowConfirmModal(false);
-        } else if (showDeleteMonthModal) {
-          setShowDeleteMonthModal(false);
+        if (showConfirmClearAllModal) {
+          setShowConfirmClearAllModal(false);
+        } else if (showConfirmDeleteMonthModal) {
+          cancelDeleteMonth();
+        } else if (monthDeletionHookNotification?.visible) {
+          monthDeletionHookNotification.onClose();
+        } else if (clearAllNotificationVisible) {
+          setClearAllNotificationVisible(false);
         } else if (selectedMonth) {
           setSelectedMonth(null);
           closeSidePanel();
@@ -164,7 +202,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     return () => {
       window.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [selectedMonth, showConfirmModal, showDeleteMonthModal, closeSidePanel, hideTooltip]);
+  }, [selectedMonth, showConfirmClearAllModal, showConfirmDeleteMonthModal, cancelDeleteMonth, monthDeletionHookNotification, clearAllNotificationVisible, closeSidePanel, hideTooltip]);
 
   const monthsWithData = useMemo(() => {
     const result: MonthData[] = [];
@@ -217,7 +255,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   }, [data]);
 
   const handleMonthClick = useCallback((month: Date) => {
-    setIsVisible(false);
     setSelectedMonth(month);
     setActiveTab('all');
     
@@ -228,50 +265,71 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     });
   }, []);
 
-  const handleCloseModal = useCallback(() => {
-    setSelectedMonth(null);
-    closeSidePanel();
-    hideTooltip();
-  }, [closeSidePanel, hideTooltip]);
-
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       handleCloseModal();
     }
   }, [handleCloseModal]);
 
-  const handleClearAllData = useCallback(async () => {
+  const handleInitiateClearAllData = useCallback(async () => {
     logger.info('User initiated clearing of all calendar data');
-    setShowConfirmModal(true);
+    setShowConfirmClearAllModal(true);
   }, []);
 
-  const handleConfirmClear = useCallback(async () => {
+  const handleConfirmClearAll = useCallback(async () => {
+    if (!currentUser?.uid) {
+      logger.error('[MonthlySummary] Cannot clear all data: User not authenticated.');
+      setClearAllNotificationTitle('Authentication Error');
+      setClearAllNotificationMessage('You must be logged in to clear all data.');
+      setClearAllNotificationVisible(true);
+      setShowConfirmClearAllModal(false);
+      return;
+    }
+    logger.info(`[MonthlySummary] User ${currentUser.uid} initiating batch clearing of ALL calendar data.`);
+    setIsClearingAll(true);
     try {
       await trackOperation(
-        'ClearAllData',
+        'ClearAllUserDataBatch',
         async () => {
-          logger.info('Starting to clear all data');
-      await storageService.clearAllData();
-          logger.info('Successfully cleared all calendar data');
-          return { success: true };
+          const allEvents = await calendarEventRepository.getAll();
+          if (allEvents.length === 0) {
+            logger.info('[MonthlySummary] No events to delete.');
+            return { success: true, itemsCleared: 0 };
+          }
+          const eventIdsToDelete = allEvents.map(event => event.id);
+
+          logger.info(`[MonthlySummary] Batch deleting ${eventIdsToDelete.length} events and their sub-events for user ${currentUser.uid}.`);
+          await subEventRepository.deleteMultipleByParentIds(eventIdsToDelete);
+          await calendarEventRepository.deleteMultipleByIds(eventIdsToDelete);
+          
+          logger.info(`[MonthlySummary] Successfully batch cleared data for user ${currentUser.uid}.`);
+          if (onDataChange) {
+            onDataChange();
+          }
+          setClearAllNotificationTitle('Success');
+          setClearAllNotificationMessage('All your calendar data has been successfully cleared.');
+          setClearAllNotificationVisible(true);
+          return { success: true, itemsCleared: eventIdsToDelete.length };
         },
-        { 
-          operation: 'data_clearing',
-          userTriggered: true 
+        {
+          source: 'MonthlyCompensationSummary.ClearAll.Batch',
+          userId: currentUser.uid
         }
       );
-      
-      window.location.reload();
     } catch (error) {
-      logger.error('Failed to clear calendar data:', error);
-      alert('Failed to clear data. See console for details.');
+      logger.error('[MonthlySummary] Error clearing all user data:', error);
+      setClearAllNotificationTitle('Error');
+      setClearAllNotificationMessage('An error occurred while clearing your data. Please try again.');
+      setClearAllNotificationVisible(true);
     } finally {
-      setShowConfirmModal(false);
+      setIsClearingAll(false);
+      setShowConfirmClearAllModal(false);
+      setSelectedMonth(null);
     }
-  }, []);
+  }, [currentUser, calendarEventRepository, subEventRepository, onDataChange, trackOperation, setIsClearingAll, setSelectedMonth, setShowConfirmClearAllModal, setClearAllNotificationVisible, setClearAllNotificationTitle, setClearAllNotificationMessage]);
 
-  const handleCancelClear = useCallback(() => {
-    setShowConfirmModal(false);
+  const handleCancelClearAll = useCallback(() => {
+    setShowConfirmClearAllModal(false);
   }, []);
 
   const selectedMonthData = useMemo(() => {
@@ -506,107 +564,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     openPanel(); 
   };
 
-  const handlePreviousMonth = useCallback(() => {
-    if (!selectedMonth) return;
-    
-    const currentIndex = monthsWithData.findIndex(
-      m => m.date.getTime() === selectedMonth.getTime()
-    );
-    
-    if (currentIndex > 0) {
-      setSelectedMonth(monthsWithData[currentIndex - 1].date);
+  const handleDeleteMonthDataForUI = useCallback(() => {
+    if (!selectedMonth) {
+      logger.warn('No month selected for deletion attempt (UI button).');
+      return;
     }
-  }, [selectedMonth, monthsWithData]);
-
-  const handleNextMonth = useCallback(() => {
-    if (!selectedMonth) return;
-    
-    const currentIndex = monthsWithData.findIndex(
-      m => m.date.getTime() === selectedMonth.getTime()
-    );
-    
-    if (currentIndex < monthsWithData.length - 1) {
-      setSelectedMonth(monthsWithData[currentIndex + 1].date);
-    }
-  }, [selectedMonth, monthsWithData]);
-
-  const selectedMonthIndex = useMemo(() => {
-    if (!selectedMonth) return -1;
-    return monthsWithData.findIndex(m => m.date.getTime() === selectedMonth.getTime());
-  }, [selectedMonth, monthsWithData]);
-
-  const handleDeleteMonth = useCallback(async () => {
-    if (!selectedMonth) return;
-    
-    const monthName = formatMonthYear(selectedMonth);
-    logger.info(`Attempting to delete all events for month: ${monthName}`);
-    
-    try {
-      await trackOperation(
-        `DeleteMonth(${monthName})`,
-        async () => {
-          const allEvents = await storageService.loadEvents();
-          const allSubEvents = await storageService.loadSubEvents();
-          
-          const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
-          const endOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59);
-          
-          const eventsToDelete = allEvents.filter(event => {
-            const eventStart = new Date(event.start);
-            const eventEnd = new Date(event.end);
-            return (
-              (eventStart >= startOfMonth && eventStart <= endOfMonth) ||
-              (eventEnd >= startOfMonth && eventEnd <= endOfMonth) ||
-              (eventStart <= startOfMonth && eventEnd >= endOfMonth)
-            );
-          });
-          
-          const deletedEventIds = eventsToDelete.map(event => event.id);
-          logger.debug(`Found ${deletedEventIds.length} events to delete for month ${monthName}`);
-          
-          const remainingEvents = allEvents.filter(event => !deletedEventIds.includes(event.id));
-          await storageService.saveEvents(remainingEvents);
-          
-          const subEventsToDelete = allSubEvents.filter(subEvent => 
-            deletedEventIds.includes(subEvent.parentEventId)
-          );
-          
-          const deletedSubEventsCount = subEventsToDelete.length;
-          logger.debug(`Found ${deletedSubEventsCount} sub-events to delete`);
-          
-          const remainingSubEvents = allSubEvents.filter(subEvent => 
-            !deletedEventIds.includes(subEvent.parentEventId)
-          );
-          await storageService.saveSubEvents(remainingSubEvents);
-          
-          return { deletedEvents: deletedEventIds.length, deletedSubEvents: deletedSubEventsCount };
-        },
-        {
-          monthName,
-          monthDate: selectedMonth.toISOString(),
-          operation: 'month_deletion'
-        }
-      );
-      
-      setShowDeleteMonthModal(false);
-      window.location.reload();
-    } catch (error) {
-      logger.error('Failed to delete month events:', error);
-      alert(`Failed to delete events for ${monthName}. See console for details.`);
-      setShowDeleteMonthModal(false);
-    }
-  }, [selectedMonth]);
-
-  const handleOpenDeleteMonthModal = useCallback(() => {
-    if (!selectedMonth) return;
-    logger.info(`Opening delete confirmation modal for month: ${formatMonthYear(selectedMonth)}`);
-    setShowDeleteMonthModal(true);
-  }, [selectedMonth]);
-
-  const handleCloseDeleteMonthModal = useCallback(() => {
-    logger.info('User cancelled month deletion');
-    setShowDeleteMonthModal(false);
-  }, []);
+    initiateDeleteMonth(selectedMonth);
+  }, [selectedMonth, initiateDeleteMonth]);
 
   const monthScrollerItems = useMemo((): MonthScrollerItem[] => {
     return monthsWithData.map(monthData => ({
@@ -816,7 +780,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               <p style={{ color: '#64748b', margin: '0 0 1rem 0', fontSize: '0.875rem' }}>
                 Remove all events for this month, including events that overlap with other months.
               </p>
-              <Button style={{ width: 'fit-content' }} variant="danger" onClick={handleOpenDeleteMonthModal}>
+              <Button style={{ width: 'fit-content' }} variant="danger" onClick={handleDeleteMonthDataForUI} disabled={isDeletingMonth}>
                 Remove All Events for {formatMonthYear(selectedMonth)}
               </Button>
             </DeleteMonthSection>
@@ -824,49 +788,48 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
         </Modal>
       )}
 
-      {showConfirmModal && (
-        <Modal isOpen={showConfirmModal} onClose={handleCancelClear}>
-          <ModalHeader>
-            <ModalTitle>Clear All Data</ModalTitle>
-          </ModalHeader>
-          <ModalBody>
-            <p>
-              Are you sure you want to clear all calendar data? <br />
-              This action cannot be undone and will remove all events and compensation data.
-            </p>
-          </ModalBody>
+      {/* Notification Modal driven by the month deletion hook */}
+      {monthDeletionHookNotification && (
+        <Modal isOpen={monthDeletionHookNotification.visible} onClose={monthDeletionHookNotification.onClose}>
+          <ModalHeader><ModalTitle>{monthDeletionHookNotification.title}</ModalTitle></ModalHeader>
+          <ModalBody><p>{monthDeletionHookNotification.message}</p></ModalBody>
+          <ModalFooter><Button variant="primary" onClick={monthDeletionHookNotification.onClose}>OK</Button></ModalFooter>
+        </Modal>
+      )}
+
+      {/* ADDED: Notification Modal for "Clear All" operation (local state) */}
+      {clearAllNotificationVisible && (
+        <Modal isOpen={clearAllNotificationVisible} onClose={() => setClearAllNotificationVisible(false)}>
+          <ModalHeader><ModalTitle>{clearAllNotificationTitle}</ModalTitle></ModalHeader>
+          <ModalBody><p>{clearAllNotificationMessage}</p></ModalBody>
+          <ModalFooter><Button variant="primary" onClick={() => setClearAllNotificationVisible(false)}>OK</Button></ModalFooter>
+        </Modal>
+      )}
+
+      {showConfirmClearAllModal && (
+        <Modal isOpen={showConfirmClearAllModal} onClose={handleCancelClearAll}>
+          <ModalHeader><ModalTitle>Clear All Data</ModalTitle></ModalHeader>
+          <ModalBody><p>Are you sure you want to clear all calendar data?...</p></ModalBody>
           <ModalFooter>
-            <Button variant="secondary" onClick={handleCancelClear}>Cancel</Button>
-            <Button variant="danger" onClick={handleConfirmClear}>Delete All Data</Button>
+            <Button variant="secondary" onClick={handleCancelClearAll} disabled={isClearingAll}>Cancel</Button>
+            <Button variant="danger" onClick={handleConfirmClearAll} disabled={isClearingAll}>Delete All Data</Button>
           </ModalFooter>
         </Modal>
       )}
 
-      {showDeleteMonthModal && selectedMonth && (
-        <Modal isOpen={showDeleteMonthModal} onClose={handleCloseDeleteMonthModal}>
-          <ModalHeader>
-            <ModalTitle>Remove All Events for {formatMonthYear(selectedMonth)}?</ModalTitle>
-          </ModalHeader>
-          <ModalBody>
-            <p>
-              This will permanently remove all events that overlap with {formatMonthYear(selectedMonth)}. 
-              This includes events that start in previous months or end in future months.
-              This action cannot be undone.
-            </p>
-          </ModalBody>
+      {showConfirmDeleteMonthModal && monthPendingDeletion && (
+        <Modal isOpen={showConfirmDeleteMonthModal} onClose={cancelDeleteMonth}>
+          <ModalHeader><ModalTitle>Remove All Events for {formatMonthYear(monthPendingDeletion)}?</ModalTitle></ModalHeader>
+          <ModalBody><p>This will permanently remove all events that overlap with {formatMonthYear(monthPendingDeletion)}...</p></ModalBody>
           <ModalFooter>
-            <Button variant="secondary" onClick={handleCloseDeleteMonthModal}>
-                Cancel
-            </Button>
-            <Button variant="danger" onClick={handleDeleteMonth}>
-                Remove Events
-            </Button>
+            <Button variant="secondary" onClick={cancelDeleteMonth} disabled={isDeletingMonth}>Cancel</Button>
+            <Button variant="danger" onClick={confirmDeleteMonth} disabled={isDeletingMonth}>Remove Events</Button>
           </ModalFooter>
         </Modal>
       )}
 
       <ClearDataSection>
-        <Button variant="danger" onClick={handleClearAllData}>
+        <Button variant="danger" onClick={handleInitiateClearAllData} disabled={isClearingAll}>
           Clear All Calendar Data
         </Button>
         <SharedWarningText>Warning: This will permanently delete all events and compensation data.</SharedWarningText>

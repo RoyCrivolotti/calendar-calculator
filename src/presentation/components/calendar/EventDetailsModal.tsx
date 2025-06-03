@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from '@emotion/styled';
-import { CalendarEvent, createCalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
-import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
+import { CalendarEvent, createCalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
 import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
 import CompensationSummarySection from './CompensationSummarySection';
 import { logger } from '../../../utils/logger';
 import { Modal, ModalHeader, ModalTitle, ModalBody, CloseButton, Button } from '../common/ui';
-import { 
+import { container } from '../../../config/container';
+import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
+import { EventCompensationService } from '../../../domain/calendar/services/EventCompensationService';
+import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
+import { useAppSelector } from '../../store/hooks'; // For accessing allEvents from Redux store
+import { RootState } from '../../store'; // For RootState type
+import {
   PhoneIcon, 
   AlertIcon, 
   ClockIcon, 
@@ -154,7 +159,9 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [compensationSummary, setCompensationSummary] = useState<CompensationSummary | null>(null);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
-  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
+  const subEventFactory = useMemo(() => new SubEventFactory(), []);
+  const eventCompensationService = useMemo(() => EventCompensationService.getInstance(), []);
+  const allEventsFromStore = useAppSelector((state: RootState) => state.calendar.events);
 
   // Set up event listener for escape key
   useEffect(() => {
@@ -171,21 +178,55 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   // Calculate compensation preview when event time changes
   useEffect(() => {
     const calculatePreview = async () => {
-      if (!isTimeValid) return;
+      // Validate start and end times directly
+      const startDate = new Date(startTime);
+      const endDate = new Date(endTime);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate >= endDate) {
+        setCompensationSummary(null); // Clear summary if times are invalid
+        // setIsTimeValid will be handled by the change handlers already
+        return;
+      }
       
+      // Ensure event type is valid for compensation calculation
+      if (event.type === 'holiday') {
+        // Holidays don't have their own compensation preview in this context
+        setCompensationSummary(null);
+        setIsCalculating(false);
+        return;
+      }
+
       try {
         setIsCalculating(true);
         
-        // Create a temporary event with the current times
-        const updatedEvent = createCalendarEvent({
-          ...event.toJSON(),
-          start: new Date(startTime),
-          end: new Date(endTime)
-        });
+        // Create a temporary event with the current times from the modal
+        const tempEventDetails: CalendarEventProps = {
+          ...event.toJSON(), // Base properties from the original event (like id, type)
+          start: startDate,
+          end: endDate,
+          title: title || (event.type === 'oncall' ? 'On-Call Shift' : 'Incident'), // Ensure title is present
+        };
+        const temporaryEvent = new CalendarEvent(tempEventDetails);
         
-        // Calculate compensation for this event
-        const summary = await calculatorFacade.calculateEventCompensation(updatedEvent);
+        // Convert all stored events (which are plain JS objects) to CalendarEvent instances
+        // The SubEventFactory expects CalendarEvent[] for its allEvents argument
+        const allDomainEvents = allEventsFromStore.map(e => new CalendarEvent(e));
+
+        // Generate temporary sub-events for this temporary event
+        // The SubEventFactory needs all events to correctly determine holidays
+        const tempSubEvents = subEventFactory.generateSubEvents(temporaryEvent, allDomainEvents);
+        
+        if (tempSubEvents.length === 0 && temporaryEvent.type === 'oncall') {
+          logger.warn('[EventDetailsModal] No temporary sub-events generated for on-call event preview. This might indicate an issue if the duration is valid.');
+        }
+        
+        // Calculate compensation summary using the event and its temporary sub-events
+        const summary = eventCompensationService.calculateEventCompensation(
+          temporaryEvent,
+          tempSubEvents
+        );
         setCompensationSummary(summary);
+        
       } catch (error) {
         logger.error('Error calculating compensation preview:', error);
         setCompensationSummary(null);
@@ -194,8 +235,13 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
       }
     };
     
-    calculatePreview();
-  }, [startTime, endTime, isTimeValid, event, calculatorFacade]);
+    // Debounce the calculation slightly to avoid running on every keystroke instantly
+    const debounceTimeout = setTimeout(() => {
+        calculatePreview();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(debounceTimeout); // Cleanup timeout
+  }, [startTime, endTime, title, event, subEventFactory, eventCompensationService, allEventsFromStore, isTimeValid]); // Added title and allEventsFromStore
 
   const validateTimes = useCallback((start: string, end: string): boolean => {
     const startDate = new Date(start);
@@ -283,23 +329,23 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           </SectionTitle>
           <TimeInputGrid>
             <TimeInputGroup>
-              <InputLabel htmlFor="start-time">Start Time</InputLabel>
+              <InputLabel htmlFor="startTime">Start Time</InputLabel>
               <TimeInput 
-                id="start-time"
                 type="datetime-local" 
-                value={startTime}
-                onChange={handleStartTimeChange}
-                required
+                id="startTime"
+                value={startTime} 
+                onChange={handleStartTimeChange} 
+                disabled={event.type === 'holiday'}
               />
             </TimeInputGroup>
             <TimeInputGroup>
-              <InputLabel htmlFor="end-time">End Time</InputLabel>
+              <InputLabel htmlFor="endTime">End Time</InputLabel>
               <TimeInput 
-                id="end-time"
                 type="datetime-local" 
-                value={endTime}
+                id="endTime"
+                value={endTime} 
                 onChange={handleEndTimeChange}
-                required
+                disabled={event.type === 'holiday'}
               />
             </TimeInputGroup>
           </TimeInputGrid>

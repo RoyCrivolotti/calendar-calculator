@@ -1,9 +1,9 @@
 import { CalendarEventRepository } from '../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../domain/calendar/repositories/SubEventRepository';
-import { IndexedDBCalendarEventRepository } from '../infrastructure/storage/IndexedDBCalendarEventRepository';
-import { IndexedDBSubEventRepository } from '../infrastructure/storage/IndexedDBSubEventRepository';
-import { CreateEventUseCase } from '../application/calendar/use-cases/CreateEvent';
-import { UpdateEventUseCase } from '../application/calendar/use-cases/UpdateEvent';
+import { FirestoreCalendarEventRepository } from '../infrastructure/storage/FirestoreCalendarEventRepository';
+import { FirestoreSubEventRepository } from '../infrastructure/storage/FirestoreSubEventRepository';
+import { CreateEventUseCase } from '../application/calendar/use-cases/CreateEventUseCase';
+import { UpdateEventUseCase } from '../application/calendar/use-cases/UpdateEventUseCase';
 import { DeleteEventUseCase } from '../application/calendar/use-cases/DeleteEvent';
 import { CalculateCompensationUseCase } from '../application/calendar/use-cases/CalculateCompensation';
 import { SubEventFactory } from '../domain/calendar/services/SubEventFactory';
@@ -26,8 +26,8 @@ class Container {
 
   private registerServices() {
     // Repositories
-    this.services.set('calendarEventRepository', new IndexedDBCalendarEventRepository());
-    this.services.set('subEventRepository', new IndexedDBSubEventRepository());
+    this.services.set('calendarEventRepository', new FirestoreCalendarEventRepository());
+    this.services.set('subEventRepository', new FirestoreSubEventRepository());
 
     // Services
     this.services.set('subEventFactory', new SubEventFactory());
@@ -38,7 +38,8 @@ class Container {
       'createEventUseCase',
       new CreateEventUseCase(
         this.get<CalendarEventRepository>('calendarEventRepository'),
-        this.get<SubEventRepository>('subEventRepository')
+        this.get<SubEventRepository>('subEventRepository'),
+        this.get<SubEventFactory>('subEventFactory')
       )
     );
 
@@ -46,7 +47,8 @@ class Container {
       'updateEventUseCase',
       new UpdateEventUseCase(
         this.get<CalendarEventRepository>('calendarEventRepository'),
-        this.get<SubEventRepository>('subEventRepository')
+        this.get<SubEventRepository>('subEventRepository'),
+        this.get<SubEventFactory>('subEventFactory')
       )
     );
 
@@ -54,7 +56,8 @@ class Container {
       'deleteEventUseCase',
       new DeleteEventUseCase(
         this.get<CalendarEventRepository>('calendarEventRepository'),
-        this.get<SubEventRepository>('subEventRepository')
+        this.get<SubEventRepository>('subEventRepository'),
+        this.get<SubEventFactory>('subEventFactory')
       )
     );
 

@@ -63,132 +63,60 @@ export class CompensationService {
   }
 
   /**
-   * Calculate the total compensation for all events and sub-events
-   */
-  calculateTotalCompensation(events: CalendarEvent[], subEvents: SubEvent[]): number {
-    const relevantSubEvents = subEvents.filter(subEvent => 
-      events.some(event => event.id === subEvent.parentEventId)
-    );
-    
-    let totalCompensation = 0;
-    
-    // Process on-call sub-events
-    const oncallSubEvents = relevantSubEvents.filter(subEvent => subEvent.type === 'oncall');
-    oncallSubEvents.forEach(subEvent => {
-      // Include hours that are either outside office hours OR night shift hours
-      if (!subEvent.isOfficeHours || subEvent.isNightShift) {
-        const hours = this.calculateHoursInSubEvent(subEvent);
-        const rate = subEvent.isWeekend ? COMPENSATION_RATES.weekendOnCallRate : COMPENSATION_RATES.weekdayOnCallRate;
-        const compensation = hours * rate;
-        
-        logger.debug(`On-call compensation: ${hours}h * €${rate} = €${compensation.toFixed(2)}`);
-        totalCompensation += compensation;
-      }
-    });
-    
-    // Process incident sub-events
-    const incidentSubEvents = relevantSubEvents.filter(subEvent => subEvent.type === 'incident');
-    incidentSubEvents.forEach(subEvent => {
-      const hours = this.calculateHoursInSubEvent(subEvent);
-      
-      if (subEvent.isWeekend) {
-        if (subEvent.isNightShift) {
-          // Weekend night shift
-          const compensation = hours * COMPENSATION_RATES.baseHourlySalary * 
-                               COMPENSATION_RATES.weekendIncidentMultiplier * 
-                               COMPENSATION_RATES.nightShiftBonusMultiplier;
-          
-          logger.debug(`Weekend night shift: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekendIncidentMultiplier} * ${COMPENSATION_RATES.nightShiftBonusMultiplier} = €${compensation.toFixed(2)}`);
-          totalCompensation += compensation;
-        } else {
-          // Regular weekend incident
-          const compensation = hours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekendIncidentMultiplier;
-          logger.debug(`Weekend incident: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekendIncidentMultiplier} = €${compensation.toFixed(2)}`);
-          totalCompensation += compensation;
-        }
-      } else {
-        if (subEvent.isNightShift) {
-          // Weekday night shift - apply all multipliers at once
-          const compensation = hours * COMPENSATION_RATES.baseHourlySalary * 
-                             COMPENSATION_RATES.weekdayIncidentMultiplier * 
-                             COMPENSATION_RATES.nightShiftBonusMultiplier;
-          
-          logger.debug(`Weekday night shift: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekdayIncidentMultiplier} * ${COMPENSATION_RATES.nightShiftBonusMultiplier} = €${compensation.toFixed(2)}`);
-          
-          totalCompensation += compensation;
-        } else {
-          // Regular weekday incident
-          const compensation = hours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekdayIncidentMultiplier;
-          logger.debug(`Weekday incident: ${hours}h * €${COMPENSATION_RATES.baseHourlySalary} * ${COMPENSATION_RATES.weekdayIncidentMultiplier} = €${compensation.toFixed(2)}`);
-          
-          totalCompensation += compensation;
-        }
-      }
-    });
-    
-    return totalCompensation;
-  }
-
-  /**
    * Calculate monthly compensation breakdown from events and sub-events
    */
   calculateMonthlyCompensation(events: CalendarEvent[], subEvents: SubEvent[], date: Date): CompensationBreakdown[] {
     const monthKey = getMonthKey(date);
     
-    // Generate a simple cache key based on events and sub-events
     const cacheKey = this.generateCacheKey(events, subEvents, monthKey);
     
-    // Check if we have a valid cached result
     const cachedResult = this.cache.get(cacheKey);
     if (cachedResult && (Date.now() - cachedResult.timestamp) < this.CACHE_TTL_MS) {
       logger.debug(`Using cached compensation data for ${monthKey}`);
       return cachedResult.data;
     }
     
-    logger.info(`Calculating compensation for month: ${monthKey}`);
-    
-    // Filter events for the current month
-    const monthEvents = events.filter(event => {
-      const eventDate = new Date(event.start);
-      const eventMonthKey = getMonthKey(eventDate);
-      const isInMonth = eventMonthKey === monthKey;
-      logger.info(`Event ${event.id} (${event.type}): ${eventDate.toISOString()} is in month ${monthKey}: ${isInMonth}`);
-      return isInMonth;
+    logger.info(`Calculating compensation for month: ${monthKey} using ${events.length} processed parent events.`);
+
+    // Define month boundaries for sub-event filtering
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    // Note: month for Date constructor is 0-indexed
+    const firstDayOfTargetMonth = new Date(year, month, 1, 0, 0, 0, 0);
+    // Get last millisecond of the last day of the month
+    const lastDayOfTargetMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    // Filter sub-events to those that actually overlap with the target month.
+    // The `events` array is already processed by the facade for this month.
+    // The `subEvents` array contains all sub-events for the parent `events`.
+    const subEventsForMonth = subEvents.filter(subEvent => {
+        const subStart = new Date(subEvent.start);
+        const subEnd = new Date(subEvent.end);
+        
+        // Check for overlap:
+        // Sub-event starts before or at the same time as month ends AND sub-event ends after or at the same time as month starts
+        const overlaps = subStart <= lastDayOfTargetMonth && subEnd >= firstDayOfTargetMonth;
+        
+        return overlaps;
     });
+
+    logger.info(`Filtered to ${subEventsForMonth.length} sub-events for month ${monthKey} based on strict date overlap.`);
     
-    logger.info(`Found ${monthEvents.length} events for month ${monthKey}`);
-    
-    // Get all parent event IDs for the month
-    const monthEventIds = monthEvents.map(event => event.id);
-    logger.info(`Month event IDs: ${monthEventIds.join(', ')}`);
-    
-    // Filter sub-events for the current month's events
-    const monthSubEvents = subEvents.filter(subEvent => 
-      monthEventIds.includes(subEvent.parentEventId)
-    );
-    
-    logger.info(`Found ${monthSubEvents.length} sub-events for month ${monthKey}`);
-    
-    // Debug output for each sub-event if needed (but limit for brevity)
-    if (monthSubEvents.length <= 10) {
-      monthSubEvents.forEach((subEvent, index) => {
-        logger.debug(`SubEvent ${index + 1}/${monthSubEvents.length}: 
-          ID: ${subEvent.id}
-          Parent: ${subEvent.parentEventId}
-          Type: ${subEvent.type}
-          Start: ${new Date(subEvent.start).toISOString()}
-          End: ${new Date(subEvent.end).toISOString()}
-          Weekend: ${subEvent.isWeekend}
-          Night Shift: ${subEvent.isNightShift}
-          Office Hours: ${subEvent.isOfficeHours}`);
-      });
-    } else {
-      logger.debug(`Too many sub-events (${monthSubEvents.length}) to log individually`);
+    // Debug output for sub-events if needed
+    if (subEventsForMonth.length > 0 && subEventsForMonth.length <= 10) { // Log details for a small number
+        subEventsForMonth.forEach((subEvent, index) => {
+            logger.debug(`Relevant SubEvent ${index + 1}/${subEventsForMonth.length} for ${monthKey}: 
+            ID: ${subEvent.id}, Parent: ${subEvent.parentEventId}, Type: ${subEvent.type}, 
+            Start: ${new Date(subEvent.start).toISOString()}, End: ${new Date(subEvent.end).toISOString()}`);
+        });
+    } else if (subEventsForMonth.length > 10) {
+        logger.debug(`Found ${subEventsForMonth.length} relevant sub-events for month ${monthKey}.`);
     }
 
-    // Separate oncall and incident events
-    const oncallEvents = monthEvents.filter(event => event.type === 'oncall');
-    const incidentEvents = monthEvents.filter(event => event.type === 'incident');
+
+    // Separate oncall and incident events (using the already processed `events` from the facade)
+    const oncallEvents = events.filter(event => event.type === 'oncall');
+    const incidentEvents = events.filter(event => event.type === 'incident');
     
     // Check if we have a 24-hour weekday oncall shift (special case)
     let has24HourWeekdayOncall = false;
@@ -210,16 +138,16 @@ export class CompensationService {
       }
     });
     
-    // Get all sub-events for on-call and incidents
-    const oncallSubEvents = monthSubEvents.filter(subEvent => subEvent.type === 'oncall');
-    const incidentSubEvents = monthSubEvents.filter(subEvent => subEvent.type === 'incident');
+    // Get all sub-events for on-call and incidents from the *month-filtered* list
+    const oncallSubEvents = subEventsForMonth.filter(subEvent => subEvent.type === 'oncall');
+    const incidentSubEvents = subEventsForMonth.filter(subEvent => subEvent.type === 'incident');
     
-    logger.info(`On-call events: ${oncallEvents.length}, incident events: ${incidentEvents.length}`);
-    logger.info(`On-call sub-events: ${oncallSubEvents.length}, incident sub-events: ${incidentSubEvents.length}`);
+    logger.info(`Using ${oncallEvents.length} on-call parent events and ${incidentEvents.length} incident parent events for month ${monthKey}.`);
+    logger.info(`Processing ${oncallSubEvents.length} on-call sub-events and ${incidentSubEvents.length} incident sub-events for month ${monthKey}.`);
     
     // Check sub-event coverage for debugging
-    const nightShiftSubEvents = monthSubEvents.filter(se => se.isNightShift);
-    const officeHoursSubEvents = monthSubEvents.filter(se => se.isOfficeHours);
+    const nightShiftSubEvents = subEventsForMonth.filter(se => se.isNightShift);
+    const officeHoursSubEvents = subEventsForMonth.filter(se => se.isOfficeHours);
     logger.info(`Night shift sub-events: ${nightShiftSubEvents.length}, Office hours sub-events: ${officeHoursSubEvents.length}`);
     
     // Calculate compensation statistics
@@ -237,10 +165,8 @@ export class CompensationService {
         
         if (subEvent.isWeekend) {
           totalWeekendOnCallHours += hours;
-          logger.debug(`Added ${hours}h to weekend on-call total (now ${totalWeekendOnCallHours}h)`);
         } else {
           totalWeekdayOnCallHours += hours;
-          logger.debug(`Added ${hours}h to weekday on-call total (now ${totalWeekdayOnCallHours}h)`);
         }
       }
     });
@@ -302,7 +228,7 @@ export class CompensationService {
     // Total compensation
     const totalCompensation = totalOnCallComp + totalIncidentComp;
 
-    logger.info(`Compensation breakdown: 
+    logger.debug(`Compensation breakdown: 
       Weekday on-call: ${totalWeekdayOnCallHours}h * €${COMPENSATION_RATES.weekdayOnCallRate} = €${weekdayOnCallComp.toFixed(2)}
       Weekend on-call: ${totalWeekendOnCallHours}h * €${COMPENSATION_RATES.weekendOnCallRate} = €${weekendOnCallComp.toFixed(2)}
       Total on-call: €${totalOnCallComp.toFixed(2)}
@@ -330,7 +256,7 @@ export class CompensationService {
         month: monthDate,
         events: oncallEvents.map(event => {
           // Find if any sub-events for this event are holidays
-          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const eventSubEvents = subEventsForMonth.filter(se => se.parentEventId === event.id);
           const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
           return {
             id: event.id,
@@ -354,7 +280,7 @@ export class CompensationService {
         month: monthDate,
         events: incidentEvents.map(event => {
           // Find if any sub-events for this event are holidays
-          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const eventSubEvents = subEventsForMonth.filter(se => se.parentEventId === event.id);
           const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
           return {
             id: event.id,
@@ -371,12 +297,12 @@ export class CompensationService {
       breakdown.push({
         type: 'total',
         amount: totalCompensation,
-        count: monthEvents.length,
+        count: events.length,
         description: 'Total compensation',
         month: monthDate,
-        events: monthEvents.map(event => {
+        events: events.map(event => {
           // Find if any sub-events for this event are holidays
-          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const eventSubEvents = subEventsForMonth.filter(se => se.parentEventId === event.id);
           const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
           return {
             id: event.id,
@@ -386,18 +312,18 @@ export class CompensationService {
           };
         })
       });
-    } else if (monthEvents.length > 0) {
+    } else if (events.length > 0) {
       // Even if total compensation is 0, still add a total item if there are events
       // This ensures that the month appears in the summary
       breakdown.push({
         type: 'total',
         amount: 0,
-        count: monthEvents.length,
+        count: events.length,
         description: 'No compensation calculated',
         month: monthDate,
-        events: monthEvents.map(event => {
+        events: events.map(event => {
           // Find if any sub-events for this event are holidays
-          const eventSubEvents = monthSubEvents.filter(se => se.parentEventId === event.id);
+          const eventSubEvents = subEventsForMonth.filter(se => se.parentEventId === event.id);
           const hasHolidaySubEvent = eventSubEvents.some(se => se.isHoliday);
           return {
             id: event.id,
@@ -432,6 +358,7 @@ export class CompensationService {
     const eventsHash = events.map(e => e.id).sort().join(',');
     const subEventsHash = subEvents.map(se => se.id).sort().join(',');
     
-    return `${monthKey}:${eventsHash.length}:${subEventsHash.length}`;
+    // Using the full hash of IDs for a more reliable cache key
+    return `${monthKey}:${eventsHash}:${subEventsHash}`;
   }
 } 

@@ -1,9 +1,8 @@
 import { CalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
-import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
+// import { SubEvent } from '../../../domain/calendar/entities/SubEvent'; // Unused import
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
-import { EventSubDivider } from '../../../domain/calendar/services/EventSubDivider';
-import { HolidayCheckerService } from '../../../domain/calendar/services/HolidayCheckerService';
+import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
 import { getLogger } from '../../../utils/logger';
 import { trackOperation } from '../../../utils/errorHandler';
 
@@ -12,34 +11,33 @@ const logger = getLogger('update-event-use-case');
 export class UpdateEventUseCase {
   private eventRepository: CalendarEventRepository;
   private subEventRepository: SubEventRepository;
-  private eventSubDivider: EventSubDivider;
-  private holidayChecker: HolidayCheckerService;
+  private subEventFactory: SubEventFactory;
 
   constructor(
     eventRepository: CalendarEventRepository,
     subEventRepository: SubEventRepository,
-    eventSubDivider: EventSubDivider,
-    holidayChecker: HolidayCheckerService
+    subEventFactory: SubEventFactory
   ) {
     this.eventRepository = eventRepository;
     this.subEventRepository = subEventRepository;
-    this.eventSubDivider = eventSubDivider;
-    this.holidayChecker = holidayChecker;
+    this.subEventFactory = subEventFactory;
   }
 
-  async execute(eventProps: CalendarEventProps): Promise<void> {
+  async execute(eventProps: CalendarEventProps): Promise<CalendarEventProps> {
     return trackOperation(
       `UpdateEvent(${eventProps.id})`,
       async () => {
         logger.info(`Updating event with ID: ${eventProps.id}`);
         
-        const event = CalendarEvent.fromJSON(eventProps);
+        const event = new CalendarEvent(eventProps);
 
         // First, delete all existing sub-events for this event
         await this.subEventRepository.deleteByParentId(event.id);
         
         // Generate new sub-events based on current settings and holidays
-        const subEvents = await this.generateSubEvents(event);
+        const holidayEvents = await this.eventRepository.getHolidayEvents();
+        logger.debug(`Found ${holidayEvents.length} holiday events for update`);
+        const subEvents = this.subEventFactory.generateSubEvents(event, holidayEvents);
         
         // Save the sub-events
         if (subEvents.length > 0) {
@@ -49,6 +47,7 @@ export class UpdateEventUseCase {
         
         // Update the main event
         await this.eventRepository.update(event);
+        return event.toJSON(); // Return the updated event's props
       },
       {
         eventType: eventProps.type,
@@ -56,48 +55,5 @@ export class UpdateEventUseCase {
         eventEndDate: new Date(eventProps.end).toISOString()
       }
     );
-  }
-
-  /**
-   * Generate sub-events for a given event
-   * This handles the logic of creating hourly/daily chunks
-   * and marking them as holidays if applicable
-   */
-  private async generateSubEvents(event: CalendarEvent): Promise<SubEvent[]> {
-    logger.debug(`Generating sub-events for event: ${event.id}`);
-    
-    // Step 1: Generate basic time slices
-    const timeSlices = this.eventSubDivider.divideEvent(event);
-    logger.debug(`Generated ${timeSlices.length} time slices`);
-    
-    // Step 2: Load all holiday events
-    const allEvents = await this.eventRepository.getAll();
-    const holidayEvents = allEvents.filter(e => e.type === 'holiday');
-    logger.debug(`Found ${holidayEvents.length} holiday events`);
-    
-    // Step 3: Initialize the holiday checker with current holidays
-    this.holidayChecker.setHolidays(holidayEvents);
-    
-    // Step 4: Process each time slice
-    const subEvents: SubEvent[] = [];
-    
-    for (const slice of timeSlices) {
-      const isWeekend = this.holidayChecker.isWeekend(slice.start);
-      const isHoliday = this.holidayChecker.isHoliday(slice.start);
-      
-      subEvents.push(new SubEvent({
-        id: crypto.randomUUID(),
-        parentEventId: event.id,
-        start: slice.start,
-        end: slice.end,
-        isWeekend,
-        isHoliday,
-        rate: slice.rate
-      }));
-    }
-    
-    logger.debug(`Created ${subEvents.length} sub-events, including ${subEvents.filter(se => se.isHoliday).length} on holidays`);
-    
-    return subEvents;
   }
 } 

@@ -5,6 +5,8 @@ import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { logger } from '../../../utils/logger';
+import { container } from '../../../config/container';
+import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { 
   ChevronRightIcon, 
   ListIcon, 
@@ -35,6 +37,8 @@ import {
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
 import { useSidePanel, useTooltip } from '../../hooks';
+import { useMonthDeletionHandler } from '../../hooks/useMonthDeletionHandler';
+import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 
 const Section = styled.div`
   background: white;
@@ -221,6 +225,7 @@ interface CompensationSectionProps {
   events: CalendarEvent[];
   currentDate: Date;
   onDateChange: (date: Date) => void;
+  onDataChange?: () => void;
 }
 
 // Type for compensation data breakdown
@@ -234,14 +239,19 @@ interface CompensationData {
 const CompensationSection: React.FC<CompensationSectionProps> = ({
   events,
   currentDate,
-  onDateChange
+  onDateChange,
+  onDataChange,
 }) => {
   // Pagination settings for event lists
   const EVENTS_PER_PAGE = 10;
 
   const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
   const [loading, setLoading] = useState(false);
-  const calculatorFacade = useMemo(() => CompensationCalculatorFacade.getInstance(), []);
+  const calculatorFacade = useMemo(() => {
+    const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
+    const subEventRepo = container.get<SubEventRepository>('subEventRepository');
+    return CompensationCalculatorFacade.getInstance(eventRepo, subEventRepo);
+  }, []);
   
   // Use useSidePanel hook
   const { 
@@ -284,63 +294,54 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     }
   }, []);
   
-  // Handle ESC key to close side panel
-  useEffect(() => {
-    const handleEscapeKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isSidePanelOpen) {
-        closeSidePanelHook();
-      }
-    };
-    
-    window.addEventListener('keydown', handleEscapeKey);
-    return () => {
-      window.removeEventListener('keydown', handleEscapeKey);
-    };
-  }, [isSidePanelOpen, closeSidePanelHook]);
+  // Initialize the month deletion hook
+  const {
+    isDeletingMonth,
+    showConfirmDeleteMonthModal,
+    monthPendingDeletion,
+    initiateDeleteMonth,
+    confirmDeleteMonth,
+    cancelDeleteMonth,
+    getNotificationProps,
+  } = useMonthDeletionHandler({ 
+    onDeletionSuccess: onDataChange,
+    onBeforeSuccessNotification: closeSidePanelHook
+  });
+
+  const monthDeletionNotification = getNotificationProps();
   
   // Effect to calculate compensation data
   useEffect(() => {
-    // Define an async function to calculate compensation
     const calculateData = async () => {
-      // Prevent duplicate calculations
       if (pendingCalculation.current) {
         return;
       }
-      
       pendingCalculation.current = true;
       setLoadingDebounced(true);
       
       try {
         logger.info(`Calculating compensation for ${format(currentDate, 'MMMM yyyy')}`);
+        const result = await calculatorFacade.calculateMonthlyCompensation(new Date(currentDate));
         
-        // Calculate compensation data
-        const result = await calculatorFacade.calculateMonthlyCompensation(events, currentDate);
-        
-        // Check if the data has actually changed
-        const dataString = JSON.stringify(result);
-        if (dataString !== previousData.current) {
-          logger.info(`Received ${result.length} compensation items - data changed`);
-          setBreakdown(result);
-          previousData.current = dataString;
-        } else {
-          logger.info('Compensation data unchanged, avoiding rerender');
-        }
+        // ALWAYS set the breakdown when events or currentDate change, as the event list in the panel depends on it.
+        // The previous check (dataString !== previousData.current) was too simplistic as it only considered compensation amounts.
+        logger.info(`Received ${result.length} compensation items. Updating breakdown.`);
+        setBreakdown(result);
+        // previousData.current = JSON.stringify(result); // This specific optimization can be removed or re-evaluated if performance issues arise
         
       } catch (error) {
         logger.error('Error calculating compensation:', error);
-        setBreakdown([]);
+        setBreakdown([]); // Clear breakdown on error
       } finally {
-        // Ensure loading state is cleared
         logger.info('Compensation calculation complete, hiding loading indicator');
         setLoadingDebounced(false);
         pendingCalculation.current = false;
       }
     };
 
-    // Run the calculation
     calculateData();
     
-  }, [events, currentDate, calculatorFacade, setLoadingDebounced]);
+  }, [currentDate, calculatorFacade, setLoadingDebounced]); // Dependencies are correct
 
   // Extract breakdown data for the visualization
   const getCompensationData = useCallback((): CompensationData[] => {
@@ -554,63 +555,25 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     );
   };
 
-  // Add new state for delete confirmation modal
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  
-  // Add handlers for delete confirmation
-  const handleOpenDeleteModal = () => {
-    setShowDeleteModal(true);
-  };
-  
-  const handleCloseDeleteModal = () => {
-    setShowDeleteModal(false);
-  };
-  
-  const handleDeleteAllEvents = async () => {
-    try {
-      // You'll need to implement this based on your application's data structure
-      // This is a placeholder assuming you have a service that can handle this
-      logger.info(`Deleting all events for ${format(currentDate, 'MMMM yyyy')}`);
-      
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth();
-      
-      // Calculate start of month and end of month
-      const startOfMonth = new Date(year, month, 1);
-      const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-      
-      // Find all events that overlap with this month
-      const eventsToDelete = events.filter(event => {
-        const eventStart = new Date(event.start);
-        const eventEnd = new Date(event.end);
-        
-        // Check if event overlaps with month
-        return (
-          (eventStart >= startOfMonth && eventStart <= endOfMonth) ||
-          (eventEnd >= startOfMonth && eventEnd <= endOfMonth) ||
-          (eventStart <= startOfMonth && eventEnd >= endOfMonth)
-        );
-      });
-      
-      // If using a storage service like localStorage or a database, you'd delete events here
-      // For this example, I'll just log the number of events to delete
-      logger.info(`Found ${eventsToDelete.length} events to delete`);
-      
-      // Then update the UI (this would typically be handled by your state management)
-      // For example, you might dispatch an action to redux or use a context
-      // setBreakdown([]);
-      
-      // Close the modal
-      setShowDeleteModal(false);
-      
-      // Optional: Show success message
-      alert(`Successfully removed ${eventsToDelete.length} events for ${format(currentDate, 'MMMM yyyy')}`);
-      
-    } catch (error) {
-      logger.error('Error deleting events:', error);
-      alert('An error occurred while trying to delete events');
-    }
-  };
+  const handleInitiateDeleteMonthForPanel = useCallback(() => {
+    initiateDeleteMonth(currentDate);
+  }, [currentDate, initiateDeleteMonth]);
+
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isSidePanelOpen) {
+          closeSidePanelHook();
+        } else if (showConfirmDeleteMonthModal) {
+          cancelDeleteMonth();
+        } else if (monthDeletionNotification?.visible) {
+          monthDeletionNotification.onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => window.removeEventListener('keydown', handleEscapeKey);
+  }, [isSidePanelOpen, closeSidePanelHook, showConfirmDeleteMonthModal, cancelDeleteMonth, monthDeletionNotification]);
 
   return (
     <>
@@ -624,28 +587,36 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         extra={tooltipState.content.extra}
       />
       
-      {/* Delete confirmation modal using shared Modal component */}
-      {showDeleteModal && (
-        <Modal isOpen={showDeleteModal} onClose={handleCloseDeleteModal}>
+      {/* Panel's Delete confirmation modal (driven by hook) */}
+      {showConfirmDeleteMonthModal && monthPendingDeletion && (
+        <Modal isOpen={showConfirmDeleteMonthModal} onClose={cancelDeleteMonth}>
           <ModalHeader>
-            <ModalTitle>Remove All Events for {format(currentDate, 'MMMM yyyy' )}?</ModalTitle>
-            {/* Optional: Add a CloseButton here if needed, though Modal's onClose handles Esc/backdrop */}
+            <ModalTitle>Remove All Events for {format(monthPendingDeletion, 'MMMM yyyy' )}?</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <p>
-              This will permanently remove all events that overlap with {format(currentDate, 'MMMM yyyy' )}. 
+              This will permanently remove all events that overlap with {format(monthPendingDeletion, 'MMMM yyyy' )}. 
               This includes events that start in previous months or end in future months.
               This action cannot be undone.
             </p>
           </ModalBody>
           <ModalFooter>
-            <SharedButton variant="secondary" onClick={handleCloseDeleteModal}>
+            <SharedButton variant="secondary" onClick={cancelDeleteMonth} disabled={isDeletingMonth}>
               Cancel
             </SharedButton>
-            <SharedButton variant="danger" onClick={handleDeleteAllEvents}>
+            <SharedButton variant="danger" onClick={confirmDeleteMonth} disabled={isDeletingMonth}>
               Remove Events
             </SharedButton>
           </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Notification Modal for month deletion from hook */}
+      {monthDeletionNotification && (
+        <Modal isOpen={monthDeletionNotification.visible} onClose={monthDeletionNotification.onClose}>
+          <ModalHeader><ModalTitle>{monthDeletionNotification.title}</ModalTitle></ModalHeader>
+          <ModalBody><p>{monthDeletionNotification.message}</p></ModalBody>
+          <ModalFooter><SharedButton variant="primary" onClick={monthDeletionNotification.onClose}>OK</SharedButton></ModalFooter>
         </Modal>
       )}
       
@@ -681,7 +652,9 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
               );
             })()}
             <DeleteEventsContainer>
-              <DeleteEventsButton onClick={handleOpenDeleteModal}>Remove All Events for {format(currentDate, 'MMMM yyyy')}</DeleteEventsButton>
+              <DeleteEventsButton onClick={handleInitiateDeleteMonthForPanel} disabled={isDeletingMonth}>
+                Remove All Events for {format(currentDate, 'MMMM yyyy')}
+              </DeleteEventsButton>
               <DeleteWarningText>Warning: This will permanently delete all events for this month.</DeleteWarningText>
             </DeleteEventsContainer>
           </SidePanelBody>
@@ -744,4 +717,4 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   );
 };
 
-export default CompensationSection; 
+export default React.memo(CompensationSection); 
