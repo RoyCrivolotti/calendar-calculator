@@ -56,7 +56,8 @@ class Container {
       'deleteEventUseCase',
       new DeleteEventUseCase(
         this.get<CalendarEventRepository>('calendarEventRepository'),
-        this.get<SubEventRepository>('subEventRepository')
+        this.get<SubEventRepository>('subEventRepository'),
+        this.get<SubEventFactory>('subEventFactory')
       )
     );
 

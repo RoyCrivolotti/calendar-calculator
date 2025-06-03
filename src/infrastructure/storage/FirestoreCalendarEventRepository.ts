@@ -11,7 +11,7 @@ import {
   where,
   getDoc
 } from 'firebase/firestore';
-import { CalendarEvent } from '../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, EventType } from '../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../domain/calendar/repositories/CalendarEventRepository';
 import { logger } from '../../utils/logger';
 
@@ -232,6 +232,54 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       }
     } catch (error) {
       logger.error(`[FirestoreRepo] Error fetching event by ID ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async getEventsOverlappingDateRange(
+    rangeStart: Date, 
+    rangeEnd: Date,
+    types?: EventType[]
+  ): Promise<CalendarEvent[]> {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      logger.warn('[FirestoreRepo] User not authenticated for getEventsOverlappingDateRange, returning empty.');
+      return [];
+    }
+    const eventsCollectionWithConverter = this.getEventsCollection(userId);
+
+    let q;
+    if (types && types.length > 0) {
+      q = query(
+        eventsCollectionWithConverter,
+        where('start', '<=', Timestamp.fromDate(rangeEnd)),
+        where('type', 'in', types)
+      );
+    } else {
+      q = query(
+        eventsCollectionWithConverter,
+        where('start', '<=', Timestamp.fromDate(rangeEnd))
+      );
+    }
+
+    try {
+      const querySnapshot = await getDocs(q);
+      const fetchedEvents = querySnapshot.docs.map(docSnap => docSnap.data());
+
+      const overlappingEvents = fetchedEvents.filter(event => {
+        const eventEnd = event.end instanceof Date ? event.end : new Date(event.end);
+        return eventEnd >= rangeStart;
+      });
+
+      logger.info(`[FirestoreRepo] Fetched ${overlappingEvents.length} overlapping events (out of ${fetchedEvents.length} initially queried based on start date and type) for range ${rangeStart.toISOString()} - ${rangeEnd.toISOString()} and types ${types?.join(', ')} for user ${userId}`);
+      return overlappingEvents;
+    } catch (error) {
+      logger.error(`[FirestoreRepo] Error fetching overlapping events for date range ${rangeStart.toISOString()} - ${rangeEnd.toISOString()} and types ${types?.join(', ')}:`, error);
+      if (error instanceof Error && (error as any).code === 'failed-precondition') { // Firestore uses 'failed-precondition' for missing indexes
+        logger.error('[FirestoreRepo] This error likely indicates a missing composite index in Firestore. Please check your Firestore console to create the required index for querying `start` and `type`.');
+      } else if (error instanceof Error && error.message.includes('INVALID_ARGUMENT')) {
+        logger.error('[FirestoreRepo] This error might be due to an empty `types` array passed to an `in` query (ensure `types` has elements if provided), or another invalid argument.');
+      }
       throw error;
     }
   }
