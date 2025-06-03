@@ -13,7 +13,8 @@ A React-based calendar application for tracking on-call shifts, managing inciden
   - Holiday detection
 - **Monthly Compensation Summaries**: Visual breakdown of earnings with charts
 - **Detailed Analytics**: Hour tracking and compensation distribution
-- **Local Storage Persistence**: All data is stored locally in the browser
+- **Firebase Firestore Persistence**: All data is stored in Firestore, linked to authenticated users.
+- **User Authentication**: Secure user sign-up and login.
 
 ### Key Modules
 1. **Calendar View**: Main interface for adding and managing events
@@ -26,12 +27,13 @@ A React-based calendar application for tracking on-call shifts, managing inciden
 ## Tech Stack
 
 - **Frontend**: React 18 with TypeScript
-- **State Management**: React Hooks (useState, useContext, useMemo)
+- **State Management**: Redux Toolkit, React Hooks (useState, useContext, useMemo)
 - **Styling**: Emotion (styled-components)
 - **Date Handling**: date-fns
 - **Calendar Component**: FullCalendar
 - **Charts**: Custom SVG-based charts
-- **Storage**: Browser LocalStorage with structured serialization
+- **Backend & Database**: Firebase (Firestore for database, Firebase Authentication for user management)
+- **Build Tool**: Vite
 - **Error Handling**: Centralized error tracking and logging
 
 ## System Architecture
@@ -47,32 +49,40 @@ graph TD
     UI -->|Renders| EventEditor[Event Editor]
     UI -->|Renders| Summary[Monthly Summary]
     
-    UI -->|Uses| PresentationServices[Presentation Services]
-    PresentationServices -->|Uses| StorageService[Storage Service]
+    UI -->|Uses| PresentationServices[Presentation Services & Hooks]
+    UI -->|Interacts with| ReduxStore[Redux Store]
     
-    UI -->|Calls| DomainServices[Domain Services]
-    DomainServices -->|Uses| Entities[Domain Entities]
-    DomainServices -->|Uses| Constants[Business Constants]
+    ReduxStore -->|Dispatches actions to| Thunks[Async Thunks / Use Cases]
+    Thunks -->|Call| ApplicationUseCases[Application Layer Use Cases]
+    ApplicationUseCases -->|Interact with| DomainServices[Domain Services & Entities]
+    ApplicationUseCases -->|Use| Repositories[Repository Pattern Interfaces]
     
-    StorageService -->|Persists| LocalStorage[(Browser LocalStorage)]
+    RepositoriesImpl[Firestore Repositories Impl] -->|Persists/Retrieves data| Firebase[(Firebase Firestore & Auth)]
     
     subgraph "Presentation Layer"
         UI
         PresentationServices
+        ReduxStore
         Calendar
         EventEditor
         Summary
     end
+
+    subgraph "Application Layer"
+        Thunks
+        ApplicationUseCases
+    end
     
     subgraph "Domain Layer"
         DomainServices
-        Entities
-        Constants
+        Entities[Domain Entities]
+        Repositories
+        Constants[Business Constants]
     end
     
     subgraph "Infrastructure Layer"
-        StorageService
-        LocalStorage
+        RepositoriesImpl
+        Firebase
     end
 ```
 
@@ -80,8 +90,8 @@ graph TD
 
 ```mermaid
 flowchart TD
-    Start([User views monthly summary]) --> LoadEvents[Load Events from Storage]
-    LoadEvents --> LoadSubEvents[Load SubEvents]
+    Start([User views monthly summary]) --> LoadEvents[Load Events from Firestore]
+    LoadEvents --> LoadSubEvents[Load SubEvents from Firestore]
     LoadSubEvents --> FilterMonth[Filter for Selected Month]
     
     FilterMonth --> A{Event Type?}
@@ -139,47 +149,51 @@ This application follows a clean, domain-driven architecture with clear separati
 
 ### Architecture Patterns
 - **Domain-Driven Design (DDD)**: Business logic encapsulated in domain entities and services
-- **Clean Architecture**: Clear separation between domain, presentation, and infrastructure
-- **Functional Core, Imperative Shell**: Pure business logic with side effects at the edges
+- **Clean Architecture**: Clear separation between domain, application, presentation, and infrastructure layers.
+- **Functional Core, Imperative Shell**: Pure business logic with side effects at the edges (primarily within use cases and repositories).
 
 ### Design Patterns
-- **Singleton Pattern**: Services implemented as singletons (CompensationService, EventCompensationService)
-- **Facade Pattern**: CompensationCalculatorFacade provides a unified interface to complex subsystems
-- **Repository Pattern**: Storage service abstracts data persistence
-- **Factory Pattern**: Creation of entities with complex initialization
-- **Observer Pattern**: React state management for UI updates
-- **Strategy Pattern**: Different compensation strategies based on event types/time
+- **Singleton Pattern**: Services can be singletons if appropriate (e.g., domain services not holding state).
+- **Facade Pattern**: CompensationCalculatorFacade provides a unified interface to complex subsystems.
+- **Repository Pattern**: Abstracts data persistence, with implementations for Firebase Firestore.
+- **Factory Pattern**: Creation of entities with complex initialization (e.g., SubEventFactory).
+- **Observer Pattern**: Implemented via React state/props and more broadly with Redux for global state management and UI updates in response to state changes.
+- **Strategy Pattern**: Different compensation strategies based on event types/time (embedded in compensation logic).
+- **Use Cases (Application Services)**: Encapsulate application-specific logic, orchestrating domain objects and repositories.
 
 ### Component Interaction Diagram
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Calendar as Calendar View
-    participant Editor as Event Editor
-    participant Summary as Monthly Summary
-    participant Calculator as CompensationCalculator
-    participant Storage as Storage Service
+    participant ReactUI as React UI Components
+    participant ReduxActions as Redux Actions/Thunks
+    participant UseCases as Application Use Cases
+    participant Repositories as Firestore Repositories
+    participant Firebase
     
-    User->>Calendar: View Calendar
-    Calendar->>Storage: Load Events
-    Storage-->>Calendar: Return Events
-    Calendar-->>User: Display Events
+    User->>ReactUI: View Calendar / Summary
+    ReactUI->>ReduxActions: Dispatch LoadEventsAction
+    ReduxActions->>UseCases: Execute GetEventsUseCase
+    UseCases->>Repositories: Call getEvents()
+    Repositories->>Firebase: Query Firestore
+    Firebase-->>Repositories: Return Event Data
+    Repositories-->>UseCases: Return Events
+    UseCases-->>ReduxActions: Return Events
+    ReduxActions->>ReactUI: Update Redux Store (triggers UI rerender)
+    ReactUI-->>User: Display Events & Compensation
     
-    User->>Calendar: Click "Add Event"
-    Calendar->>Editor: Open Editor
-    User->>Editor: Input Event Details
-    Editor->>Storage: Save Event
-    
-    User->>Summary: View Monthly Summary
-    Summary->>Storage: Load Events for Month
-    Storage-->>Summary: Return Events
-    Summary->>Calculator: Calculate Compensation
-    Calculator-->>Summary: Return Breakdown
-    Summary-->>User: Display Charts & Data
-    
-    User->>Summary: Toggle Breakdown View
-    Summary-->>User: Update Visualization
+    User->>ReactUI: Click "Add/Edit Event"
+    ReactUI->>ReduxActions: Dispatch SaveEventAction (with event data)
+    ReduxActions->>UseCases: Execute Create/UpdateEventUseCase
+    UseCases->>Repositories: Call saveEvent()/updateEvent()
+    UseCases->>Repositories: Call deleteSubEvents()/saveSubEvents()
+    Repositories->>Firebase: Write to Firestore (batch operations)
+    Firebase-->>Repositories: Confirm Write
+    Repositories-->>UseCases: Confirm Save
+    UseCases-->>ReduxActions: Return Saved Event
+    ReduxActions->>ReactUI: Update Redux Store (triggers UI rerender)
+    ReactUI-->>User: Show Confirmation / Updated Calendar
 ```
 
 ### Code Organization Principles
@@ -191,21 +205,31 @@ sequenceDiagram
 
 ```
 src/
-├── domain/            # Business logic, entities, and domain services
+├── application/       # Application-specific logic (use cases)
+│   └── calendar/
+│       └── use-cases/
+├── domain/            # Core business logic, entities, and domain service interfaces
 │   ├── calendar/      # Core calendar domain
 │   │   ├── constants/ # Business constants like compensation rates
 │   │   ├── entities/  # Domain entities (CalendarEvent, SubEvent)
-│   │   ├── services/  # Domain services (CompensationService)
+│   │   ├── repositories/ # Repository interfaces (CalendarEventRepository, SubEventRepository)
+│   │   ├── services/  # Domain services (SubEventFactory, EventCompensationService)
 │   │   └── types/     # TypeScript types and interfaces
 │
-├── presentation/      # React components and UI logic
-│   ├── components/    # UI components
-│   │   ├── calendar/  # Calendar-specific components
-│   │   └── common/    # Shared/reusable components
-│   ├── hooks/         # Custom React hooks
-│   └── services/      # Presentation-layer services (Storage)
+├── infrastructure/    # Implementation of external concerns (e.g., Firebase)
+│   └── storage/       # Firestore repository implementations
 │
-└── utils/             # Shared utilities for dates, logging, etc.
+├── presentation/      # React components, UI logic, Redux store, and hooks
+│   ├── components/    # UI components (Calendar, Modals, etc.)
+│   │   ├── calendar/
+│   │   └── common/
+│   ├── store/         # Redux Toolkit store, slices, and thunks
+│   │   ├── slices/
+│   │   └── thunks/
+│   ├── hooks/         # Custom React hooks
+│   └── services/      # Presentation-layer services (e.g., CompensationCalculatorFacade)
+│
+└── utils/             # Shared utilities for dates, logging, error handling etc.
 ```
 
 ## Data Model
@@ -273,23 +297,101 @@ Compensation is calculated based on several factors:
 3. **Office Hours**:
    - Monday-Friday, 9:00-18:00: Regular work hours, no on-call compensation
 
+## Backend / Cloud Services
+
+This application uses Firebase for its backend needs:
+- **Firebase Authentication**: Manages user sign-up, login, and session persistence.
+- **Firebase Firestore**: A NoSQL document database used to store all calendar event data, sub-event data, and user-specific information. Data is structured per user, ensuring data privacy.
+- **Firestore Security Rules**: (Recommended) Should be configured to ensure that users can only access and modify their own data.
+
 ## Getting Started
 
-1. Clone the repository:
-```bash
-git clone https://github.com/RoyCrivolotti/calendar-calculator.git
-cd calendar-calculator
-```
+To run this project locally, you'll need to set up Firebase and configure the application to connect to your Firebase project.
 
-2. Install dependencies:
-```bash
-npm install
-```
+**Prerequisites:**
+- Node.js (version >=16.0.0 recommended, as per `package.json`)
+- npm (usually comes with Node.js)
+- A Google account to create a Firebase project.
 
-3. Start the development server:
-```bash
-npm run dev
-```
+**Steps:**
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/RoyCrivolotti/calendar-calculator.git
+    cd calendar-calculator
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+3.  **Set up Firebase:**
+    *   Go to the [Firebase Console](https://console.firebase.google.com/).
+    *   Click on "Add project" and follow the steps to create a new Firebase project.
+    *   Once your project is created, navigate to Project Settings (click the gear icon next to "Project Overview").
+    *   In the "General" tab, scroll down to "Your apps".
+    *   Click on the Web icon (`</>`) to add a web app to your project.
+    *   Register your app (give it a nickname, e.g., "Calendar Calculator App"). Firebase Hosting setup is optional at this stage.
+    *   After registering, Firebase will provide you with a `firebaseConfig` object. **Copy this object.**
+
+4.  **Configure Firebase in the application:**
+    *   In the project's source code, locate or create the Firebase configuration file. This is typically `src/firebaseConfig.ts`.
+    *   The file should look something like this (if it doesn't exist, create it):
+        ```typescript
+        // src/firebaseConfig.ts
+        import { initializeApp } from "firebase/app";
+        import { getFirestore } from "firebase/firestore";
+        import { getAuth } from "firebase/auth";
+
+        // TODO: Replace with your actual Firebase project configuration
+        const firebaseConfig = {
+          apiKey: "YOUR_API_KEY",
+          authDomain: "YOUR_AUTH_DOMAIN",
+          projectId: "YOUR_PROJECT_ID",
+          storageBucket: "YOUR_STORAGE_BUCKET",
+          messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+          appId: "YOUR_APP_ID",
+          measurementId: "YOUR_MEASUREMENT_ID" // Optional
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        export { db, auth, app };
+        ```
+    *   **Replace the placeholder `firebaseConfig` values with the actual values you copied from the Firebase console.**
+
+5.  **Set up Firestore Database and Authentication:**
+    *   In the Firebase console, navigate to "Firestore Database" in the left-hand menu.
+    *   Click "Create database".
+    *   Choose to start in **test mode** for initial development (this allows open access; you should secure it with security rules later). Select your region.
+    *   Navigate to "Authentication" in the left-hand menu.
+    *   Go to the "Sign-in method" tab.
+    *   Enable the "Email/Password" provider (or any other providers you wish to support).
+
+6.  **Start the development server:**
+    ```bash
+    npm run dev
+    ```
+    This will typically open the application in your default web browser, usually at `http://localhost:5173` (Vite's default).
+
+7.  **(Recommended) Secure your Firestore Data:**
+    *   After initial setup and testing, go back to the Firebase console -> Firestore Database -> Rules.
+    *   Implement security rules to ensure users can only read/write their own data. For example:
+        ```
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            // Allow users to read and write only their own documents in the 'users' collection
+            match /users/{userId}/{document=**} {
+              allow read, write: if request.auth != null && request.auth.uid == userId;
+            }
+          }
+        }
+        ```
 
 ## Development Notes
 
