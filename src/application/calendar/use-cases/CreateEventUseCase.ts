@@ -3,8 +3,6 @@ import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
-// HolidayChecker is used statically by SubEventFactory, no need to inject into use case if SEF handles it
-// import { HolidayChecker } from '../../../domain/calendar/services/HolidayChecker'; 
 import { createUseCaseLogger } from '../../../utils/initializeLogger';
 import { 
   trackOperation, 
@@ -21,18 +19,15 @@ export class CreateEventUseCase {
   private eventRepository: CalendarEventRepository;
   private subEventRepository: SubEventRepository;
   private subEventFactory: SubEventFactory;
-  // private holidayChecker: HolidayChecker; // Removed
 
   constructor(
     eventRepository: CalendarEventRepository,
     subEventRepository: SubEventRepository,
     subEventFactory: SubEventFactory
-    // holidayChecker: HolidayChecker // Removed
   ) {
     this.eventRepository = eventRepository;
     this.subEventRepository = subEventRepository;
     this.subEventFactory = subEventFactory;
-    // this.holidayChecker = holidayChecker; // Removed
   }
 
   /**
@@ -114,15 +109,6 @@ export class CreateEventUseCase {
     //   }
     // );
   }
-
-  // The markHolidays method can be removed if SubEventFactory handles it, or kept if it performs additional checks.
-  // For now, let's keep the explicit holiday marking step commented out as before, 
-  // as SubEventFactory might already do it.
-  /*
-  private async markHolidays(subEvents: SubEvent[], allCalendarEvents: CalendarEvent[]): Promise<void> {
-    logger.info(`Checking ${subEvents.length} sub-events for holidays (SKIPPING ACTUAL CHECK FOR DEBUGGING)`);
-  }
-  */
 
   // Added private method for ripple effect
   private async triggerHolidayRippleEffect(changedHoliday: CalendarEvent, currentAllHolidays: CalendarEvent[]): Promise<void> {

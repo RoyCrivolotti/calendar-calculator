@@ -33,19 +33,10 @@ class FirebaseAuthService {
   public async signInWithGooglePopup(): Promise<UserCredential> {
     try {
       const result = await signInWithPopup(auth, this.googleProvider);
-      // const credential = GoogleAuthProvider.credentialFromResult(result);
-      // const token = credential?.accessToken;
-      // const user = result.user;
       // You can access user details here if needed immediately after sign-in
       return result;
     } catch (error) {
       // Handle Errors here.
-      // const errorCode = error.code;
-      // const errorMessage = error.message;
-      // The email of the user's account used.
-      // const email = error.customData.email;
-      // The AuthCredential type that was used.
-      // const credential = GoogleAuthProvider.credentialFromError(error);
       console.error("Error during Google sign-in popup:", error);
       throw error; // Re-throw to be handled by the caller
     }
