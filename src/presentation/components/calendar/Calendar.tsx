@@ -25,6 +25,9 @@ import {
   optimisticallyAddEvent,
   finalizeOptimisticEvent,
   revertOptimisticAdd,
+  optimisticallyUpdateEvent,
+  finalizeOptimisticUpdate,
+  revertOptimisticUpdate,
 } from '../../store/slices/calendarSlice';
 import { container } from '../../../config/container';
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
@@ -89,12 +92,7 @@ const Calendar: React.FC = () => {
   const updateCompensationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const latestCalculationIdRef = useRef<number>(0);
   const calendarRef = useRef<FullCalendar>(null);
-  // const setCompensationDataRef = useRef(setCompensationData); // Keep this if used elsewhere, or remove if only for the pattern below
   
-  // useEffect(() => {
-  //   setCompensationDataRef.current = setCompensationData;
-  // }, [setCompensationData]);
-
   const refreshCalendarEvents = useCallback(async () => {
     if (!currentUser || !currentUser.uid) {
       logger.info('[Calendar] No authenticated user or UID. Skipping Firestore event load.');
@@ -202,7 +200,7 @@ const Calendar: React.FC = () => {
       }
       logger.info(`updateCompensationData finished (calcId: ${calculationId})`); 
     }
-  }, [currentEventsFromStore, calculatorFacade, getMonthKey]); // Removed logger from deps as it's stable
+  }, [currentEventsFromStore, calculatorFacade, getMonthKey]);
   
   const updateCompensationDataRef = useRef(updateCompensationData);
   useEffect(() => {
@@ -220,7 +218,7 @@ const Calendar: React.FC = () => {
     updateCompensationTimeoutRef.current = setTimeout(() => {
       updateCompensationDataRef.current(currentCalculationId);
     }, 300);
-  }, [calculatorFacade]); // updateCompensationData removed from deps, uses ref now
+  }, [calculatorFacade]);
 
   // Main useEffect for triggering summary updates
   useEffect(() => {
@@ -484,52 +482,52 @@ const Calendar: React.FC = () => {
     logger.info('[regenerateConflictingSubEvents] Regeneration complete.');
   };
 
-  const saveEventWithoutConflictCheck = useCallback(async (event: CalendarEvent) => {
-    const isNewEvent = event.id.startsWith('temp-');
-    const tempId = isNewEvent ? event.id : null;
+  const saveEventWithoutConflictCheck = useCallback(async (eventToSave: CalendarEvent) => {
+    const isNewEvent = eventToSave.id.startsWith('temp-');
+    const tempId = isNewEvent ? eventToSave.id : null;
 
-    logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} event: ${event.id} (${event.type})`);
+    logger.info(`Optimistically saving ${isNewEvent ? 'new' : 'existing'} event: ${eventToSave.id} (${eventToSave.type})`);
     calculatorFacade.clearCaches();
 
-    let savedEventProps: CalendarEventProps | null = null;
+    if (isNewEvent && tempId) {
+      dispatch(optimisticallyAddEvent(eventToSave.toJSON()));
+    } else { // Existing event
+      dispatch(optimisticallyUpdateEvent(eventToSave.toJSON()));
+    }
+    dispatch(setShowEventModal(false));
+    dispatch(setSelectedEvent(null));
 
     try {
+      let savedEventProps: CalendarEventProps | null = null;
       if (isNewEvent && tempId) {
-        const optimisticEventProps = event.toJSON();
-        dispatch(optimisticallyAddEvent(optimisticEventProps));
-        logger.info(`Optimistically added event ${tempId} to store.`);
-
         const eventDataForCreation = {
-          start: event.start.toISOString(),
-          end: event.end.toISOString(),
-          type: event.type,
-          title: event.title,
+          start: eventToSave.start.toISOString(),
+          end: eventToSave.end.toISOString(),
+          type: eventToSave.type,
+          title: eventToSave.title,
         } as CalendarEventProps;
         savedEventProps = await dispatch(createEventAsync(eventDataForCreation)).unwrap();
-      } else {
-        const eventUpdates = event.toJSON();
-        savedEventProps = await dispatch(updateEventAsync(eventUpdates)).unwrap();
+        if (!savedEventProps) throw new Error("Create operation did not return event properties.");
+        dispatch(finalizeOptimisticEvent({ tempId, finalEvent: savedEventProps }));
+        logger.info(`Successfully created and finalized event ${savedEventProps.id}.`);
+      } else { // Existing event
+        savedEventProps = await dispatch(updateEventAsync(eventToSave.toJSON())).unwrap();
+        if (!savedEventProps) throw new Error("Update operation did not return event properties.");
+        dispatch(finalizeOptimisticUpdate()); 
+        logger.info(`Successfully updated event ${savedEventProps.id}.`);
       }
 
-      if (savedEventProps) {
-        logger.info(`Event ${savedEventProps.id} ${isNewEvent ? 'created' : 'updated'} successfully.`);
-        if (isNewEvent && tempId) {
-          dispatch(finalizeOptimisticEvent({ tempId, finalEvent: savedEventProps }));
-          logger.info(`Finalized optimistic event, replaced ${tempId} with ${savedEventProps.id}.`);
-        }
-        dispatch(setShowEventModal(false));
-        dispatch(setSelectedEvent(null));
-        await refreshCalendarEvents();
-        debouncedUpdateCompensationData();
-      } else {
-        throw new Error("Save operation did not return event properties.");
-      }
+      await refreshCalendarEvents();
+      debouncedUpdateCompensationData();
 
     } catch (error: any) {
-      logger.error(`Failed to ${isNewEvent ? 'create' : 'update'} event ${event.id}:`, error);
+      logger.error(`Failed to ${isNewEvent ? 'create' : 'update'} event ${eventToSave.id} in backend:`, error);
       if (isNewEvent && tempId) {
         logger.warn(`Rolling back optimistic add for temp event ${tempId}`);
         dispatch(revertOptimisticAdd(tempId));
+      } else if (!isNewEvent) { // Existing event update failed
+        logger.warn(`Rolling back optimistic update for event ${eventToSave.id}`);
+        dispatch(revertOptimisticUpdate());
       }
       setNotificationTitle('Save Failed');
       setNotificationMessage(
@@ -538,7 +536,7 @@ const Calendar: React.FC = () => {
       );
       setNotificationVisible(true);
     }
-  }, [dispatch, calculatorFacade, refreshCalendarEvents, debouncedUpdateCompensationData]);
+  }, [dispatch, calculatorFacade, refreshCalendarEvents, debouncedUpdateCompensationData, currentEventsFromStore, optimisticallyUpdateEvent, finalizeOptimisticUpdate, revertOptimisticUpdate, optimisticallyAddEvent, finalizeOptimisticEvent, revertOptimisticAdd]);
 
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     logger.info(`Checking conflicts for ${event.type} event: ${event.id}`);

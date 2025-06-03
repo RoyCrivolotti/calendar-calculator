@@ -1,7 +1,7 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import { CalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
 import { container } from '../../../config/container';
-import { CreateEventUseCase } from '../../../application/calendar/use-cases/CreateEvent';
+import { CreateEventUseCase } from '../../../application/calendar/use-cases/CreateEventUseCase';
 import { UpdateEventUseCase } from '../../../application/calendar/use-cases/UpdateEvent';
 import { DeleteEventUseCase } from '../../../application/calendar/use-cases/DeleteEvent';
 
@@ -12,6 +12,7 @@ interface CalendarState {
   showEventModal: boolean;
   showImportModal: boolean;
   importText: string;
+  originalEventForOptimisticUpdate: CalendarEventProps | null;
 }
 
 const initialState: CalendarState = {
@@ -21,6 +22,7 @@ const initialState: CalendarState = {
   showEventModal: false,
   showImportModal: false,
   importText: '',
+  originalEventForOptimisticUpdate: null,
 };
 
 // Async thunks
@@ -78,6 +80,25 @@ const calendarSlice = createSlice({
         state.events[index] = action.payload.finalEvent;
       }
     },
+    optimisticallyUpdateEvent: (state, action: PayloadAction<CalendarEventProps>) => {
+      const index = state.events.findIndex(event => event.id === action.payload.id);
+      if (index !== -1) {
+        state.originalEventForOptimisticUpdate = JSON.parse(JSON.stringify(state.events[index]));
+        state.events[index] = action.payload;
+      }
+    },
+    finalizeOptimisticUpdate: (state) => {
+      state.originalEventForOptimisticUpdate = null;
+    },
+    revertOptimisticUpdate: (state) => {
+      if (state.originalEventForOptimisticUpdate) {
+        const index = state.events.findIndex(event => event.id === state.originalEventForOptimisticUpdate!.id);
+        if (index !== -1) {
+          state.events[index] = state.originalEventForOptimisticUpdate;
+        }
+        state.originalEventForOptimisticUpdate = null;
+      }
+    },
     setCurrentDate: (state, action: PayloadAction<string>) => {
       state.currentDate = action.payload;
     },
@@ -100,22 +121,20 @@ const calendarSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(createEventAsync.fulfilled, (state, action) => {
-        // state.events.push(action.payload); // REMOVE: This is now handled by finalizeOptimisticEvent
-        // The original event was added optimistically with a temp ID.
-        // finalizeOptimisticEvent will update it with the permanent ID from the backend (action.payload).
-        // If for some reason an optimistic add didn't happen, this might need to add it, 
-        // but the standard flow is optimistic add -> finalize.
-        // For robustness, we could check if the event (by new permanent ID) exists. If not, add it.
-        // However, the primary responsibility shifts to finalizeOptimisticEvent.
-        // Let's assume finalizeOptimisticEvent is always called after createEventAsync.fulfilled for optimistic cases.
-        // If createEventAsync is called *without* a prior optimistic add, then we *would* need to add it here.
-        // Given our current flow in Calendar.tsx, createEventAsync is tied to an optimistic add.
+        // Assuming finalizeOptimisticEvent is called from the component after success
+      })
+      .addCase(createEventAsync.rejected, (state, action) => {
+        // Revert logic is handled in the component that dispatched optimistically
       })
       .addCase(updateEventAsync.fulfilled, (state, action) => {
         const index = state.events.findIndex(event => event.id === action.payload.id);
         if (index !== -1) {
           state.events[index] = action.payload;
         }
+        state.originalEventForOptimisticUpdate = null; // Clear backup on successful update
+      })
+      .addCase(updateEventAsync.rejected, (state, action) => {
+        // Revert logic is handled in the component that dispatched optimistically
       })
       .addCase(deleteEventAsync.fulfilled, (state, action) => {
         state.events = state.events.filter(event => event.id !== action.payload);
@@ -133,6 +152,9 @@ export const {
   optimisticallyAddEvent,
   finalizeOptimisticEvent,
   revertOptimisticAdd,
+  optimisticallyUpdateEvent,
+  finalizeOptimisticUpdate,
+  revertOptimisticUpdate,
 } = calendarSlice.actions;
 
 export default calendarSlice.reducer; 
