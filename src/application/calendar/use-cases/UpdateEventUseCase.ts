@@ -23,7 +23,7 @@ export class UpdateEventUseCase {
     this.subEventFactory = subEventFactory;
   }
 
-  async execute(eventProps: CalendarEventProps): Promise<void> {
+  async execute(eventProps: CalendarEventProps): Promise<CalendarEventProps> {
     return trackOperation(
       `UpdateEvent(${eventProps.id})`,
       async () => {
@@ -47,6 +47,7 @@ export class UpdateEventUseCase {
         
         // Update the main event
         await this.eventRepository.update(event);
+        return event.toJSON(); // Return the updated event's props
       },
       {
         eventType: eventProps.type,

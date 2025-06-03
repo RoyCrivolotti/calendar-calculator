@@ -3,7 +3,7 @@ import { SubEventRepository } from '../domain/calendar/repositories/SubEventRepo
 import { FirestoreCalendarEventRepository } from '../infrastructure/storage/FirestoreCalendarEventRepository';
 import { FirestoreSubEventRepository } from '../infrastructure/storage/FirestoreSubEventRepository';
 import { CreateEventUseCase } from '../application/calendar/use-cases/CreateEventUseCase';
-import { UpdateEventUseCase } from '../application/calendar/use-cases/UpdateEvent';
+import { UpdateEventUseCase } from '../application/calendar/use-cases/UpdateEventUseCase';
 import { DeleteEventUseCase } from '../application/calendar/use-cases/DeleteEvent';
 import { CalculateCompensationUseCase } from '../application/calendar/use-cases/CalculateCompensation';
 import { SubEventFactory } from '../domain/calendar/services/SubEventFactory';
@@ -47,7 +47,8 @@ class Container {
       'updateEventUseCase',
       new UpdateEventUseCase(
         this.get<CalendarEventRepository>('calendarEventRepository'),
-        this.get<SubEventRepository>('subEventRepository')
+        this.get<SubEventRepository>('subEventRepository'),
+        this.get<SubEventFactory>('subEventFactory')
       )
     );
 

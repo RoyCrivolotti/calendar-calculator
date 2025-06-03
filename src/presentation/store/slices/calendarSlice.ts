@@ -2,7 +2,7 @@ import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
 import { container } from '../../../config/container';
 import { CreateEventUseCase } from '../../../application/calendar/use-cases/CreateEventUseCase';
-import { UpdateEventUseCase } from '../../../application/calendar/use-cases/UpdateEvent';
+import { UpdateEventUseCase } from '../../../application/calendar/use-cases/UpdateEventUseCase';
 import { DeleteEventUseCase } from '../../../application/calendar/use-cases/DeleteEvent';
 
 interface CalendarState {
@@ -31,9 +31,11 @@ export const createEventAsync = createAsyncThunk(
   async (event: CalendarEventProps) => {
     const createEventUseCase = container.get<CreateEventUseCase>('createEventUseCase');
     const newEvent = await createEventUseCase.execute({
+      id: event.id,
       start: new Date(event.start),
       end: new Date(event.end),
-      type: event.type
+      type: event.type,
+      title: event.title,
     });
     return newEvent.toJSON();
   }
@@ -43,13 +45,17 @@ export const updateEventAsync = createAsyncThunk(
   'calendar/updateEvent',
   async (event: CalendarEventProps) => {
     const updateEventUseCase = container.get<UpdateEventUseCase>('updateEventUseCase');
-    const updatedEvent = await updateEventUseCase.execute({
+    
+    const updatedEvent: CalendarEventProps = {
       id: event.id,
       start: new Date(event.start),
       end: new Date(event.end),
-      type: event.type
-    });
-    return updatedEvent.toJSON();
+      type: event.type,
+      title: event.title,
+    };
+    
+    const returnedEventProps = await updateEventUseCase.execute(updatedEvent);
+    return returnedEventProps;
   }
 );
 
