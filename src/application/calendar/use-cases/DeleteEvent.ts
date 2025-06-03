@@ -13,7 +13,7 @@ export class DeleteEventUseCase {
     private subEventFactory: SubEventFactory
   ) {}
  
-  async execute(eventId: string, eventTypeHint?: EventType): Promise<void> {
+  async execute(eventId: string): Promise<void> {
     logger.info(`Attempting to delete event with ID: ${eventId}`);
 
     const eventToDelete = await this.eventRepository.getById(eventId);

@@ -1,5 +1,5 @@
 import { CalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
-import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
+// import { SubEvent } from '../../../domain/calendar/entities/SubEvent'; // Unused import
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';

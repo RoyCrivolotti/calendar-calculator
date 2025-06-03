@@ -30,7 +30,6 @@ const calendarEventConverter = {
     };
     if (jsonData.title !== undefined) {
       firestoreData.title = jsonData.title;
-    } else {
     }
 
     return firestoreData;

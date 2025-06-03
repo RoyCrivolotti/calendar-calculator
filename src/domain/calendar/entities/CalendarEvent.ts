@@ -29,10 +29,6 @@ export class CalendarEvent {
     this.title = props.title;
   }
 
-  static create(props: CalendarEventProps): CalendarEvent {
-    return new CalendarEvent(props);
-  }
-
   toJSON(): CalendarEventProps {
     return {
       id: this.id,
