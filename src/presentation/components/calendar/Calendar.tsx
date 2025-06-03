@@ -74,7 +74,8 @@ const Calendar: React.FC = () => {
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [conflictingEvents, setConflictingEvents] = useState<CalendarEventProps[]>([]);
-  const [pendingEventSave, setPendingEventSave] = useState<CalendarEvent | null>(null);
+  const [pendingEventSave, _setPendingEventSave] = useState<CalendarEvent | null>(null);
+  const pendingEventSaveRef = useRef<CalendarEvent | null>(null);
   const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
   const [isHolidayConflict, setIsHolidayConflict] = useState(false);
   const [compensationSectionKey, setCompensationSectionKey] = useState(0);
@@ -93,6 +94,12 @@ const Calendar: React.FC = () => {
   const latestCalculationIdRef = useRef<number>(0);
   const calendarRef = useRef<FullCalendar>(null);
   
+  // Custom setter for pendingEventSave to also update the ref
+  const setPendingEventSave = useCallback((event: CalendarEvent | null) => {
+    _setPendingEventSave(event);
+    pendingEventSaveRef.current = event;
+  }, []); // _setPendingEventSave is stable, no need to list it as dependency
+
   const refreshCalendarEvents = useCallback(async () => {
     if (!currentUser || !currentUser.uid) {
       logger.info('[Calendar] No authenticated user or UID. Skipping Firestore event load.');
@@ -547,7 +554,7 @@ const Calendar: React.FC = () => {
       startDate.setHours(0, 0, 0, 0);
       event.start = startDate;
 
-      const endDate = new Date(event.end);
+      const endDate = new Date(event.start); // Base endDate on the (potentially adjusted) startDate
       endDate.setHours(23, 59, 59, 999);
       event.end = endDate;
       logger.info(`  Adjusted holiday times: Start: ${event.start.toISOString()}, End: ${event.end.toISOString()}`);
@@ -592,86 +599,99 @@ const Calendar: React.FC = () => {
   }, [currentEventsFromStore, findConflictingEvents, setPendingEventSave, setShowConflictModal, setConflictingEvents, setIsHolidayConflict, saveEventWithoutConflictCheck]);
 
   const handleConflictModalAdjust = useCallback(async () => {
-    if (!pendingEventSave) return;
+    const eventToProcess = pendingEventSaveRef.current;
+    if (!eventToProcess) {
+      logger.warn('[handleConflictModalAdjust] No event in pendingEventSaveRef. Aborting.');
+      return;
+    }
+
+    const localPendingEventSave = eventToProcess; 
+
+    logger.info(
+      `[handleConflictModalAdjust] Adjusting event ${localPendingEventSave.id} of type ${localPendingEventSave.type}, ` +
+      `which conflicts with ${conflictingEvents.length} other events.`
+    );
+
+    setShowConflictModal(false);
+    calculatorFacade.clearCaches();
 
     try {
       await trackOperation(
-        `RegenerateConflictingSubEvents(${pendingEventSave.id})`,
+        `RegenerateConflictingSubEvents(${localPendingEventSave.id})`,
         async () => {
-          const isNewEvent = pendingEventSave.id.startsWith('temp-');
-          
-          let eventToSave = pendingEventSave;
+          let eventToSave = localPendingEventSave;
+          const isNewEvent = localPendingEventSave.id.startsWith('temp-');
           
           if (isNewEvent) {
             eventToSave = createCalendarEvent({
-              ...pendingEventSave.toJSON(),
+              ...localPendingEventSave.toJSON(),
               id: crypto.randomUUID()
             });
             
-            logger.info(`Generated permanent ID for new holiday: ${eventToSave.id}`);
+            logger.info(`Generated permanent ID for new ${eventToSave.type} event: ${eventToSave.id}`);
           }
           
-          logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} holiday: ${eventToSave.id}`);
+          logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} ${eventToSave.type} event: ${eventToSave.id}`);
           
           if (isNewEvent) {
             await dispatch(createEventAsync(eventToSave.toJSON())).unwrap();
-            logger.info(`Holiday ${eventToSave.id} saved to storage via createEventAsync`);
+            logger.info(`${eventToSave.type} event ${eventToSave.id} saved to storage via createEventAsync`);
           } else {
             await dispatch(updateEventAsync(eventToSave.toJSON())).unwrap();
-            logger.info(`Holiday ${eventToSave.id} updated in storage via updateEventAsync`);
+            logger.info(`${eventToSave.type} event ${eventToSave.id} updated in storage via updateEventAsync`);
           }
           
-          logger.info(`Now regenerating sub-events for events that conflict with holiday ${eventToSave.id}`);
-          await regenerateConflictingSubEvents(eventToSave, conflictingEvents, true);
-          
+          await regenerateConflictingSubEvents(
+            eventToSave, 
+            conflictingEvents,
+            true 
+          );
+
+          // Close the main event details modal and clear selected event on success
           dispatch(setShowEventModal(false));
           dispatch(setSelectedEvent(null));
-          
-          setShowConflictModal(false);
-          setPendingEventSave(null);
-          setConflictingEvents([]);
-          
-          logger.info(`Conflict resolved, updating compensation data`);
-          updateCompensationData(latestCalculationIdRef.current);
-          
-          return { 
-            success: true, 
-            conflictingEventsCount: conflictingEvents.length,
-            eventType: eventToSave.type
-          };
-        },
-        {
-          type: pendingEventSave.type,
-          conflictingEventsCount: conflictingEvents.length
         }
       );
+      setPendingEventSave(null); // Clear pending event after successful operation
+      setConflictingEvents([]);
+      await refreshCalendarEvents();
+      debouncedUpdateCompensationData();
+      logger.info(`Conflict resolved for event ${localPendingEventSave.id}, UI updated.`);
     } catch (error) {
-      logger.error('Failed to regenerate sub-events for conflicting events:', error);
-      alert('Failed to update events. Please try again.');
-      setShowConflictModal(false);
+      logger.error(`Error adjusting event ${localPendingEventSave.id} after conflict:`, error);
+      setNotificationTitle('Adjustment Failed');
+      setNotificationMessage(`Failed to adjust event after conflict: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setNotificationVisible(true);
+      await refreshCalendarEvents(); 
     }
   }, [
-    pendingEventSave, 
-    dispatch,
+    dispatch, 
     conflictingEvents, 
-    regenerateConflictingSubEvents, 
-    setShowConflictModal, 
-    setPendingEventSave, 
-    setConflictingEvents, 
     calculatorFacade, 
-    updateCompensationData,
-    logger,
-    trackOperation
+    refreshCalendarEvents, 
+    debouncedUpdateCompensationData, 
+    regenerateConflictingSubEvents,
+    setPendingEventSave
   ]);
+
+  const handleConflictModalContinue = useCallback(async () => {
+    const eventToProcess = pendingEventSaveRef.current;
+    if (!eventToProcess) {
+      logger.warn('[handleConflictModalContinue] No event in pendingEventSaveRef. Aborting.');
+      setShowConflictModal(false); // Close modal even if no event
+      return;
+    }
+    logger.info(`Continuing to save event ${eventToProcess.id} of type ${eventToProcess.type} despite conflicts.`);
+    setShowConflictModal(false);
+    await saveEventWithoutConflictCheck(eventToProcess);
+    setPendingEventSave(null); // Clear pending event after successful operation
+    setConflictingEvents([]);
+  }, [saveEventWithoutConflictCheck, setPendingEventSave]); // Removed pendingEventSaveRef from here as it's stable
 
   const handleConflictModalCancel = () => {
     setShowConflictModal(false);
     setPendingEventSave(null);
     setConflictingEvents([]);
-  };
-
-  const handleConflictModalContinue = () => {
-    handleConflictModalAdjust();
   };
 
   const handleDeleteEvent = async (event: CalendarEvent) => {

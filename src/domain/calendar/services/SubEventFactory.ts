@@ -18,6 +18,16 @@ export class SubEventFactory {
       logger.info(`Holiday: ${holiday.id}, Start: ${new Date(holiday.start).toLocaleDateString()}, End: ${new Date(holiday.end).toLocaleDateString()}`);
     });
     
+    // Determine the list of holidays to actually check against
+    let effectiveHolidayEvents = [...holidayEvents]; // Start with a copy
+    if (event.type === 'holiday') {
+      // If the event being processed is a holiday, ensure it's in the list
+      // for checking its own sub-event dates against.
+      if (!effectiveHolidayEvents.find(h => h.id === event.id)) {
+        effectiveHolidayEvents.push(event);
+      }
+    }
+    
     // Create hourly sub-events
     const currentTime = new Date(start);
     currentTime.setMinutes(0, 0, 0);
@@ -36,7 +46,8 @@ export class SubEventFactory {
       
       // Determine the properties of this hour
       const isWeekendHour = isWeekend(currentTime);
-      const isHolidayHour = HolidayChecker.isHoliday(currentTime, holidayEvents);
+      // Use effectiveHolidayEvents for the check
+      const isHolidayHour = HolidayChecker.isHoliday(currentTime, effectiveHolidayEvents);
       const isNightShiftHour = isNightShift(currentTime, subEventEnd);
       // Check office hours - but never consider holidays as office hours
       const isOfficeHoursTime = !isHolidayHour && isOfficeHours(currentTime);
