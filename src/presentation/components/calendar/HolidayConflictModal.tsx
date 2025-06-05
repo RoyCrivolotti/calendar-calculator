@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from '@emotion/styled';
-import { CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEventProps, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, Button } from '../common/ui';
 
 const ConflictList = styled.ul`
@@ -32,14 +32,14 @@ const HolidayConflictModal: React.FC<HolidayConflictModalProps> = ({
 }) => {
   // Get event types for a more informative display
   const conflictTypes = conflicts.map(e => 
-    e.type === 'oncall' ? 'on-call shift' : e.type
+    e.type === EventTypes.ONCALL ? 'on-call shift' : e.type
   );
   const uniqueTypes = [...new Set(conflictTypes)];
   
   // Group conflicts by type for better display
   const conflictsByType: Record<string, CalendarEventProps[]> = {};
   conflicts.forEach(conflict => {
-    const type = conflict.type === 'oncall' ? 'on-call shift' : conflict.type;
+    const type = conflict.type === EventTypes.ONCALL ? 'on-call shift' : conflict.type;
     if (!conflictsByType[type]) {
       conflictsByType[type] = [];
     }

@@ -1,7 +1,7 @@
-import { CalendarEvent } from '../entities/CalendarEvent';
+import { EventTypes } from '../entities/CalendarEvent';
 
 export interface CompensationBreakdown {
-  type: 'oncall' | 'incident' | 'total';
+  type: EventTypes.ONCALL | EventTypes.INCIDENT | 'total';
   amount: number;
   count: number;
   description: string;

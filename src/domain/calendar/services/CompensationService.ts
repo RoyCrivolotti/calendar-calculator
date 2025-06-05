@@ -1,4 +1,4 @@
-import { CalendarEvent } from '../entities/CalendarEvent';
+import { CalendarEvent, EventTypes } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
 import { CompensationBreakdown } from '../types/CompensationBreakdown';
 import { COMPENSATION_RATES } from '../constants/CompensationRates';
@@ -34,7 +34,7 @@ export class CompensationService {
     logger.debug(`Raw hours: ${hours}, type: ${subEvent.type}, isOfficeHours: ${subEvent.isOfficeHours}, isNightShift: ${subEvent.isNightShift}, isWeekend: ${subEvent.isWeekend}`);
     
     // For incidents, round up to the nearest hour even if just a few minutes
-    if (subEvent.type === 'incident') {
+    if (subEvent.type === EventTypes.INCIDENT) {
       // Weekend and night shift hours are always compensated for incidents
       if (subEvent.isWeekend || subEvent.isNightShift) {
         logger.debug(`Incident: Counting full ${Math.ceil(hours)}h (weekend or night shift)`);
@@ -50,7 +50,7 @@ export class CompensationService {
     }
     
     // For on-call shifts, also round up to the nearest hour
-    if (subEvent.type === 'oncall') {
+    if (subEvent.type === EventTypes.ONCALL) {
       // Only count non-office hours for on-call
       if (!subEvent.isOfficeHours || subEvent.isNightShift) {
         return Math.ceil(hours);
@@ -115,8 +115,8 @@ export class CompensationService {
 
 
     // Separate oncall and incident events (using the already processed `events` from the facade)
-    const oncallEvents = events.filter(event => event.type === 'oncall');
-    const incidentEvents = events.filter(event => event.type === 'incident');
+    const oncallEvents = events.filter(event => event.type === EventTypes.ONCALL);
+    const incidentEvents = events.filter(event => event.type === EventTypes.INCIDENT);
     
     // Check if we have a 24-hour weekday oncall shift (special case)
     let has24HourWeekdayOncall = false;
@@ -139,8 +139,8 @@ export class CompensationService {
     });
     
     // Get all sub-events for on-call and incidents from the *month-filtered* list
-    const oncallSubEvents = subEventsForMonth.filter(subEvent => subEvent.type === 'oncall');
-    const incidentSubEvents = subEventsForMonth.filter(subEvent => subEvent.type === 'incident');
+    const oncallSubEvents = subEventsForMonth.filter(subEvent => subEvent.type === EventTypes.ONCALL);
+    const incidentSubEvents = subEventsForMonth.filter(subEvent => subEvent.type === EventTypes.INCIDENT);
     
     logger.info(`Using ${oncallEvents.length} on-call parent events and ${incidentEvents.length} incident parent events for month ${monthKey}.`);
     logger.info(`Processing ${oncallSubEvents.length} on-call sub-events and ${incidentSubEvents.length} incident sub-events for month ${monthKey}.`);
@@ -249,7 +249,7 @@ export class CompensationService {
     // Add on-call compensation to breakdown
     if (totalWeekdayOnCallHours > 0 || totalWeekendOnCallHours > 0) {
       breakdown.push({
-        type: 'oncall',
+        type: EventTypes.ONCALL,
         amount: totalOnCallComp,
         count: oncallEvents.length,
         description: `On-call shifts (${totalWeekdayOnCallHours.toFixed(1)}h weekday, ${totalWeekendOnCallHours.toFixed(1)}h weekend)`,
@@ -273,7 +273,7 @@ export class CompensationService {
         totalWeekdayNightShiftHours > 0 || totalWeekendNightShiftHours > 0) {
       
       breakdown.push({
-        type: 'incident',
+        type: EventTypes.INCIDENT,
         amount: totalIncidentComp,
         count: incidentEvents.length,
         description: `Incidents (${totalWeekdayIncidentHours}h weekday, ${totalWeekendIncidentHours}h weekend, ${totalWeekdayNightShiftHours}h weekday night, ${totalWeekendNightShiftHours}h weekend night)`,

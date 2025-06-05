@@ -1,6 +1,6 @@
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
-import { CalendarEvent, EventType } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
 import { createUseCaseLogger } from '../../../utils/initializeLogger';
 
@@ -25,7 +25,7 @@ export class DeleteEventUseCase {
 
     logger.info(`Event ${eventId} found (type: ${eventToDelete.type}). Proceeding with deletion process.`);
 
-    if (eventToDelete.type === 'holiday') {
+    if (eventToDelete.type === EventTypes.HOLIDAY) {
       logger.info(`Holiday ${eventToDelete.id} is being deleted. Triggering ripple effect for affected events.`);
       const allOtherHolidays = (await this.eventRepository.getHolidayEvents()).filter(h => h.id !== eventId);
       await this.triggerHolidayRippleEffect(eventToDelete, allOtherHolidays);
@@ -45,7 +45,7 @@ export class DeleteEventUseCase {
     const potentiallyAffectedParentEvents = await this.eventRepository.getEventsOverlappingDateRange(
       holidayDateRange.start,
       holidayDateRange.end,
-      ['oncall', 'incident']
+      [EventTypes.ONCALL, EventTypes.INCIDENT]
     );
 
     logger.info(`HolidayRipple (Delete): Found ${potentiallyAffectedParentEvents.length} potentially affected parent events.`);

@@ -157,12 +157,12 @@ export class CompensationCalculatorFacade {
           const calEvent = event instanceof CalendarEvent ? event : new CalendarEvent(event as any);
           return this.eventBelongsToMonth(calEvent, monthKey);
         });
-        
+      
         if (eventsForMonthCalculation.length === 0) {
           logger.info(`No pre-fetched events belong to month ${monthKey}`);
-          return [];
-        }
-
+        return [];
+      }
+      
         const relevantParentEventIds = eventsForMonthCalculation.map(e => e.id);
         // Filter pre-fetched sub-events by parent ID and then by month
         const subEventsForRelevantParents = allDomainSubEvents.filter(subEvent => 
@@ -171,7 +171,7 @@ export class CompensationCalculatorFacade {
         subEventsForCalculation = this.filterSubEventsByMonth(subEventsForRelevantParents, monthKey);
         logger.debug(`Filtered to ${eventsForMonthCalculation.length} parent events and ${subEventsForCalculation.length} sub-events for month ${monthKey} from pre-fetched data.`);
 
-      } else {
+        } else {
         logger.debug(`Fetching events and sub-events from repositories for month ${monthKey}`);
         const year = actualDateObject.getFullYear(); // Use actualDateObject
         const month = actualDateObject.getMonth(); // Use actualDateObject
@@ -181,7 +181,7 @@ export class CompensationCalculatorFacade {
         logger.debug(`Fetching parent events for range: ${firstDayOfMonth.toISOString()} - ${lastDayOfMonth.toISOString()}`);
         const fetchedParentEvents = await this.eventRepository.getEventsForDateRange(firstDayOfMonth, lastDayOfMonth);
         logger.debug(`Fetched ${fetchedParentEvents.length} parent events for month ${monthKey}`);
-        
+      
         if (fetchedParentEvents.length === 0) {
           logger.info(`No events found for month ${monthKey} via repository.`);
           return [];

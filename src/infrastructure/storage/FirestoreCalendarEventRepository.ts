@@ -11,7 +11,7 @@ import {
   where,
   getDoc
 } from 'firebase/firestore';
-import { CalendarEvent, EventType } from '../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, EventType, EventTypes } from '../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../domain/calendar/repositories/CalendarEventRepository';
 import { logger } from '../../utils/logger';
 
@@ -136,7 +136,7 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       return [];
     }
     const eventsCollectionWithConverter = this.getEventsCollection(userId);
-    const q = query(eventsCollectionWithConverter, where('type', '==', 'holiday'));
+    const q = query(eventsCollectionWithConverter, where('type', '==', EventTypes.HOLIDAY));
 
     try {
       const querySnapshot = await getDocs(q);
@@ -273,12 +273,7 @@ export class FirestoreCalendarEventRepository implements CalendarEventRepository
       logger.info(`[FirestoreRepo] Fetched ${overlappingEvents.length} overlapping events (out of ${fetchedEvents.length} initially queried based on start date and type) for range ${rangeStart.toISOString()} - ${rangeEnd.toISOString()} and types ${types?.join(', ')} for user ${userId}`);
       return overlappingEvents;
     } catch (error) {
-      logger.error(`[FirestoreRepo] Error fetching overlapping events for date range ${rangeStart.toISOString()} - ${rangeEnd.toISOString()} and types ${types?.join(', ')}:`, error);
-      if (error instanceof Error && (error as any).code === 'failed-precondition') { // Firestore uses 'failed-precondition' for missing indexes
-        logger.error('[FirestoreRepo] This error likely indicates a missing composite index in Firestore. Please check your Firestore console to create the required index for querying `start` and `type`.');
-      } else if (error instanceof Error && error.message.includes('INVALID_ARGUMENT')) {
-        logger.error('[FirestoreRepo] This error might be due to an empty `types` array passed to an `in` query (ensure `types` has elements if provided), or another invalid argument.');
-      }
+      logger.error(`[FirestoreRepo] Error fetching events for date range:`, error);
       throw error;
     }
   }

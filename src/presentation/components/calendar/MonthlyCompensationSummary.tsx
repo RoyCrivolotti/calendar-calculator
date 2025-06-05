@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import styled from '@emotion/styled';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
+import { EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { logger } from '../../../utils/logger';
 import { trackOperation } from '../../../utils/errorHandler';
 import { container } from '../../../config/container';
@@ -136,7 +137,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
   const [showConfirmClearAllModal, setShowConfirmClearAllModal] = useState(false);
   const [isClearingAll, setIsClearingAll] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'oncall' | 'incident'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | EventTypes.ONCALL | EventTypes.INCIDENT>('all');
   const [isVisible, setIsVisible] = useState(false);
   
   const { tooltipState, showTooltip, hideTooltip, updateTooltipPosition } = useTooltip();
@@ -151,7 +152,7 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     defaultContent: 'events'
   });
 
-  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'oncall' | 'incident'>('all');
+  const [sidePanelTab, setSidePanelTab] = useState<'all' | EventTypes.ONCALL | EventTypes.INCIDENT>('all');
   
   const handleCloseModal = useCallback(() => {
     setSelectedMonth(null);
@@ -346,12 +347,12 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   }, [selectedMonth, data]);
 
   const oncallData = useMemo(() => 
-    selectedMonthData.filter(item => item.type === 'oncall'), 
+    selectedMonthData.filter(item => item.type === EventTypes.ONCALL), 
     [selectedMonthData]
   );
 
   const incidentData = useMemo(() => 
-    selectedMonthData.filter(item => item.type === 'incident'), 
+    selectedMonthData.filter(item => item.type === EventTypes.INCIDENT), 
     [selectedMonthData]
   );
 
@@ -361,11 +362,6 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   );
 
   const monthTotal = totalData.length > 0 ? totalData[0].amount : 0;
-
-  const getPercentage = (amount: number): string => {
-    if (!monthTotal) return '0%';
-    return `${Math.round((amount / monthTotal) * 100)}%`;
-  };
 
   const renderHoursChart = () => {
     const oncallHours = oncallData.length > 0 ? extractHoursData(oncallData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
@@ -632,8 +628,8 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             <>
               <SidePanelTabs>
                 <SidePanelTab isActive={sidePanelTab === 'all'} onClick={() => setSidePanelTab('all')}>All</SidePanelTab>
-                <SidePanelTab isActive={sidePanelTab === 'oncall'} onClick={() => setSidePanelTab('oncall')}>On-call</SidePanelTab>
-                <SidePanelTab isActive={sidePanelTab === 'incident'} onClick={() => setSidePanelTab('incident')}>Incidents</SidePanelTab>
+                <SidePanelTab isActive={sidePanelTab === EventTypes.ONCALL} onClick={() => setSidePanelTab(EventTypes.ONCALL)}>On-call</SidePanelTab>
+                <SidePanelTab isActive={sidePanelTab === EventTypes.INCIDENT} onClick={() => setSidePanelTab(EventTypes.INCIDENT)}>Incidents</SidePanelTab>
               </SidePanelTabs>
               {(() => {
                 const oncallSource = oncallData.length > 0 && oncallData[0].events ? oncallData[0].events : [];
@@ -641,13 +637,13 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
                 const currentOncallEvents: SharedPanelEvent[] = oncallSource.map(e => ({ 
                   ...e,
-                  type: 'oncall' as const, 
+                  type: EventTypes.ONCALL as const, 
                   start: new Date(e.start), 
                   end: new Date(e.end) 
                 }));
                 const currentIncidentEvents: SharedPanelEvent[] = incidentSource.map(e => ({ 
                   ...e,
-                  type: 'incident' as const, 
+                  type: EventTypes.INCIDENT as const, 
                   start: new Date(e.start), 
                   end: new Date(e.end) 
                 }));

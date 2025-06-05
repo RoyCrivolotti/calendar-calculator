@@ -1,4 +1,4 @@
-import { CalendarEvent } from '../entities/CalendarEvent';
+import { CalendarEvent, EventTypes } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
 import { isWeekend, isNightShift, isOfficeHours } from '../../../utils/calendarUtils';
 import { HolidayChecker } from './HolidayChecker';
@@ -14,10 +14,10 @@ export class SubEventFactory {
     
     // Determine the list of holidays to actually check against
     let effectiveHolidayEvents = [...holidayEvents]; // Start with a copy
-    if (event.type === 'holiday') {
+    if (event.type === EventTypes.HOLIDAY) {
       // If the event being processed is a holiday, ensure it's in the list
       // for checking its own sub-event dates against.
-      if (!effectiveHolidayEvents.find(h => h.id === event.id)) {
+      if (!effectiveHolidayEvents.some(h => h.id === event.id)) {
         effectiveHolidayEvents.push(event);
       }
     }

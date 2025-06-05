@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from '@emotion/styled';
-import { CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEventProps, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, Button } from '../common/ui';
 
 const EventList = styled.ul`
@@ -32,7 +32,7 @@ const HolidayDeleteModal: React.FC<HolidayDeleteModalProps> = ({
   const eventsByType: Record<string, CalendarEventProps[]> = {};
   
   affectedEvents.forEach(event => {
-    const type = event.type === 'oncall' ? 'on-call shift' : event.type;
+    const type = event.type === EventTypes.ONCALL ? 'on-call shift' : event.type;
     if (!eventsByType[type]) {
       eventsByType[type] = [];
     }
