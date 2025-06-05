@@ -1,5 +1,4 @@
-import { CalendarEvent } from '../entities/CalendarEvent';
-import { SubEvent } from '../entities/SubEvent';
+import { CalendarEvent, EventTypes } from '../entities/CalendarEvent';
 import { logger } from '../../../utils/logger';
 
 export class HolidayChecker {
@@ -40,11 +39,11 @@ export class HolidayChecker {
     logger.debug(`Checking if ${dateToCheck.toDateString()} is a holiday among ${events.length} events`);
     
     // Filter events to only include holidays for more efficient debugging
-    const holidayEvents = events.filter(event => event.type === 'holiday');
+    const holidayEvents = events.filter(event => event.type === EventTypes.HOLIDAY);
     logger.debug(`Found ${holidayEvents.length} holiday events to check against`);
     
     const isHoliday = events.some(event => {
-      if (event.type !== 'holiday') return false;
+      if (event.type !== EventTypes.HOLIDAY) return false;
       
       const eventStart = new Date(event.start);
       eventStart.setHours(0, 0, 0, 0);

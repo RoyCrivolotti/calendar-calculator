@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { format } from 'date-fns';
+import { EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { CalendarIcon, ClockIcon } from '../../../assets/icons'; // Adjust path as necessary
 import { formatDuration } from '../../../utils/formatting/formatters'; // Adjust path as necessary
 import {
@@ -17,7 +18,7 @@ import {
 // Define the Event type as it's used in CompensationSection and MonthlyCompensationSummary
 export interface Event {
   id: string;
-  type: 'oncall' | 'incident';
+  type: EventTypes.ONCALL | EventTypes.INCIDENT;
   start: Date;
   end: Date;
   isHoliday?: boolean;
@@ -35,7 +36,7 @@ const NoEventsMessage = styled.div`
 interface SharedEventsPanelContentProps {
   oncallEvents: Event[];
   incidentEvents: Event[];
-  activeTab: 'all' | 'oncall' | 'incident';
+  activeTab: 'all' | EventTypes.ONCALL | EventTypes.INCIDENT;
   eventsPerPage?: number;
 }
 
@@ -53,9 +54,9 @@ const SharedEventsPanelContent: React.FC<SharedEventsPanelContentProps> = ({
 
   const getEventsForTab = () => {
     switch (activeTab) {
-      case 'oncall':
+      case EventTypes.ONCALL:
         return oncallEvents;
-      case 'incident':
+      case EventTypes.INCIDENT:
         return incidentEvents;
       case 'all':
       default:
@@ -85,14 +86,14 @@ const SharedEventsPanelContent: React.FC<SharedEventsPanelContentProps> = ({
               <CalendarIcon />
               {format(new Date(event.start), 'MMM d, HH:mm')} - 
               {/* Adjust end time format based on type if necessary, similar to CompensationSection */}
-              {event.type === 'incident' && new Date(event.start).toDateString() === new Date(event.end).toDateString()
+              {event.type === EventTypes.INCIDENT && new Date(event.start).toDateString() === new Date(event.end).toDateString()
                 ? format(new Date(event.end), 'HH:mm') 
                 : format(new Date(event.end), 'MMM d, HH:mm')}
             </SharedEventTime>
-            {event.type === 'oncall' && (
+            {event.type === EventTypes.ONCALL && (
               <SharedEventBadge color="#3b82f6">On-Call</SharedEventBadge>
             )}
-            {event.type === 'incident' && (
+            {event.type === EventTypes.INCIDENT && (
               <SharedEventBadge color="#f43f5e">Incident</SharedEventBadge>
             )}
           </SharedEventTimeContainer>

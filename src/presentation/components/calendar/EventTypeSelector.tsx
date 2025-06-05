@@ -1,4 +1,5 @@
 import React from 'react';
+import { EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import styled from '@emotion/styled';
 
 const ModalOverlay = styled.div`
@@ -31,7 +32,7 @@ const Title = styled.h2`
   font-size: 1.5rem;
 `;
 
-type EventType = 'oncall' | 'incident' | 'holiday';
+type EventType = EventTypes.ONCALL | EventTypes.INCIDENT | EventTypes.HOLIDAY;
 
 interface ButtonProps {
   eventType: EventType;
@@ -47,11 +48,11 @@ const Button = styled.button<ButtonProps>`
   color: white;
   background-color: ${props => {
     switch (props.eventType) {
-      case 'oncall':
+      case EventTypes.ONCALL:
         return '#4a90e2';
-      case 'incident':
+      case EventTypes.INCIDENT:
         return '#e25c4a';
-      case 'holiday':
+      case EventTypes.HOLIDAY:
         return '#4ae25c';
     }
   }};
@@ -71,13 +72,13 @@ const EventTypeSelector: React.FC<EventTypeSelectorProps> = ({ onSelect, onClose
     <ModalOverlay onClick={onClose}>
       <ModalContent onClick={e => e.stopPropagation()}>
         <Title>Select Event Type</Title>
-        <Button eventType="oncall" onClick={() => onSelect('oncall')}>
+        <Button eventType="oncall" onClick={() => onSelect(EventTypes.ONCALL)}>
           On-Call Shift
         </Button>
-        <Button eventType="incident" onClick={() => onSelect('incident')}>
+        <Button eventType="incident" onClick={() => onSelect(EventTypes.INCIDENT)}>
           Incident
         </Button>
-        <Button eventType="holiday" onClick={() => onSelect('holiday')}>
+        <Button eventType="holiday" onClick={() => onSelect(EventTypes.HOLIDAY)}>
           Holiday
         </Button>
       </ModalContent>

@@ -1,4 +1,4 @@
-import { CalendarEvent } from '../entities/CalendarEvent';
+import { CalendarEvent, EventTypes } from '../entities/CalendarEvent';
 import { SubEvent } from '../entities/SubEvent';
 import { CompensationSummary, HoursSummary, CompensationDetail, MonthlyCompensation } from '../types/CompensationSummary';
 import { COMPENSATION_RATES } from '../constants/CompensationRates';
@@ -101,11 +101,11 @@ export class EventCompensationService {
       const hours = (subEventEnd.getTime() - subEventStart.getTime()) / (1000 * 60 * 60);
       
       // For incidents, only hours outside office hours, on weekends or night shifts are billable
-      if (subEvent.type === 'incident' && (!subEvent.isOfficeHours || subEvent.isWeekend || subEvent.isNightShift)) {
+      if (subEvent.type === EventTypes.INCIDENT && (!subEvent.isOfficeHours || subEvent.isWeekend || subEvent.isNightShift)) {
         billableHours += hours;
       } 
       // For on-call, only non-office hours are billable
-      else if (subEvent.type === 'oncall' && (!subEvent.isOfficeHours || subEvent.isNightShift)) {
+      else if (subEvent.type === EventTypes.ONCALL && (!subEvent.isOfficeHours || subEvent.isNightShift)) {
         billableHours += hours;
       }
       
@@ -144,12 +144,12 @@ export class EventCompensationService {
     const details: CompensationDetail[] = [];
     
     // Group sub-events by type and category
-    const oncallWeekday = subEvents.filter(se => se.type === 'oncall' && !se.isWeekend && (!se.isOfficeHours || se.isNightShift));
-    const oncallWeekend = subEvents.filter(se => se.type === 'oncall' && se.isWeekend);
-    const incidentWeekday = subEvents.filter(se => se.type === 'incident' && !se.isWeekend && !se.isNightShift);
-    const incidentWeekdayNight = subEvents.filter(se => se.type === 'incident' && !se.isWeekend && se.isNightShift);
-    const incidentWeekend = subEvents.filter(se => se.type === 'incident' && se.isWeekend && !se.isNightShift);
-    const incidentWeekendNight = subEvents.filter(se => se.type === 'incident' && se.isWeekend && se.isNightShift);
+    const oncallWeekday = subEvents.filter(se => se.type === EventTypes.ONCALL && !se.isWeekend && (!se.isOfficeHours || se.isNightShift));
+    const oncallWeekend = subEvents.filter(se => se.type === EventTypes.ONCALL && se.isWeekend);
+    const incidentWeekday = subEvents.filter(se => se.type === EventTypes.INCIDENT && !se.isWeekend && !se.isNightShift);
+    const incidentWeekdayNight = subEvents.filter(se => se.type === EventTypes.INCIDENT && !se.isWeekend && se.isNightShift);
+    const incidentWeekend = subEvents.filter(se => se.type === EventTypes.INCIDENT && se.isWeekend && !se.isNightShift);
+    const incidentWeekendNight = subEvents.filter(se => se.type === EventTypes.INCIDENT && se.isWeekend && se.isNightShift);
     
     // Calculate on-call weekday compensation
     if (oncallWeekday.length > 0) {
@@ -272,7 +272,7 @@ export class EventCompensationService {
       const rawHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       
       // Skip incidents during office hours (not billable)
-      if (subEvent.type === 'incident' && subEvent.isOfficeHours && !subEvent.isWeekend && !subEvent.isNightShift) {
+      if (subEvent.type === EventTypes.INCIDENT && subEvent.isOfficeHours && !subEvent.isWeekend && !subEvent.isNightShift) {
         return sum;
       }
       

@@ -1,4 +1,10 @@
-export type EventType = 'oncall' | 'incident' | 'holiday';
+export enum EventTypes {
+  ONCALL = 'oncall',
+  INCIDENT = 'incident',
+  HOLIDAY = 'holiday',
+}
+
+export type EventType = EventTypes;
 
 export interface CalendarEventProps {
   id: string;

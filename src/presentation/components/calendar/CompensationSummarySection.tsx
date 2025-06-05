@@ -1,7 +1,7 @@
 import React from 'react';
 import styled from '@emotion/styled';
 import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
-
+import { EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 const SummaryContainer = styled.div`
   /* margin-top: 1.5rem; */
   /* border-top: 1px solid #e2e8f0; */
@@ -96,7 +96,7 @@ const CompensationSummarySection: React.FC<CompensationSummarySectionProps> = ({
   
   const { hours, details, total, monthlyBreakdown } = summary;
   
-  const isIncident = details.length > 0 && details[0].description.toLowerCase().includes('incident');
+  const isIncident = details.length > 0 && details[0].description.toLowerCase().includes(EventTypes.INCIDENT);
 
   let compensatedWeekdayOnCallHours = 0;
   let calculatedNonBillableWeekdayHours = 0;

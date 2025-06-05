@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useMemo, lazy, Suspense, useCallbac
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
-import { CalendarEvent, createCalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, createCalendarEvent, CalendarEventProps, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import CompensationSection from './CompensationSection';
@@ -282,12 +282,12 @@ const Calendar: React.FC = () => {
 
     if (eventDataFromWrapper.viewType === 'dayGridMonth') {
       logger.info('[Calendar] Applying DAY_GRID_MONTH logic');
-      if (eventToUpdate.type === 'holiday') {
+      if (eventToUpdate.type === EventTypes.HOLIDAY) {
         newStart.setHours(0, 0, 0, 0);
         newEnd = new Date(newEnd.setDate(newEnd.getDate() -1));
         newEnd.setHours(23, 59, 59, 999);
         logger.info(`  Holiday in Month: Set to full days. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
-      } else if (eventToUpdate.type === 'oncall') {
+      } else if (eventToUpdate.type === EventTypes.ONCALL) {
         const originalEventStart = new Date(eventToUpdate.start);
         const originalEventEnd = new Date(eventToUpdate.end);
         const durationMs = originalEventEnd.getTime() - originalEventStart.getTime();
@@ -295,7 +295,7 @@ const Calendar: React.FC = () => {
         newStart.setHours(9, 0, 0, 0);
         newEnd = new Date(newStart.getTime() + durationMs);
         logger.info(`  On-Call in Month: Set to 9AM start, maintained duration. Start: ${newStart.toISOString()}, End: ${newEnd.toISOString()}`);
-      } else if (eventToUpdate.type === 'incident') {
+      } else if (eventToUpdate.type === EventTypes.INCIDENT) {
         const originalEventStart = new Date(eventToUpdate.start);
         const originalEventEnd = new Date(eventToUpdate.end);
         const durationMs = originalEventEnd.getTime() - originalEventStart.getTime();
@@ -339,15 +339,15 @@ const Calendar: React.FC = () => {
     }
   }, [currentEventsFromStore, dispatch]);
 
-  const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => {
+  const handleDateSelect = useCallback((selectInfo: DateSelectArg, type: EventTypes.ONCALL | EventTypes.INCIDENT | EventTypes.HOLIDAY) => {
     let effectiveStart = new Date(selectInfo.start);
     let effectiveEnd = new Date(selectInfo.end);
     
-    if (type === 'holiday') {
+    if (type === EventTypes.HOLIDAY) {
       effectiveStart.setHours(0, 0, 0, 0);
       effectiveEnd = new Date(effectiveEnd.getTime() - 1);
       effectiveEnd.setHours(23, 59, 59, 999);
-    } else if (type === 'oncall') {
+    } else if (type === EventTypes.ONCALL) {
       const calendarApi = calendarRef.current?.getApi();
       const viewType = calendarApi?.view.type;
 
@@ -363,7 +363,7 @@ const Calendar: React.FC = () => {
         effectiveEnd.setDate(inclusiveEndDay.getDate() + 1);
         effectiveEnd.setHours(0, 0, 0, 0);
       }
-    } else if (type === 'incident') {
+    } else if (type === EventTypes.INCIDENT) {
       const calendarApi = calendarRef.current?.getApi();
       const viewType = calendarApi?.view.type;
 
@@ -392,7 +392,7 @@ const Calendar: React.FC = () => {
       start: effectiveStart,
       end: effectiveEnd,  
       type,
-      title: type === 'oncall' ? 'On-Call Shift' : type === 'incident' ? 'Incident' : 'Holiday'
+      title: type === EventTypes.ONCALL ? 'On-Call Shift' : type === EventTypes.INCIDENT ? 'Incident' : 'Holiday'
     });
 
     dispatch(setSelectedEvent(newEvent.toJSON()));
@@ -548,7 +548,7 @@ const Calendar: React.FC = () => {
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     logger.info(`Checking conflicts for ${event.type} event: ${event.id}`);
   
-    if (event.type === 'holiday') {
+    if (event.type === EventTypes.HOLIDAY) {
       logger.info(`[Calendar] handleSaveEvent - Adjusting holiday ${event.id} to full day.`);
       const startDate = new Date(event.start);
       startDate.setHours(0, 0, 0, 0);
@@ -568,7 +568,7 @@ const Calendar: React.FC = () => {
       logger.info(`Conflict types: ${conflictTypes.join(', ')}`);
     }
     
-    if (event.type === 'holiday') {
+    if (event.type === EventTypes.HOLIDAY) {
       const conflictingEventsExist = allConflictingEvents.length > 0;
       
       if (conflictingEventsExist) {
@@ -580,7 +580,7 @@ const Calendar: React.FC = () => {
         return;
       }
     } else {
-      const conflictingHolidays = allConflictingEvents.filter(e => e.type === 'holiday');
+      const conflictingHolidays = allConflictingEvents.filter(e => e.type === EventTypes.HOLIDAY);
       const hasHolidayConflicts = conflictingHolidays.length > 0;
       
       if (hasHolidayConflicts) {
@@ -697,10 +697,10 @@ const Calendar: React.FC = () => {
   const handleDeleteEvent = async (event: CalendarEvent) => {
     logger.info(`Attempting to delete event: ${event.id} (${event.type})`);
     
-    if (event.type === 'holiday') {
+    if (event.type === EventTypes.HOLIDAY) {
       const allConflictingEvents = findConflictingEvents(event, currentEventsFromStore);
       
-      const affectedEvents = allConflictingEvents.filter(e => e.type !== 'holiday');
+      const affectedEvents = allConflictingEvents.filter(e => e.type !== EventTypes.HOLIDAY);
       
       if (affectedEvents.length > 0) {
         logger.info(`Found ${affectedEvents.length} events affected by holiday deletion`);
@@ -765,13 +765,13 @@ const Calendar: React.FC = () => {
         
         const updatePromises = [];
         for (const eventProps of conflictingEvents) {
-          if (eventProps.type === 'holiday') continue;
+          if (eventProps.type === EventTypes.HOLIDAY) continue;
           
           logger.debug(`Regenerating sub-events for ${eventProps.type} event ${eventProps.id}`);
           
           const updatePromise = dispatch(updateEventAsync({
             ...eventProps,
-            title: eventProps.title || (eventProps.type === 'oncall' ? 'On-Call Shift' : eventProps.type === 'incident' ? 'Incident' : 'Holiday')
+            title: eventProps.title || (eventProps.type === EventTypes.ONCALL ? 'On-Call Shift' : eventProps.type === EventTypes.INCIDENT ? 'Incident' : 'Holiday')
           })).unwrap();
           
           updatePromises.push(updatePromise);
@@ -831,7 +831,7 @@ const Calendar: React.FC = () => {
     logger.debug(`Starting holiday detection analysis for ${dateString}`);
     
     const holidayEvents = currentEventsFromStore.filter(event => {
-      if (event.type !== 'holiday') return false;
+      if (event.type !== EventTypes.HOLIDAY) return false;
       
       const eventStart = new Date(event.start);
       eventStart.setHours(0, 0, 0, 0);

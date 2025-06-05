@@ -1,16 +1,9 @@
-import { CalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
-import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
+import { CalendarEvent, CalendarEventProps, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
 import { createUseCaseLogger } from '../../../utils/initializeLogger';
-import { 
-  trackOperation, 
-  ApplicationError, 
-  BaseError, 
-  DatabaseError,
-  withErrorHandling
-} from '../../../utils/errorHandler';
+import { ApplicationError, BaseError } from '../../../utils/errorHandler';
 
 // Use standardized use case logger
 const logger = createUseCaseLogger('createEvent');
@@ -74,7 +67,7 @@ export class CreateEventUseCase {
           });
 
           // Holiday Ripple Effect
-          if (event.type === 'holiday') {
+          if (event.type === EventTypes.HOLIDAY) {
             logger.info(`Holiday ${event.id} created. Triggering ripple effect for affected events.`);
             // Get all holidays *after* this new one is saved to ensure it's included
             const currentAllHolidays = await this.eventRepository.getHolidayEvents(); 
@@ -118,7 +111,7 @@ export class CreateEventUseCase {
     const potentiallyAffectedParentEvents = await this.eventRepository.getEventsOverlappingDateRange(
       holidayDateRange.start,
       holidayDateRange.end,
-      ['oncall', 'incident'] // Only affect these types
+      [EventTypes.ONCALL, EventTypes.INCIDENT] // Only affect these types
     );
 
     logger.info(`HolidayRipple: Found ${potentiallyAffectedParentEvents.length} potentially affected parent events.`);

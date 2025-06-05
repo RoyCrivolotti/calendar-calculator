@@ -1,4 +1,4 @@
-import { CalendarEvent, CalendarEventProps, EventType } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, CalendarEventProps, EventType, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 // import { SubEvent } from '../../../domain/calendar/entities/SubEvent'; // Unused import
 import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
@@ -8,11 +8,6 @@ import { trackOperation } from '../../../utils/errorHandler';
 
 const logger = getLogger('update-event-use-case');
 
-const EventTypes: { [key in EventType as Uppercase<key>]: EventType } = {
-  ONCALL: 'oncall',
-  INCIDENT: 'incident',
-  HOLIDAY: 'holiday',
-};
 
 export class UpdateEventUseCase {
   private eventRepository: CalendarEventRepository;

@@ -4,7 +4,7 @@ import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import styled from '@emotion/styled';
 
 const EventTypeSelector = styled.div`
@@ -193,7 +193,7 @@ const CalendarContainer = styled.div`
 interface CalendarWrapperProps {
   events: CalendarEvent[];
   onEventClick: (clickInfo: EventClickArg) => void;
-  onDateSelect: (selectInfo: DateSelectArg, type: 'oncall' | 'incident' | 'holiday') => void;
+  onDateSelect: (selectInfo: DateSelectArg, type: EventTypes.ONCALL | EventTypes.INCIDENT | EventTypes.HOLIDAY) => void;
   onViewChange: (info: { start: Date; end: Date; startStr: string; endStr: string; timeZone: string; view: any }) => void;
   currentDate: Date;
   onEventUpdate: (updatedEventData: { id: string; start: Date; end: Date | null; viewType: string; /* FC view type, e.g., 'timeGridWeek', 'dayGridMonth' */ }) => void;
@@ -220,7 +220,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
       setShowEventTypeSelector(true);
     }, []);
 
-    const handleEventTypeSelect = useCallback((type: 'oncall' | 'incident' | 'holiday') => {
+    const handleEventTypeSelect = useCallback((type: EventTypes.ONCALL | EventTypes.INCIDENT | EventTypes.HOLIDAY) => {
       if (pendingEventInfo) {
         onDateSelect(pendingEventInfo, type);
       }
@@ -303,11 +303,11 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
     const formatEventTitle = useCallback((event: CalendarEvent) => {
       if (event.title) return event.title;
       switch (event.type) {
-        case 'oncall':
+        case EventTypes.ONCALL:
           return 'On-Call Shift';
-        case 'incident':
+        case EventTypes.INCIDENT:
           return 'Incident';
-        case 'holiday':
+        case EventTypes.HOLIDAY:
           return 'Holiday';
         default:
           return event.type;
@@ -315,34 +315,34 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
     }, []);
 
     const formatEventColor = useCallback((event: CalendarEvent) => {
-      if (event.type === 'oncall') {
+      if (event.type === EventTypes.ONCALL) {
         return '#e0f2fe'; // Changed from #f0f9ff (sky-100 instead of sky-50)
       }
-      if (event.type === 'incident') {
+      if (event.type === EventTypes.INCIDENT) {
         return '#fee2e2'; // Changed from #ef4444 (red-100)
       }
       return '#fef3c7'; // Changed from #f59e0b (amber-100 for holidays)
     }, []);
 
     const formatEventBorderColor = useCallback((event: CalendarEvent) => {
-      if (event.type === 'oncall') {
+      if (event.type === EventTypes.ONCALL) {
         return '#e0f2fe'; // Changed from #f0f9ff (sky-100 to match new background)
       }
-      if (event.type === 'incident') {
+      if (event.type === EventTypes.INCIDENT) {
         return '#fca5a5'; // Changed from #ef4444 (red-300)
       }
       return '#fde68a'; // Changed from #f59e0b (amber-300 for holidays)
     }, []);
 
     const formatEventTextColor = useCallback((event: CalendarEvent) => {
-      if (event.type === 'oncall') {
+      if (event.type === EventTypes.ONCALL) {
         return '#075985'; // sky-800 (consistent)
       }
       // For incident and holiday, we now want specific darker text, not just white
-      if (event.type === 'incident') {
+      if (event.type === EventTypes.INCIDENT) {
         return '#991b1b'; // red-800
       }
-      if (event.type === 'holiday') {
+      if (event.type === EventTypes.HOLIDAY) {
         return '#92400e'; // amber-800
       }
       return '#ffffff'; // Should ideally not be reached if all types handled
@@ -369,7 +369,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
         const segmentStart = event.start;
         let prefixString = '';
 
-        if (eventType === 'oncall' && overallEventEnd) {
+        if (eventType === EventTypes.ONCALL && overallEventEnd) {
           const durationMs = overallEventEnd.getTime() - originalEventStart.getTime();
           if (durationMs > 0) {
             const totalHours = Math.round(durationMs / (1000 * 60 * 60));
@@ -377,7 +377,7 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
               prefixString = `~${totalHours}hr`;
             }
           }
-        } else if (eventType === 'incident') {
+        } else if (eventType === EventTypes.INCIDENT) {
           if (segmentStart.toDateString() === originalEventStart.toDateString()) {
             prefixString = formatTime(event.startStr);
           }
@@ -585,19 +585,19 @@ const CalendarWrapperComponent = forwardRef<FullCalendar, CalendarWrapperProps>(
               <ModalTitle>Select Event Type</ModalTitle>
               <EventTypeButton
                 className="oncall"
-                onClick={() => handleEventTypeSelect('oncall')}
+                onClick={() => handleEventTypeSelect(EventTypes.ONCALL)}
               >
                 On-Call Shift
               </EventTypeButton>
               <EventTypeButton
                 className="incident"
-                onClick={() => handleEventTypeSelect('incident')}
+                onClick={() => handleEventTypeSelect(EventTypes.INCIDENT)}
               >
                 Incident
               </EventTypeButton>
               <EventTypeButton
                 className="holiday"
-                onClick={() => handleEventTypeSelect('holiday')}
+                onClick={() => handleEventTypeSelect(EventTypes.HOLIDAY)}
               >
                 Holiday
               </EventTypeButton>

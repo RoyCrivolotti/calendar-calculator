@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import styled from '@emotion/styled';
-import { CalendarEvent } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
@@ -263,7 +263,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   } = useSidePanel({ defaultContent: 'events' });
   
   // Retain sidePanelTab state if it's specific to this component's tab implementation within the panel
-  const [sidePanelTab, setSidePanelTab] = useState<'all' | 'incident' | 'oncall'>('all');
+  const [sidePanelTab, setSidePanelTab] = useState<'all' | EventTypes.INCIDENT | EventTypes.ONCALL>('all');
   
   // Use useTooltip hook
   const {
@@ -345,8 +345,8 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
 
   // Extract breakdown data for the visualization
   const getCompensationData = useCallback((): CompensationData[] => {
-    const oncallData = breakdown.find(item => item.type === 'oncall');
-    const incidentData = breakdown.find(item => item.type === 'incident');
+    const oncallData = breakdown.find(item => item.type === EventTypes.ONCALL);
+    const incidentData = breakdown.find(item => item.type === EventTypes.INCIDENT);
     const result: CompensationData[] = [];
     
     if (!oncallData && !incidentData) return [];
@@ -633,15 +633,15 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           <SidePanelBody>
             <SidePanelTabs>
               <SidePanelTab isActive={sidePanelTab === 'all'} onClick={() => setSidePanelTab('all')}>All Events</SidePanelTab>
-              <SidePanelTab isActive={sidePanelTab === 'oncall'} onClick={() => setSidePanelTab('oncall')}>On-Call</SidePanelTab>
-              <SidePanelTab isActive={sidePanelTab === 'incident'} onClick={() => setSidePanelTab('incident')}>Incidents</SidePanelTab>
+              <SidePanelTab isActive={sidePanelTab === EventTypes.ONCALL} onClick={() => setSidePanelTab(EventTypes.ONCALL)}>On-Call</SidePanelTab>
+              <SidePanelTab isActive={sidePanelTab === EventTypes.INCIDENT} onClick={() => setSidePanelTab(EventTypes.INCIDENT)}>Incidents</SidePanelTab>
             </SidePanelTabs>
             {(() => {
-              const oncallDataForPanel = breakdown.find(item => item.type === 'oncall');
-              const incidentDataForPanel = breakdown.find(item => item.type === 'incident');
+              const oncallDataForPanel = breakdown.find(item => item.type === EventTypes.ONCALL);
+              const incidentDataForPanel = breakdown.find(item => item.type === EventTypes.INCIDENT);
 
-              const oncallEventsForPanel: SharedPanelEvent[] = (oncallDataForPanel?.events || []).map(e => ({ ...e, type: 'oncall' as const, start: new Date(e.start), end: new Date(e.end) }));
-              const incidentEventsForPanel: SharedPanelEvent[] = (incidentDataForPanel?.events || []).map(e => ({ ...e, type: 'incident' as const, start: new Date(e.start), end: new Date(e.end) }));
+              const oncallEventsForPanel: SharedPanelEvent[] = (oncallDataForPanel?.events || []).map(e => ({ ...e, type: EventTypes.ONCALL as const, start: new Date(e.start), end: new Date(e.end) }));
+              const incidentEventsForPanel: SharedPanelEvent[] = (incidentDataForPanel?.events || []).map(e => ({ ...e, type: EventTypes.INCIDENT as const, start: new Date(e.start), end: new Date(e.end) }));
               
               return (
                 <SharedEventsPanelContent 

@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from '@emotion/styled';
-import { CalendarEvent, createCalendarEvent, CalendarEventProps } from '../../../domain/calendar/entities/CalendarEvent';
+import { CalendarEvent, createCalendarEvent, CalendarEventProps, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { CompensationSummary } from '../../../domain/calendar/types/CompensationSummary';
 import CompensationSummarySection from './CompensationSummarySection';
 import { logger } from '../../../utils/logger';
 import { Modal, ModalHeader, ModalTitle, ModalBody, CloseButton, Button } from '../common/ui';
-import { container } from '../../../config/container';
-import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { EventCompensationService } from '../../../domain/calendar/services/EventCompensationService';
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
 import { useAppSelector } from '../../store/hooks'; // For accessing allEvents from Redux store
@@ -31,25 +29,25 @@ const EventTypeBadge = styled.span<{ eventType: string }>`
   line-height: 1.2;
   border: 1px solid ${props => {
     switch(props.eventType) {
-      case 'oncall': return '#e0f2fe';
-      case 'incident': return '#fca5a5';
-      case 'holiday': return '#fde68a';
+      case EventTypes.ONCALL: return '#e0f2fe';
+      case EventTypes.INCIDENT: return '#fca5a5';
+      case EventTypes.HOLIDAY: return '#fde68a';
       default: return '#d1fae5';
     }
   }};
   background: ${props => {
     switch(props.eventType) {
-      case 'oncall': return '#e0f2fe';
-      case 'incident': return '#fee2e2';
-      case 'holiday': return '#fef3c7';
+      case EventTypes.ONCALL: return '#e0f2fe';
+      case EventTypes.INCIDENT: return '#fee2e2';
+      case EventTypes.HOLIDAY: return '#fef3c7';
       default: return '#f0fdf4';
     }
   }};
   color: ${props => {
     switch(props.eventType) {
-      case 'oncall': return '#075985';
-      case 'incident': return '#991b1b';
-      case 'holiday': return '#92400e';
+      case EventTypes.ONCALL: return '#075985';
+      case EventTypes.INCIDENT: return '#991b1b';
+      case EventTypes.HOLIDAY: return '#92400e';
       default: return '#16a34a';
     }
   }};
@@ -189,7 +187,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
       }
       
       // Ensure event type is valid for compensation calculation
-      if (event.type === 'holiday') {
+      if (event.type === EventTypes.HOLIDAY) {
         // Holidays don't have their own compensation preview in this context
         setCompensationSummary(null);
         setIsCalculating(false);
@@ -204,7 +202,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           ...event.toJSON(), // Base properties from the original event (like id, type)
           start: startDate,
           end: endDate,
-          title: title || (event.type === 'oncall' ? 'On-Call Shift' : 'Incident'), // Ensure title is present
+          title: title || (event.type === EventTypes.ONCALL ? 'On-Call Shift' : 'Incident'), // Ensure title is present
         };
         const temporaryEvent = new CalendarEvent(tempEventDetails);
         
@@ -216,7 +214,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
         // The SubEventFactory needs all events to correctly determine holidays
         const tempSubEvents = subEventFactory.generateSubEvents(temporaryEvent, allDomainEvents);
         
-        if (tempSubEvents.length === 0 && temporaryEvent.type === 'oncall') {
+        if (tempSubEvents.length === 0 && temporaryEvent.type === EventTypes.ONCALL) {
           logger.warn('[EventDetailsModal] No temporary sub-events generated for on-call event preview. This might indicate an issue if the duration is valid.');
         }
         
@@ -311,11 +309,11 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           <span style={{ marginRight: '0.5rem', color: '#64748b', display: 'inline-flex', alignItems: 'center' }}><CalendarIcon /></span>
           <ModalTitle>{event.id.startsWith('temp-') ? 'Add Event' : 'Edit Event'}</ModalTitle>
           <EventTypeBadge eventType={event.type}>
-            {event.type === 'oncall' && <PhoneIcon />}
-            {event.type === 'incident' && <AlertIcon />}
-            {event.type === 'oncall' ? 'On-Call Shift' : 
-             event.type === 'incident' ? 'Incident Response' :
-             event.type === 'holiday' ? 'Holiday' : event.title}
+            {event.type === EventTypes.ONCALL && <PhoneIcon />}
+            {event.type === EventTypes.INCIDENT && <AlertIcon />}
+            {event.type === EventTypes.ONCALL ? 'On-Call Shift' : 
+             event.type === EventTypes.INCIDENT ? 'Incident Response' :
+             event.type === EventTypes.HOLIDAY ? 'Holiday' : event.title}
           </EventTypeBadge>
         </div>
         <CloseButton onClose={onClose} />
@@ -335,7 +333,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
                 id="startTime"
                 value={startTime}
                 onChange={handleStartTimeChange}
-                disabled={event.type === 'holiday'}
+                disabled={event.type === EventTypes.HOLIDAY}
               />
             </TimeInputGroup>
             <TimeInputGroup>
@@ -345,7 +343,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
                 id="endTime"
                 value={endTime}
                 onChange={handleEndTimeChange}
-                disabled={event.type === 'holiday'}
+                disabled={event.type === EventTypes.HOLIDAY}
               />
             </TimeInputGroup>
           </TimeInputGrid>
