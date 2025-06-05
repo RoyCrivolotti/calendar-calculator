@@ -8,6 +8,12 @@ import { trackOperation } from '../../../utils/errorHandler';
 
 const logger = getLogger('update-event-use-case');
 
+const EventTypes: { [key in EventType as Uppercase<key>]: EventType } = {
+  ONCALL: 'oncall',
+  INCIDENT: 'incident',
+  HOLIDAY: 'holiday',
+};
+
 export class UpdateEventUseCase {
   private eventRepository: CalendarEventRepository;
   private subEventRepository: SubEventRepository;
@@ -36,7 +42,7 @@ export class UpdateEventUseCase {
           throw new Error(`Event with ID ${eventProps.id} not found.`);
         }
 
-        const originalEventIsHoliday = originalEvent.type === 'holiday';
+        const originalEventIsHoliday = originalEvent.type === EventTypes.HOLIDAY;
         const originalEventStart = new Date(originalEvent.start);
         const originalEventEnd = new Date(originalEvent.end);
 
@@ -65,7 +71,7 @@ export class UpdateEventUseCase {
         }
         
         // 3. Determine if a ripple effect is needed due to changes in holiday status or dates.
-        const updatedEventIsHoliday = updatedEvent.type === 'holiday';
+        const updatedEventIsHoliday = updatedEvent.type === EventTypes.HOLIDAY;
         // Ensure start/end are treated as Dates for comparison
         const updatedEventStart = new Date(updatedEvent.start);
         const updatedEventEnd = new Date(updatedEvent.end);
@@ -112,7 +118,7 @@ export class UpdateEventUseCase {
     const affectedRanges: { start: Date, end: Date }[] = [];
 
     // If the event is now a holiday, its new range is affected
-    if (currentEventState.type === 'holiday') {
+    if (currentEventState.type === EventTypes.HOLIDAY) {
       affectedRanges.push({ start: new Date(currentEventState.start), end: new Date(currentEventState.end) });
     }
     // If the event *was* a holiday (and its type might have changed or dates shifted), its old range was affected
@@ -125,15 +131,17 @@ export class UpdateEventUseCase {
       return;
     }
     
+    // Merge overlapping/adjacent date ranges to reduce queries
+    const mergedRanges = this.mergeDateRanges(affectedRanges);
     let allPotentiallyAffectedParentEvents: CalendarEvent[] = [];
     const processedEventIds = new Set<string>(); // To avoid processing the same parent event multiple times
 
-    for (const range of affectedRanges) {
+    for (const range of mergedRanges) {
       logger.info(`HolidayUpdateRipple: Querying events overlapping range ${range.start.toISOString()} - ${range.end.toISOString()} for ripple effect.`);
       const eventsInThisRange = await this.eventRepository.getEventsOverlappingDateRange(
         range.start,
         range.end,
-        ['oncall', 'incident'] // Only these types are affected by holiday changes for compensation
+        [EventTypes.ONCALL, EventTypes.INCIDENT] // Use constants instead of hardcoded strings
       );
       eventsInThisRange.forEach(event => {
         if (!processedEventIds.has(event.id)) {
@@ -172,5 +180,41 @@ export class UpdateEventUseCase {
       }
     }
     logger.info(`HolidayUpdateRipple: Finished processing affected events related to event ${currentEventState.id}.`);
+  }
+
+  /**
+   * Merges an array of date ranges into the minimum number of contiguous ranges.
+   * @param ranges An array of objects with start and end Date properties.
+   * @returns A new array of merged date ranges.
+   */
+  private mergeDateRanges(ranges: { start: Date, end: Date }[]): { start: Date, end: Date }[] {
+    if (ranges.length <= 1) {
+      return ranges;
+    }
+
+    // Sort ranges by start date
+    const sortedRanges = ranges.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    const merged: { start: Date, end: Date }[] = [];
+    let currentMerge = sortedRanges[0];
+
+    for (let i = 1; i < sortedRanges.length; i++) {
+      const nextRange = sortedRanges[i];
+      // Check for overlap: next range starts before or at the same time the current merge ends
+      if (nextRange.start.getTime() <= currentMerge.end.getTime()) {
+        // We have an overlap, so extend the end of the current merge if the next range ends later
+        if (nextRange.end.getTime() > currentMerge.end.getTime()) {
+          currentMerge.end = nextRange.end;
+        }
+      } else {
+        // No overlap, push the completed merge and start a new one
+        merged.push(currentMerge);
+        currentMerge = nextRange;
+      }
+    }
+    // Add the last merged range
+    merged.push(currentMerge);
+
+    return merged;
   }
 } 
