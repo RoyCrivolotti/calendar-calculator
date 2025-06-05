@@ -170,12 +170,12 @@ export class FirestoreSubEventRepository implements SubEventRepository {
       const parentIdChunk = parentIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT);
       
       const q = query(subEventsCollection, where('parentEventId', 'in', parentIdChunk));
-      try {
-        const querySnapshot = await getDocs(q);
+    try {
+      const querySnapshot = await getDocs(q);
         const subEventsInChunk = querySnapshot.docs.map(docSnap => docSnap.data()); 
         allSubEventsToDelete.push(...subEventsInChunk);
         logger.debug(`[FirestoreSubRepo] Fetched ${subEventsInChunk.length} subEvents for parentId chunk ${Math.floor(i / FIRESTORE_IN_QUERY_LIMIT) + 1}/${Math.ceil(parentIds.length / FIRESTORE_IN_QUERY_LIMIT)} (Parent IDs: ${parentIdChunk.join(', ')})`);
-      } catch (error) {
+    } catch (error) {
         logger.error(`[FirestoreSubRepo] Error fetching subEvents for parentId chunk (Parent IDs: ${parentIdChunk.join(', ')}):`, error);
         throw error;
       }
@@ -189,23 +189,23 @@ export class FirestoreSubEventRepository implements SubEventRepository {
 
     let totalSuccessfullyDeletedCount = 0;
     for (let i = 0; i < allSubEventsToDelete.length; i += FIRESTORE_WRITE_BATCH_LIMIT) {
-      const batch = writeBatch(db);
+    const batch = writeBatch(db);
       const subEventChunkToDelete = allSubEventsToDelete.slice(i, i + FIRESTORE_WRITE_BATCH_LIMIT);
       let operationsInCurrentBatch = 0;
 
       subEventChunkToDelete.forEach(subEvent => {
         if (subEvent && typeof subEvent.id === 'string' && subEvent.id.length > 0) {
-          const subEventRef = doc(db, subEventsCollectionPath, subEvent.id);
-          batch.delete(subEventRef);
+      const subEventRef = doc(db, subEventsCollectionPath, subEvent.id);
+      batch.delete(subEventRef);
           operationsInCurrentBatch++;
         } else {
           logger.warn('[FirestoreSubRepo] Skipped invalid subEvent (missing or invalid ID) during batch delete. Details:', { subEventData: subEvent });
         }
-      });
-      
+    });
+
       if (operationsInCurrentBatch > 0) {
-        try {
-          await batch.commit();
+    try {
+      await batch.commit();
           totalSuccessfullyDeletedCount += operationsInCurrentBatch;
           logger.debug(`[FirestoreSubRepo] Committed delete batch ${Math.floor(i / FIRESTORE_WRITE_BATCH_LIMIT) + 1}/${Math.ceil(allSubEventsToDelete.length / FIRESTORE_WRITE_BATCH_LIMIT)}, deleting ${operationsInCurrentBatch} subEvents.`);
         } catch (error) {
@@ -243,11 +243,11 @@ export class FirestoreSubEventRepository implements SubEventRepository {
         const subEventsInChunk = querySnapshot.docs.map(docSnap => docSnap.data());
         allFetchedSubEvents.push(...subEventsInChunk);
         logger.debug(`[FirestoreSubRepo] Fetched ${subEventsInChunk.length} subEvents for eventId chunk ${Math.floor(i / FIRESTORE_IN_QUERY_LIMIT) + 1} (Event IDs: ${chunk.join(', ')})`);
-      } catch (error) {
+    } catch (error) {
         logger.error(`[FirestoreSubRepo] Error fetching subEvents for eventId chunk (Event IDs: ${chunk.join(', ')}):`, error);
         // Depending on desired error handling, we might throw or continue to fetch other chunks
         // For now, let's rethrow to be consistent with other methods.
-        throw error;
+      throw error;
       }
     }
     logger.info(`[FirestoreSubRepo] Fetched a total of ${allFetchedSubEvents.length} subEvents for ${eventIds.length} parent event IDs.`);

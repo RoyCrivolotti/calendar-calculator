@@ -11,7 +11,7 @@ import { EventCompensationService } from '../../../domain/calendar/services/Even
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
 import { useAppSelector } from '../../store/hooks'; // For accessing allEvents from Redux store
 import { RootState } from '../../store'; // For RootState type
-import {
+import { 
   PhoneIcon, 
   AlertIcon, 
   ClockIcon, 
@@ -195,7 +195,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
         setIsCalculating(false);
         return;
       }
-
+      
       try {
         setIsCalculating(true);
         
@@ -237,7 +237,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     
     // Debounce the calculation slightly to avoid running on every keystroke instantly
     const debounceTimeout = setTimeout(() => {
-        calculatePreview();
+    calculatePreview();
     }, 300); // 300ms debounce
 
     return () => clearTimeout(debounceTimeout); // Cleanup timeout
@@ -333,8 +333,8 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
               <TimeInput 
                 type="datetime-local" 
                 id="startTime"
-                value={startTime} 
-                onChange={handleStartTimeChange} 
+                value={startTime}
+                onChange={handleStartTimeChange}
                 disabled={event.type === 'holiday'}
               />
             </TimeInputGroup>
@@ -343,7 +343,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
               <TimeInput 
                 type="datetime-local" 
                 id="endTime"
-                value={endTime} 
+                value={endTime}
                 onChange={handleEndTimeChange}
                 disabled={event.type === 'holiday'}
               />
