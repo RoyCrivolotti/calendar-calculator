@@ -225,42 +225,47 @@ export class Logger {
    * Log a message at ERROR level
    */
   error(message: string, ...args: any[]): void {
-    this.log(LogLevel.ERROR, message, args);
+    this.log(LogLevel.ERROR, message, ...args);
   }
 
   /**
    * Log a message at WARN level
    */
   warn(message: string, ...args: any[]): void {
-    this.log(LogLevel.WARN, message, args);
+    this.log(LogLevel.WARN, message, ...args);
   }
 
   /**
    * Log a message at INFO level
    */
   info(message: string, ...args: any[]): void {
-    this.log(LogLevel.INFO, message, args);
+    this.log(LogLevel.INFO, message, ...args);
   }
 
   /**
    * Log a message at DEBUG level
    */
   debug(message: string, ...args: any[]): void {
-    this.log(LogLevel.DEBUG, message, args);
+    this.log(LogLevel.DEBUG, message, ...args);
   }
 
   /**
    * Log a message at TRACE level
    */
   trace(message: string, ...args: any[]): void {
-    this.log(LogLevel.TRACE, message, args);
+    this.log(LogLevel.TRACE, message, ...args);
   }
 
   /**
-   * Core logging method that handles actual output based on level and config
+   * The core logging method
+   * @param level The log level
+   * @param message The message to log
+   * @param args Additional data to log
    */
-  private log(level: LogLevel, message: string, args: any[]): void {
-    if (level > this.config.level) return;
+  private log(level: LogLevel, message: string, ...args: any[]): void {
+    if (this.config.level < level || this.config.level === LogLevel.NONE) {
+      return;
+    }
 
     const timestamp = new Date();
     const timestampStr = formatTimestamp(timestamp, this.config);
