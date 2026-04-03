@@ -9,6 +9,7 @@ import { getMonthKey } from '../../../utils/calendarUtils';
 import { EventCompensationService } from './EventCompensationService';
 import { CompensationSummary } from '../types/CompensationSummary';
 import { HolidayChecker } from './HolidayChecker';
+import { SalaryService } from './SalaryService';
 
 /**
  * Facade for compensation calculations to ensure consistent results across the application
@@ -20,27 +21,33 @@ export class CompensationCalculatorFacade {
   private eventCompensationService: EventCompensationService;
   private eventRepository: CalendarEventRepository;
   private subEventRepository: SubEventRepository;
+  private salaryService: SalaryService | null;
   
-  private constructor(eventRepository: CalendarEventRepository, subEventRepository: SubEventRepository) {
+  private constructor(
+    eventRepository: CalendarEventRepository,
+    subEventRepository: SubEventRepository,
+    salaryService?: SalaryService
+  ) {
     this.compensationService = new CompensationService();
     this.eventCompensationService = EventCompensationService.getInstance();
     this.eventRepository = eventRepository;
     this.subEventRepository = subEventRepository;
+    this.salaryService = salaryService ?? null;
   }
   
-  /**
-   * Get the singleton instance of the facade
-   */
   public static getInstance(
     eventRepository: CalendarEventRepository,
-    subEventRepository: SubEventRepository
+    subEventRepository: SubEventRepository,
+    salaryService?: SalaryService
   ): CompensationCalculatorFacade {
     if (!this.instance) {
-      this.instance = new CompensationCalculatorFacade(eventRepository, subEventRepository);
+      this.instance = new CompensationCalculatorFacade(eventRepository, subEventRepository, salaryService);
     } else if (this.instance.subEventRepository !== subEventRepository || 
                this.instance.eventRepository !== eventRepository) {
       logger.warn('CompensationCalculatorFacade.getInstance called with new Repositories. Re-initializing.');
-      this.instance = new CompensationCalculatorFacade(eventRepository, subEventRepository);
+      this.instance = new CompensationCalculatorFacade(eventRepository, subEventRepository, salaryService);
+    } else if (salaryService && this.instance.salaryService !== salaryService) {
+      this.instance.salaryService = salaryService;
     }
     return this.instance;
   }
@@ -122,17 +129,6 @@ export class CompensationCalculatorFacade {
   }
   
   /**
-   * Filter sub-events that belong to a specific month
-   */
-  private filterSubEventsByMonth(subEvents: SubEvent[], monthKey: string): SubEvent[] {
-    return subEvents.filter(subEvent => {
-      const subEventStart = new Date(subEvent.start);
-      const subEventMonthKey = getMonthKey(subEventStart);
-      return subEventMonthKey === monthKey;
-    });
-  }
-  
-  /**
    * Calculate compensation breakdown for a specific month
    * This method ensures sub-events are loaded before calculation
    * and properly handles events that span across month boundaries
@@ -164,11 +160,9 @@ export class CompensationCalculatorFacade {
       }
       
         const relevantParentEventIds = eventsForMonthCalculation.map(e => e.id);
-        // Filter pre-fetched sub-events by parent ID and then by month
-        const subEventsForRelevantParents = allDomainSubEvents.filter(subEvent => 
+        subEventsForCalculation = allDomainSubEvents.filter(subEvent => 
           relevantParentEventIds.includes(subEvent.parentEventId)
         );
-        subEventsForCalculation = this.filterSubEventsByMonth(subEventsForRelevantParents, monthKey);
         logger.debug(`Filtered to ${eventsForMonthCalculation.length} parent events and ${subEventsForCalculation.length} sub-events for month ${monthKey} from pre-fetched data.`);
 
         } else {
@@ -240,10 +234,15 @@ export class CompensationCalculatorFacade {
       // However, compensationService.calculateMonthlyCompensation takes the date and should handle this fine.
       const finalSubEventsForService = subEventsForCalculation;
 
+      const hourlyRate = this.salaryService
+        ? this.salaryService.getHourlyRateForDate(actualDateObject)
+        : undefined;
+
       const breakdown = this.compensationService.calculateMonthlyCompensation(
         processedMonthEvents, 
         finalSubEventsForService,
-        actualDateObject // Pass the Date object to the service
+        actualDateObject,
+        hourlyRate
       );
       
       return breakdown;
@@ -267,10 +266,14 @@ export class CompensationCalculatorFacade {
       
       logger.info(`Found ${eventSubEvents.length} sub-events for event ${event.id} from Firestore`);
       
-      // Calculate compensation summary
+      const hourlyRate = this.salaryService
+        ? this.salaryService.getHourlyRateForDate(new Date(event.start))
+        : undefined;
+
       const summary = this.eventCompensationService.calculateEventCompensation(
         event,
-        eventSubEvents
+        eventSubEvents,
+        hourlyRate
       );
       
       return summary;

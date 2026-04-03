@@ -1,15 +1,30 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import styled from '@emotion/styled';
 import {
   SharedCompensationTable,
   SharedMobileRatesContainer
 } from './ui';
+import { COMPENSATION_RATES } from '../../../domain/calendar/constants/CompensationRates';
+import { SalaryService } from '../../../domain/calendar/services/SalaryService';
+import { container } from '../../../config/container';
 
 interface SharedRatesPanelContentProps {
   displayMode?: 'compact' | 'full';
 }
 
 const SharedRatesPanelContent: React.FC<SharedRatesPanelContentProps> = ({ displayMode = 'full' }) => {
+  const currentHourlyRate = useMemo(() => {
+    try {
+      const salaryService = container.get<SalaryService>('salaryService');
+      return salaryService.getHourlyRateForDate(new Date());
+    } catch {
+      return COMPENSATION_RATES.baseHourlySalary;
+    }
+  }, []);
+
+  const weekdayEffective = (currentHourlyRate * COMPENSATION_RATES.weekdayIncidentMultiplier).toFixed(2);
+  const weekendEffective = (currentHourlyRate * COMPENSATION_RATES.weekendIncidentMultiplier).toFixed(2);
+
   return (
     <SharedCompensationTable>
       <thead>
@@ -23,33 +38,33 @@ const SharedRatesPanelContent: React.FC<SharedRatesPanelContentProps> = ({ displ
       <tbody>
         <tr>
           <td>Weekday On-Call (non-office hours)</td>
-          <td>€3.90</td>
+          <td>€{COMPENSATION_RATES.weekdayOnCallRate.toFixed(2)}</td>
           <td>-</td>
-          <td>€3.90</td>
+          <td>€{COMPENSATION_RATES.weekdayOnCallRate.toFixed(2)}</td>
         </tr>
         <tr>
           <td>Weekend On-Call</td>
-          <td>€7.34</td>
+          <td>€{COMPENSATION_RATES.weekendOnCallRate.toFixed(2)}</td>
           <td>-</td>
-          <td>€7.34</td>
+          <td>€{COMPENSATION_RATES.weekendOnCallRate.toFixed(2)}</td>
         </tr>
         <tr>
           <td>Weekday Incident</td>
-          <td>€33.50</td>
-          <td>1.8×</td>
-          <td>€60.30</td>
+          <td>€{currentHourlyRate.toFixed(2)}</td>
+          <td>{COMPENSATION_RATES.weekdayIncidentMultiplier}×</td>
+          <td>€{weekdayEffective}</td>
         </tr>
         <tr>
           <td>Weekend Incident</td>
-          <td>€33.50</td>
-          <td>2.0×</td>
-          <td>€67.00</td>
+          <td>€{currentHourlyRate.toFixed(2)}</td>
+          <td>{COMPENSATION_RATES.weekendIncidentMultiplier}×</td>
+          <td>€{weekendEffective}</td>
         </tr>
         <tr>
           <td>Night Shift (additional)</td>
           <td>-</td>
-          <td>1.4×</td>
-          <td>+40% bonus</td>
+          <td>{COMPENSATION_RATES.nightShiftBonusMultiplier}×</td>
+          <td>+{((COMPENSATION_RATES.nightShiftBonusMultiplier - 1) * 100).toFixed(0)}% bonus</td>
         </tr>
       </tbody>
     </SharedCompensationTable>

@@ -4,6 +4,7 @@ import { CompensationSummary, HoursSummary, CompensationDetail, MonthlyCompensat
 import { COMPENSATION_RATES } from '../constants/CompensationRates';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { logger } from '../../../utils/logger';
+import { calculateBillableHours } from './compensationHelpers';
 
 /**
  * Service for generating detailed compensation summaries for calendar events
@@ -20,10 +21,7 @@ export class EventCompensationService {
     return EventCompensationService.instance;
   }
 
-  /**
-   * Calculate a detailed compensation summary for a single event
-   */
-  public calculateEventCompensation(event: CalendarEvent, subEvents: SubEvent[]): CompensationSummary {
+  public calculateEventCompensation(event: CalendarEvent, subEvents: SubEvent[], baseHourlySalary?: number): CompensationSummary {
     logger.debug(`Calculating detailed compensation for event ${event.id}`);
     
     // Filter sub-events that belong to this event
@@ -37,8 +35,7 @@ export class EventCompensationService {
     // Calculate hours summary
     const hours = this.calculateHoursSummary(event, eventSubEvents);
     
-    // Calculate compensation details
-    const details = this.calculateCompensationDetails(event, eventSubEvents);
+    const details = this.calculateCompensationDetails(event, eventSubEvents, baseHourlySalary);
     
     // Calculate total compensation
     const total = details.reduce((sum, detail) => sum + detail.amount, 0);
@@ -137,13 +134,10 @@ export class EventCompensationService {
     };
   }
 
-  /**
-   * Calculate detailed compensation breakdown for the event
-   */
-  private calculateCompensationDetails(event: CalendarEvent, subEvents: SubEvent[]): CompensationDetail[] {
+  private calculateCompensationDetails(event: CalendarEvent, subEvents: SubEvent[], baseHourlySalary?: number): CompensationDetail[] {
     const details: CompensationDetail[] = [];
+    const effectiveRate = baseHourlySalary ?? COMPENSATION_RATES.baseHourlySalary;
     
-    // Group sub-events by type and category
     const oncallWeekday = subEvents.filter(se => se.type === EventTypes.ONCALL && !se.isWeekend && (!se.isOfficeHours || se.isNightShift));
     const oncallWeekend = subEvents.filter(se => se.type === EventTypes.ONCALL && se.isWeekend);
     const incidentWeekday = subEvents.filter(se => se.type === EventTypes.INCIDENT && !se.isWeekend && !se.isNightShift);
@@ -151,7 +145,6 @@ export class EventCompensationService {
     const incidentWeekend = subEvents.filter(se => se.type === EventTypes.INCIDENT && se.isWeekend && !se.isNightShift);
     const incidentWeekendNight = subEvents.filter(se => se.type === EventTypes.INCIDENT && se.isWeekend && se.isNightShift);
     
-    // Calculate on-call weekday compensation
     if (oncallWeekday.length > 0) {
       const hours = this.sumSubEventHours(oncallWeekday);
       details.push({
@@ -162,7 +155,6 @@ export class EventCompensationService {
       });
     }
     
-    // Calculate on-call weekend compensation
     if (oncallWeekend.length > 0) {
       const hours = this.sumSubEventHours(oncallWeekend);
       details.push({
@@ -173,54 +165,50 @@ export class EventCompensationService {
       });
     }
     
-    // Calculate incident weekday compensation
     if (incidentWeekday.length > 0) {
       const hours = this.sumSubEventHours(incidentWeekday);
       details.push({
         hours,
-        rate: COMPENSATION_RATES.baseHourlySalary,
+        rate: effectiveRate,
         multiplier: COMPENSATION_RATES.weekdayIncidentMultiplier,
-        amount: hours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekdayIncidentMultiplier,
+        amount: hours * effectiveRate * COMPENSATION_RATES.weekdayIncidentMultiplier,
         description: 'Weekday Incident'
       });
     }
     
-    // Calculate incident weekday night shift compensation
     if (incidentWeekdayNight.length > 0) {
       const hours = this.sumSubEventHours(incidentWeekdayNight);
       details.push({
         hours,
-        rate: COMPENSATION_RATES.baseHourlySalary,
+        rate: effectiveRate,
         multiplier: COMPENSATION_RATES.weekdayIncidentMultiplier,
         nightShiftMultiplier: COMPENSATION_RATES.nightShiftBonusMultiplier,
-        amount: hours * COMPENSATION_RATES.baseHourlySalary * 
+        amount: hours * effectiveRate * 
                 COMPENSATION_RATES.weekdayIncidentMultiplier * 
                 COMPENSATION_RATES.nightShiftBonusMultiplier,
         description: 'Weekday Night Incident'
       });
     }
     
-    // Calculate incident weekend compensation
     if (incidentWeekend.length > 0) {
       const hours = this.sumSubEventHours(incidentWeekend);
       details.push({
         hours,
-        rate: COMPENSATION_RATES.baseHourlySalary,
+        rate: effectiveRate,
         multiplier: COMPENSATION_RATES.weekendIncidentMultiplier,
-        amount: hours * COMPENSATION_RATES.baseHourlySalary * COMPENSATION_RATES.weekendIncidentMultiplier,
+        amount: hours * effectiveRate * COMPENSATION_RATES.weekendIncidentMultiplier,
         description: 'Weekend Incident'
       });
     }
     
-    // Calculate incident weekend night shift compensation
     if (incidentWeekendNight.length > 0) {
       const hours = this.sumSubEventHours(incidentWeekendNight);
       details.push({
         hours,
-        rate: COMPENSATION_RATES.baseHourlySalary,
+        rate: effectiveRate,
         multiplier: COMPENSATION_RATES.weekendIncidentMultiplier,
         nightShiftMultiplier: COMPENSATION_RATES.nightShiftBonusMultiplier,
-        amount: hours * COMPENSATION_RATES.baseHourlySalary * 
+        amount: hours * effectiveRate * 
                 COMPENSATION_RATES.weekendIncidentMultiplier * 
                 COMPENSATION_RATES.nightShiftBonusMultiplier,
         description: 'Weekend Night Incident'
@@ -262,24 +250,7 @@ export class EventCompensationService {
     return monthlyBreakdown;
   }
 
-  /**
-   * Helper method to sum hours across sub-events with proper rounding
-   */
   private sumSubEventHours(subEvents: SubEvent[]): number {
-    return subEvents.reduce((sum, subEvent) => {
-      const start = new Date(subEvent.start);
-      const end = new Date(subEvent.end);
-      const rawHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-      
-      // Skip incidents during office hours (not billable)
-      if (subEvent.type === EventTypes.INCIDENT && subEvent.isOfficeHours && !subEvent.isWeekend && !subEvent.isNightShift) {
-        return sum;
-      }
-      
-      // Round up to the nearest hour for compensation calculations
-      let hours = Math.ceil(rawHours);
-      
-      return sum + hours;
-    }, 0);
+    return subEvents.reduce((sum, subEvent) => sum + calculateBillableHours(subEvent), 0);
   }
 } 

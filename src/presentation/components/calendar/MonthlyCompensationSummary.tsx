@@ -14,7 +14,6 @@ import {
   DollarIcon,
   XIcon
 } from '../../../assets/icons';
-import { extractHoursData } from '../../../utils/compensation/compensationUtils';
 import { formatMonthYear } from '../../../utils/formatting/formatters';
 import { 
   Button, 
@@ -47,6 +46,7 @@ import {
   SharedWarningText
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
+import SalaryManagement from './SalaryManagement';
 import { useTooltip, useSidePanel } from '../../hooks';
 import { useMonthDeletionHandler } from '../../hooks/useMonthDeletionHandler';
 
@@ -364,8 +364,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
   const monthTotal = totalData.length > 0 ? totalData[0].amount : 0;
 
   const renderHoursChart = () => {
-    const oncallHours = oncallData.length > 0 ? extractHoursData(oncallData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
-    const incidentHours = incidentData.length > 0 ? extractHoursData(incidentData[0].description) : { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
+    const defaultHours = { weekday: 0, weekend: 0, nightShift: 0, weekendNight: 0 };
+    const oncallHours = oncallData.length > 0 && oncallData[0].hours ? oncallData[0].hours : defaultHours;
+    const incidentHours = incidentData.length > 0 && incidentData[0].hours ? incidentData[0].hours : defaultHours;
     
     const chartItems: BarChartItem[] = [];
     const allHoursValues = [
@@ -453,82 +454,50 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
     const result: PieChartItem[] = [];
     
     if (oncallData.length > 0) {
-      const oncallHours = extractHoursData(oncallData[0].description);
-      const totalOncallAmount = oncallData[0].amount;
-      const totalOncallHours = oncallHours.weekday + oncallHours.weekend;
-      
-      if (oncallHours.weekday > 0 && totalOncallHours > 0) {
-        const weekdayProportion = oncallHours.weekday / totalOncallHours;
-        const amount = totalOncallAmount * weekdayProportion;
-        result.push({
-          key: 'weekday-oncall-pie',
-          label: 'Weekday On-Call',
-          value: amount,
-          color: '#3b82f6'
-        });
-      }
-      
-      if (oncallHours.weekend > 0 && totalOncallHours > 0) {
-        const weekendProportion = oncallHours.weekend / totalOncallHours;
-        const amount = totalOncallAmount * weekendProportion;
-        result.push({
-          key: 'weekend-oncall-pie',
-          label: 'Weekend On-Call',
-          value: amount,
-          color: '#93c5fd'
-        });
+      const hours = oncallData[0].hours;
+      if (hours) {
+        const totalOncallAmount = oncallData[0].amount;
+        const totalOncallHours = hours.weekday + hours.weekend;
+        
+        if (hours.weekday > 0 && totalOncallHours > 0) {
+          result.push({
+            key: 'weekday-oncall-pie',
+            label: 'Weekday On-Call',
+            value: totalOncallAmount * (hours.weekday / totalOncallHours),
+            color: '#3b82f6'
+          });
+        }
+        
+        if (hours.weekend > 0 && totalOncallHours > 0) {
+          result.push({
+            key: 'weekend-oncall-pie',
+            label: 'Weekend On-Call',
+            value: totalOncallAmount * (hours.weekend / totalOncallHours),
+            color: '#93c5fd'
+          });
+        }
       }
     }
     
     if (incidentData.length > 0) {
-      const hours = extractHoursData(incidentData[0].description);
-      const totalIncidentAmount = incidentData[0].amount;
-      const totalIncidentHours = 
-        hours.weekday + 
-        hours.weekend + 
-        hours.nightShift + 
-        hours.weekendNight;
-      
-      if (totalIncidentHours > 0) {
-        if (hours.weekday > 0) {
-          const proportion = hours.weekday / totalIncidentHours;
-          const amount = totalIncidentAmount * proportion;
-          result.push({
-            key: 'weekday-incident-pie',
-            label: 'Weekday Incident',
-            value: amount,
-            color: '#dc2626'
-          });
-        }
-        if (hours.weekend > 0) {
-          const proportion = hours.weekend / totalIncidentHours;
-          const amount = totalIncidentAmount * proportion;
-          result.push({
-            key: 'weekend-incident-pie',
-            label: 'Weekend Incident',
-            value: amount,
-            color: '#fca5a5'
-          });
-        }
-        if (hours.nightShift > 0) {
-          const proportion = hours.nightShift / totalIncidentHours;
-          const amount = totalIncidentAmount * proportion;
-          result.push({
-            key: 'night-shift-incident-pie',
-            label: 'Night Shift Incident',
-            value: amount,
-            color: '#9f1239'
-          });
-        }
-        if (hours.weekendNight > 0) {
-          const proportion = hours.weekendNight / totalIncidentHours;
-          const amount = totalIncidentAmount * proportion;
-          result.push({
-            key: 'weekend-night-pie',
-            label: 'Weekend Night',
-            value: amount,
-            color: '#f43f5e'
-          });
+      const hours = incidentData[0].hours;
+      if (hours) {
+        const totalIncidentAmount = incidentData[0].amount;
+        const totalIncidentHours = hours.weekday + hours.weekend + hours.nightShift + hours.weekendNight;
+        
+        if (totalIncidentHours > 0) {
+          if (hours.weekday > 0) {
+            result.push({ key: 'weekday-incident-pie', label: 'Weekday Incident', value: totalIncidentAmount * (hours.weekday / totalIncidentHours), color: '#dc2626' });
+          }
+          if (hours.weekend > 0) {
+            result.push({ key: 'weekend-incident-pie', label: 'Weekend Incident', value: totalIncidentAmount * (hours.weekend / totalIncidentHours), color: '#fca5a5' });
+          }
+          if (hours.nightShift > 0) {
+            result.push({ key: 'night-shift-incident-pie', label: 'Night Shift Incident', value: totalIncidentAmount * (hours.nightShift / totalIncidentHours), color: '#9f1239' });
+          }
+          if (hours.weekendNight > 0) {
+            result.push({ key: 'weekend-night-pie', label: 'Weekend Night', value: totalIncidentAmount * (hours.weekendNight / totalIncidentHours), color: '#f43f5e' });
+          }
         }
       }
     }
@@ -582,17 +551,17 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
 
   const renderChartLegend = () => {
     const legendItems: LegendItemProps[] = [];
-    if (oncallData.length > 0) {
-      const hours = extractHoursData(oncallData[0].description);
+    if (oncallData.length > 0 && oncallData[0].hours) {
+      const hours = oncallData[0].hours;
       if (hours.weekday > 0) legendItems.push({ label: "Weekday On-Call", color: "#3b82f6" });
       if (hours.weekend > 0) legendItems.push({ label: "Weekend On-Call", color: "#93c5fd" });
     }
-    if (incidentData.length > 0) {
-      const hours = extractHoursData(incidentData[0].description);
+    if (incidentData.length > 0 && incidentData[0].hours) {
+      const hours = incidentData[0].hours;
       if (hours.weekday > 0) legendItems.push({ label: "Weekday Incident", color: "#dc2626" });
       if (hours.weekend > 0) legendItems.push({ label: "Weekend Incident", color: "#fca5a5" });
-      if (hours.nightShift && hours.nightShift > 0) legendItems.push({ label: "Night Shift Incident", color: "#9f1239" });
-      if (hours.weekendNight && hours.weekendNight > 0) legendItems.push({ label: "Weekend Night", color: "#f43f5e" });
+      if (hours.nightShift > 0) legendItems.push({ label: "Night Shift Incident", color: "#9f1239" });
+      if (hours.weekendNight > 0) legendItems.push({ label: "Weekend Night", color: "#f43f5e" });
     }
 
     if (legendItems.length === 0 || (!renderHoursChart() && !renderCompensationPieChart())) {
@@ -658,7 +627,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               })()}
             </>
           ) : (
-            <SharedRatesPanelContent displayMode="compact" />
+            <>
+              <SharedRatesPanelContent displayMode="compact" />
+              <SalaryManagement onSalaryChange={onDataChange} />
+            </>
           )}
         </SidePanelBody>
       </SidePanel>
@@ -730,11 +702,9 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
                 }}>
                   <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Total On-Call Hours</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#334155' }}>
-                    {oncallData.length > 0 && oncallData[0].description ? 
-                      (() => {
-                        const hours = extractHoursData(oncallData[0].description);
-                        return (hours.weekday + hours.weekend).toFixed(1);
-                      })() : 0}
+                    {oncallData.length > 0 && oncallData[0].hours
+                      ? (oncallData[0].hours.weekday + oncallData[0].hours.weekend).toFixed(1)
+                      : 0}
                   </div>
                 </div>
               </div>

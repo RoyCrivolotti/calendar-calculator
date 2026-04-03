@@ -1,13 +1,16 @@
 import { CalendarEventRepository } from '../domain/calendar/repositories/CalendarEventRepository';
 import { SubEventRepository } from '../domain/calendar/repositories/SubEventRepository';
+import { SalaryRecordRepository } from '../domain/calendar/repositories/SalaryRecordRepository';
 import { FirestoreCalendarEventRepository } from '../infrastructure/storage/FirestoreCalendarEventRepository';
 import { FirestoreSubEventRepository } from '../infrastructure/storage/FirestoreSubEventRepository';
+import { FirestoreSalaryRecordRepository } from '../infrastructure/storage/FirestoreSalaryRecordRepository';
 import { CreateEventUseCase } from '../application/calendar/use-cases/CreateEventUseCase';
 import { UpdateEventUseCase } from '../application/calendar/use-cases/UpdateEventUseCase';
 import { DeleteEventUseCase } from '../application/calendar/use-cases/DeleteEvent';
 import { CalculateCompensationUseCase } from '../application/calendar/use-cases/CalculateCompensation';
 import { SubEventFactory } from '../domain/calendar/services/SubEventFactory';
 import { CompensationService } from '../domain/calendar/services/CompensationService';
+import { SalaryService } from '../domain/calendar/services/SalaryService';
 
 class Container {
   private static instance: Container;
@@ -28,10 +31,15 @@ class Container {
     // Repositories
     this.services.set('calendarEventRepository', new FirestoreCalendarEventRepository());
     this.services.set('subEventRepository', new FirestoreSubEventRepository());
+    this.services.set('salaryRecordRepository', new FirestoreSalaryRecordRepository());
 
     // Services
     this.services.set('subEventFactory', new SubEventFactory());
     this.services.set('compensationService', new CompensationService());
+    this.services.set(
+      'salaryService',
+      new SalaryService(this.get<SalaryRecordRepository>('salaryRecordRepository'))
+    );
 
     // Use cases
     this.services.set(
