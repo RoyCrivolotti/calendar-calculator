@@ -627,8 +627,10 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
               })()}
             </>
           ) : (
-            <SharedRatesPanelContent displayMode="compact" />
-            <SalaryManagement onSalaryChange={onDataChange} />
+            <>
+              <SharedRatesPanelContent displayMode="compact" />
+              <SalaryManagement onSalaryChange={onDataChange} />
+            </>
           )}
         </SidePanelBody>
       </SidePanel>

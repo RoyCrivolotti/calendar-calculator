@@ -41,3 +41,9 @@ src/firebaseConfig.ts
 # Firebase
 .firebase
 firebase.json.local
+
+# Firebase CLI / emulator logs (can contain account email, paths, project IDs)
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+dataconnect-debug.log
