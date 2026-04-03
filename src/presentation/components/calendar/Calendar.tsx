@@ -3,7 +3,6 @@ import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import FullCalendar from '@fullcalendar/react';
 import styled from '@emotion/styled';
 import { CalendarEvent, createCalendarEvent, CalendarEventProps, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
-import { SubEvent } from '../../../domain/calendar/entities/SubEvent';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
 import CompensationSection from './CompensationSection';
 import MonthlyCompensationSummary from './MonthlyCompensationSummary';
@@ -36,8 +35,7 @@ import { DEFAULT_EVENT_TIMES } from '../../../config/constants';
 import { logger } from '../../../utils/logger';
 import { getMonthKey } from '../../../utils/calendarUtils';
 import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
-import { trackOperation } from '../../../utils/errorHandler';
-import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
+import { SalaryService } from '../../../domain/calendar/services/SalaryService';
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, Button as SharedButton } from '../common/ui';
 
 const CalendarContainer = styled.div`
@@ -84,12 +82,15 @@ const Calendar: React.FC = () => {
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
 
+  const salaryService = useMemo(() => container.get<SalaryService>('salaryService'), []);
+
   const calculatorFacade = useMemo(() => {
     const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
     const subEventRepo = container.get<SubEventRepository>('subEventRepository');
-    return CompensationCalculatorFacade.getInstance(eventRepo, subEventRepo);
-  }, []);
+    return CompensationCalculatorFacade.getInstance(eventRepo, subEventRepo, salaryService);
+  }, [salaryService]);
   
+  const isSavingRef = useRef(false);
   const updateCompensationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const latestCalculationIdRef = useRef<number>(0);
   const calendarRef = useRef<FullCalendar>(null);
@@ -120,7 +121,12 @@ const Calendar: React.FC = () => {
 
   useEffect(() => {
     refreshCalendarEvents();
-  }, [refreshCalendarEvents]);
+    if (currentUser?.uid) {
+      salaryService.loadRecords().catch(err => 
+        logger.error('[Calendar] Failed to load salary records:', err)
+      );
+    }
+  }, [refreshCalendarEvents, currentUser, salaryService]);
   
   const updateCompensationData = useCallback(async (calculationId: number) => {
     logger.info(`updateCompensationData triggered (calcId: ${calculationId})`); 
@@ -226,12 +232,6 @@ const Calendar: React.FC = () => {
       updateCompensationDataRef.current(currentCalculationId);
     }, 300);
   }, [calculatorFacade]);
-
-  // Main useEffect for triggering summary updates
-  useEffect(() => {
-    logger.debug('[Calendar] useEffect for summary re-calculation. Events count: ' + currentEventsFromStore.length + '. Triggering debounce.');
-    debouncedUpdateCompensationData();
-  }, [currentEventsFromStore, debouncedUpdateCompensationData]);
 
   const handleDataRefresh = useCallback(async () => {
     logger.info('[Calendar] Data changed in summary, triggering full refresh.');
@@ -351,9 +351,17 @@ const Calendar: React.FC = () => {
       const calendarApi = calendarRef.current?.getApi();
       const viewType = calendarApi?.view.type;
 
-      if (viewType === 'dayGridMonth' || selectInfo.allDay) { 
+      if (viewType === 'dayGridMonth' || selectInfo.allDay) {
+        effectiveStart.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
+
+        let inclusiveEndDay = new Date(selectInfo.end);
+        if (inclusiveEndDay.getHours() === 0 && inclusiveEndDay.getMinutes() === 0 && inclusiveEndDay.getSeconds() === 0 && inclusiveEndDay.getMilliseconds() === 0) {
+          inclusiveEndDay = new Date(inclusiveEndDay.getTime() - 1);
+        }
+        effectiveEnd = new Date(inclusiveEndDay);
+        effectiveEnd.setHours(DEFAULT_EVENT_TIMES.END_HOUR, DEFAULT_EVENT_TIMES.END_MINUTE, 0, 0);
       } else {
-        effectiveStart.setHours(0, 0, 0, 0);
+        effectiveStart.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
       
         let inclusiveEndDay = new Date(selectInfo.end);
         if (inclusiveEndDay.getHours() === 0 && inclusiveEndDay.getMinutes() === 0 && inclusiveEndDay.getSeconds() === 0 && inclusiveEndDay.getMilliseconds() === 0) {
@@ -361,7 +369,7 @@ const Calendar: React.FC = () => {
         }
         effectiveEnd = new Date(inclusiveEndDay);
         effectiveEnd.setDate(inclusiveEndDay.getDate() + 1);
-        effectiveEnd.setHours(0, 0, 0, 0);
+        effectiveEnd.setHours(DEFAULT_EVENT_TIMES.START_HOUR, DEFAULT_EVENT_TIMES.START_MINUTE, 0, 0);
       }
     } else if (type === EventTypes.INCIDENT) {
       const calendarApi = calendarRef.current?.getApi();
@@ -425,70 +433,6 @@ const Calendar: React.FC = () => {
     );
   };
 
-  const regenerateConflictingSubEvents = async (
-    holidayEvent: CalendarEvent,
-    conflictingEventsProps: CalendarEventProps[],
-    skipHolidaySave: boolean = false
-  ): Promise<void> => {
-    if (!currentUser) {
-      logger.error('[regenerateConflictingSubEvents] User not authenticated. Aborting.');
-      throw new Error('User not authenticated');
-    }
-    logger.info('[regenerateConflictingSubEvents] Starting regeneration...', { holidayEventId: holidayEvent.id, conflictingCount: conflictingEventsProps.length });
-
-    const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
-    const subEventRepo = container.get<SubEventRepository>('subEventRepository');
-    const subEventFactory = container.get<SubEventFactory>('subEventFactory');
-
-    const allCurrentDomainEvents = currentEventsFromStore.map(props => new CalendarEvent(props));
-    const holidayEventIndex = allCurrentDomainEvents.findIndex(e => e.id === holidayEvent.id);
-    if (holidayEventIndex !== -1) {
-      allCurrentDomainEvents[holidayEventIndex] = holidayEvent;
-    } else {
-      allCurrentDomainEvents.push(holidayEvent);
-    }
-
-    const allModifiedSubEvents: SubEvent[] = [];
-    let holidaySubEvents: SubEvent[] = [];
-
-    logger.debug(`[regenerateConflictingSubEvents] Deleting existing sub-events for holiday ${holidayEvent.id}`);
-    await subEventRepo.deleteByParentId(holidayEvent.id);
-    holidaySubEvents = subEventFactory.generateSubEvents(holidayEvent, allCurrentDomainEvents);
-    holidaySubEvents.forEach((sub: SubEvent) => sub.markAsHoliday());
-    allModifiedSubEvents.push(...holidaySubEvents);
-    logger.debug(`[regenerateConflictingSubEvents] Regenerated ${holidaySubEvents.length} sub-events for holiday ${holidayEvent.id}`);
-
-    for (const conflictingEventProps of conflictingEventsProps) {
-      const conflictingEvent = new CalendarEvent(conflictingEventProps);
-      logger.debug(`[regenerateConflictingSubEvents] Processing conflicting event ${conflictingEvent.id}`);
-      
-      await subEventRepo.deleteByParentId(conflictingEvent.id);
-      let newSubEvents = subEventFactory.generateSubEvents(conflictingEvent, allCurrentDomainEvents);
-      
-      newSubEvents.forEach((sub: SubEvent) => {
-        if (sub.start < holidayEvent.end && sub.end > holidayEvent.start) {
-          if(sub.isWeekday){
-            sub.markAsHoliday(); 
-            logger.debug(`[regenerateConflictingSubEvents] Sub-event ${sub.id} for event ${conflictingEvent.id} marked as holiday due to overlap.`);
-          }
-        }
-      });
-      allModifiedSubEvents.push(...newSubEvents);
-      logger.debug(`[regenerateConflictingSubEvents] Regenerated ${newSubEvents.length} sub-events for conflicting event ${conflictingEvent.id}`);
-    }
-
-    if (allModifiedSubEvents.length > 0) {
-      logger.info(`[regenerateConflictingSubEvents] Saving ${allModifiedSubEvents.length} modified sub-events to Firestore...`);
-      await subEventRepo.save(allModifiedSubEvents);
-    }
-
-    if (!skipHolidaySave) {
-      logger.info(`[regenerateConflictingSubEvents] Saving holiday event ${holidayEvent.id} to Firestore...`);
-      await eventRepo.update(holidayEvent);
-    }
-    logger.info('[regenerateConflictingSubEvents] Regeneration complete.');
-  };
-
   const saveEventWithoutConflictCheck = useCallback(async (eventToSave: CalendarEvent) => {
     const isNewEvent = eventToSave.id.startsWith('temp-');
     const tempId = isNewEvent ? eventToSave.id : null;
@@ -546,6 +490,7 @@ const Calendar: React.FC = () => {
   }, [dispatch, calculatorFacade, refreshCalendarEvents, debouncedUpdateCompensationData, currentEventsFromStore, optimisticallyUpdateEvent, finalizeOptimisticUpdate, revertOptimisticUpdate, optimisticallyAddEvent, finalizeOptimisticEvent, revertOptimisticAdd]);
 
   const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
+    if (isSavingRef.current) return;
     logger.info(`Checking conflicts for ${event.type} event: ${event.id}`);
   
     if (event.type === EventTypes.HOLIDAY) {
@@ -554,7 +499,7 @@ const Calendar: React.FC = () => {
       startDate.setHours(0, 0, 0, 0);
       event.start = startDate;
 
-      const endDate = new Date(event.start); // Base endDate on the (potentially adjusted) startDate
+      const endDate = new Date(event.start);
       endDate.setHours(23, 59, 59, 999);
       event.end = endDate;
       logger.info(`  Adjusted holiday times: Start: ${event.start.toISOString()}, End: ${event.end.toISOString()}`);
@@ -573,6 +518,8 @@ const Calendar: React.FC = () => {
       
       if (conflictingEventsExist) {
         logger.info(`Holiday conflicts with ${allConflictingEvents.length} events - showing conflict modal`);
+        dispatch(setShowEventModal(false));
+        dispatch(setSelectedEvent(null));
         setPendingEventSave(event);
         setConflictingEvents(allConflictingEvents);
         setIsHolidayConflict(true);
@@ -585,6 +532,8 @@ const Calendar: React.FC = () => {
       
       if (hasHolidayConflicts) {
         logger.info(`Event conflicts with ${conflictingHolidays.length} holidays - showing conflict modal`);
+        dispatch(setShowEventModal(false));
+        dispatch(setSelectedEvent(null));
         setPendingEventSave(event);
         setConflictingEvents(conflictingHolidays);
         setIsHolidayConflict(false);
@@ -596,7 +545,7 @@ const Calendar: React.FC = () => {
     }
 
     saveEventWithoutConflictCheck(event);
-  }, [currentEventsFromStore, findConflictingEvents, setPendingEventSave, setShowConflictModal, setConflictingEvents, setIsHolidayConflict, saveEventWithoutConflictCheck]);
+  }, [dispatch, currentEventsFromStore, findConflictingEvents, setPendingEventSave, setShowConflictModal, setConflictingEvents, setIsHolidayConflict, saveEventWithoutConflictCheck]);
 
   const handleConflictModalAdjust = useCallback(async () => {
     const eventToProcess = pendingEventSaveRef.current;
@@ -605,7 +554,8 @@ const Calendar: React.FC = () => {
       return;
     }
 
-    const localPendingEventSave = eventToProcess; 
+    const localPendingEventSave = eventToProcess;
+    isSavingRef.current = true;
 
     logger.info(
       `[handleConflictModalAdjust] Adjusting event ${localPendingEventSave.id} of type ${localPendingEventSave.type}, ` +
@@ -616,43 +566,28 @@ const Calendar: React.FC = () => {
     calculatorFacade.clearCaches();
 
     try {
-      await trackOperation(
-        `RegenerateConflictingSubEvents(${localPendingEventSave.id})`,
-        async () => {
-          let eventToSave = localPendingEventSave;
-          const isNewEvent = localPendingEventSave.id.startsWith('temp-');
-          
-          if (isNewEvent) {
-            eventToSave = createCalendarEvent({
-              ...localPendingEventSave.toJSON(),
-              id: crypto.randomUUID()
-            });
-            
-            logger.info(`Generated permanent ID for new ${eventToSave.type} event: ${eventToSave.id}`);
-          }
-          
-          logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} ${eventToSave.type} event: ${eventToSave.id}`);
-          
-          if (isNewEvent) {
-            await dispatch(createEventAsync(eventToSave.toJSON())).unwrap();
-            logger.info(`${eventToSave.type} event ${eventToSave.id} saved to storage via createEventAsync`);
-          } else {
-            await dispatch(updateEventAsync(eventToSave.toJSON())).unwrap();
-            logger.info(`${eventToSave.type} event ${eventToSave.id} updated in storage via updateEventAsync`);
-          }
-          
-          await regenerateConflictingSubEvents(
-            eventToSave, 
-            conflictingEvents,
-            true 
-          );
+      let eventToSave = localPendingEventSave;
+      const isNewEvent = localPendingEventSave.id.startsWith('temp-');
 
-          // Close the main event details modal and clear selected event on success
-          dispatch(setShowEventModal(false));
-          dispatch(setSelectedEvent(null));
-        }
-      );
-      setPendingEventSave(null); // Clear pending event after successful operation
+      if (isNewEvent) {
+        eventToSave = createCalendarEvent({
+          ...localPendingEventSave.toJSON(),
+          id: crypto.randomUUID()
+        });
+        logger.info(`Generated permanent ID for new ${eventToSave.type} event: ${eventToSave.id}`);
+      }
+
+      logger.info(`Saving ${isNewEvent ? 'new' : 'existing'} ${eventToSave.type} event: ${eventToSave.id}`);
+
+      if (isNewEvent) {
+        await dispatch(createEventAsync(eventToSave.toJSON())).unwrap();
+        logger.info(`${eventToSave.type} event ${eventToSave.id} saved via createEventAsync`);
+      } else {
+        await dispatch(updateEventAsync(eventToSave.toJSON())).unwrap();
+        logger.info(`${eventToSave.type} event ${eventToSave.id} updated via updateEventAsync`);
+      }
+
+      setPendingEventSave(null);
       setConflictingEvents([]);
       await refreshCalendarEvents();
       debouncedUpdateCompensationData();
@@ -662,15 +597,16 @@ const Calendar: React.FC = () => {
       setNotificationTitle('Adjustment Failed');
       setNotificationMessage(`Failed to adjust event after conflict: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setNotificationVisible(true);
-      await refreshCalendarEvents(); 
+      await refreshCalendarEvents();
+    } finally {
+      isSavingRef.current = false;
     }
   }, [
-    dispatch, 
-    conflictingEvents, 
-    calculatorFacade, 
-    refreshCalendarEvents, 
-    debouncedUpdateCompensationData, 
-    regenerateConflictingSubEvents,
+    dispatch,
+    conflictingEvents,
+    calculatorFacade,
+    refreshCalendarEvents,
+    debouncedUpdateCompensationData,
     setPendingEventSave
   ]);
 
@@ -875,6 +811,7 @@ const Calendar: React.FC = () => {
         currentDate={new Date(currentDate)}
         onDateChange={(date) => dispatch(setCurrentDate(date.toISOString()))}
         onDataChange={handleDataRefresh}
+        compensationData={compensationData}
       />
       {compensationData.length > 0 && (
         <MonthlyCompensationSummary 

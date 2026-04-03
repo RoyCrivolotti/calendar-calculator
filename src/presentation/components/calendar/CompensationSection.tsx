@@ -1,19 +1,15 @@
-import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import styled from '@emotion/styled';
 import { CalendarEvent, EventTypes } from '../../../domain/calendar/entities/CalendarEvent';
 import { format } from 'date-fns';
 import { CompensationBreakdown } from '../../../domain/calendar/types/CompensationBreakdown';
-import { CompensationCalculatorFacade } from '../../../domain/calendar/services/CompensationCalculatorFacade';
 import { logger } from '../../../utils/logger';
-import { container } from '../../../config/container';
-import { SubEventRepository } from '../../../domain/calendar/repositories/SubEventRepository';
 import { 
   ChevronRightIcon, 
   ListIcon, 
   XIcon, 
   DollarIcon 
 } from '../../../assets/icons';
-import { extractHoursData } from '../../../utils/compensation/compensationUtils';
 import { 
   Button as SharedButton,
   SidePanel,
@@ -36,9 +32,9 @@ import {
   ModalFooter
 } from '../common/ui';
 import SharedRatesPanelContent from '../common/SharedRatesPanelContent';
+import SalaryManagement from './SalaryManagement';
 import { useSidePanel, useTooltip } from '../../hooks';
 import { useMonthDeletionHandler } from '../../hooks/useMonthDeletionHandler';
-import { CalendarEventRepository } from '../../../domain/calendar/repositories/CalendarEventRepository';
 
 const Section = styled.div`
   background: white;
@@ -117,28 +113,6 @@ const MonthButton = styled.button`
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-`;
-
-const LoadingOverlay = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.8);
-  color: #64748b;
-  font-style: italic;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-
-  &.active {
-    opacity: 1;
-    visibility: visible;
   }
 `;
 
@@ -226,9 +200,9 @@ interface CompensationSectionProps {
   currentDate: Date;
   onDateChange: (date: Date) => void;
   onDataChange?: () => void;
+  compensationData: CompensationBreakdown[];
 }
 
-// Type for compensation data breakdown
 interface CompensationData {
   type: string;
   amount: number;
@@ -241,19 +215,20 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   currentDate,
   onDateChange,
   onDataChange,
+  compensationData,
 }) => {
-  // Pagination settings for event lists
-  const EVENTS_PER_PAGE = 10;
-
-  const [breakdown, setBreakdown] = useState<CompensationBreakdown[]>([]);
-  const [loading, setLoading] = useState(false);
-  const calculatorFacade = useMemo(() => {
-    const eventRepo = container.get<CalendarEventRepository>('calendarEventRepository');
-    const subEventRepo = container.get<SubEventRepository>('subEventRepository');
-    return CompensationCalculatorFacade.getInstance(eventRepo, subEventRepo);
-  }, []);
   
-  // Use useSidePanel hook
+  // Filter compensationData for the currently viewed month
+  const breakdown = useMemo(() => {
+    const targetYear = currentDate.getFullYear();
+    const targetMonth = currentDate.getMonth();
+    return compensationData.filter(item => {
+      if (!item.month) return false;
+      const itemMonth = item.month instanceof Date ? item.month : new Date(item.month);
+      return itemMonth.getFullYear() === targetYear && itemMonth.getMonth() === targetMonth;
+    });
+  }, [compensationData, currentDate]);
+
   const { 
     isOpen: isSidePanelOpen,
     contentType: sidePanelContentType, 
@@ -262,10 +237,8 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     setContent: setSidePanelContentForHook
   } = useSidePanel({ defaultContent: 'events' });
   
-  // Retain sidePanelTab state if it's specific to this component's tab implementation within the panel
   const [sidePanelTab, setSidePanelTab] = useState<'all' | EventTypes.INCIDENT | EventTypes.ONCALL>('all');
   
-  // Use useTooltip hook
   const {
     tooltipState,
     showTooltip: showTooltipHook,
@@ -273,28 +246,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     updateTooltipPosition
   } = useTooltip();
   
-  // Track calculations in progress
-  const pendingCalculation = useRef<boolean>(false);
-  const previousData = useRef<string>('');
-  const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Debounced loading setter to prevent flickering
-  const setLoadingDebounced = useCallback((isLoading: boolean) => {
-    if (loadingTimerRef.current) {
-      clearTimeout(loadingTimerRef.current);
-    }
-    
-    if (isLoading) {
-      // Show loading after a small delay to prevent flicker on fast operations
-      loadingTimerRef.current = setTimeout(() => {
-        setLoading(true);
-      }, 300);
-    } else {
-      setLoading(false);
-    }
-  }, []);
-  
-  // Initialize the month deletion hook
   const {
     isDeletingMonth,
     showConfirmDeleteMonthModal,
@@ -309,39 +260,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   });
 
   const monthDeletionNotification = getNotificationProps();
-  
-  // Effect to calculate compensation data
-  useEffect(() => {
-    const calculateData = async () => {
-      if (pendingCalculation.current) {
-        return;
-      }
-      pendingCalculation.current = true;
-      setLoadingDebounced(true);
-      
-      try {
-        logger.info(`Calculating compensation for ${format(currentDate, 'MMMM yyyy')}`);
-        const result = await calculatorFacade.calculateMonthlyCompensation(new Date(currentDate));
-        
-        // ALWAYS set the breakdown when events or currentDate change, as the event list in the panel depends on it.
-        // The previous check (dataString !== previousData.current) was too simplistic as it only considered compensation amounts.
-        logger.info(`Received ${result.length} compensation items. Updating breakdown.`);
-        setBreakdown(result);
-        // previousData.current = JSON.stringify(result); // This specific optimization can be removed or re-evaluated if performance issues arise
-        
-      } catch (error) {
-        logger.error('Error calculating compensation:', error);
-        setBreakdown([]); // Clear breakdown on error
-      } finally {
-        logger.info('Compensation calculation complete, hiding loading indicator');
-        setLoadingDebounced(false);
-        pendingCalculation.current = false;
-      }
-    };
-
-    calculateData();
-    
-  }, [currentDate, calculatorFacade, setLoadingDebounced]); // Dependencies are correct
 
   // Extract breakdown data for the visualization
   const getCompensationData = useCallback((): CompensationData[] => {
@@ -352,34 +270,26 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     if (!oncallData && !incidentData) return [];
     
     if (oncallData) {
-      // Check if there's description to extract details
-      if (oncallData.description) {
-        const oncallHours = extractHoursData(oncallData.description);
-        const totalOncallHours = oncallHours.weekday + oncallHours.weekend;
+      const hours = oncallData.hours;
+      if (hours) {
+        const totalOncallHours = hours.weekday + hours.weekend;
         
-        // Weekday on-call
-        if (oncallHours.weekday > 0 && totalOncallHours > 0) {
-          const weekdayProportion = oncallHours.weekday / totalOncallHours;
-          const amount = oncallData.amount * weekdayProportion;
+        if (hours.weekday > 0 && totalOncallHours > 0) {
           result.push({
             type: 'Weekday On-Call',
-            amount,
+            amount: oncallData.amount * (hours.weekday / totalOncallHours),
             color: '#3b82f6'
           });
         }
         
-        // Weekend on-call
-        if (oncallHours.weekend > 0 && totalOncallHours > 0) {
-          const weekendProportion = oncallHours.weekend / totalOncallHours;
-          const amount = oncallData.amount * weekendProportion;
+        if (hours.weekend > 0 && totalOncallHours > 0) {
           result.push({
             type: 'Weekend On-Call',
-            amount,
+            amount: oncallData.amount * (hours.weekend / totalOncallHours),
             color: '#93c5fd'
           });
         }
       } else {
-        // If no description, add the whole thing
         result.push({
           type: 'On-Call',
           amount: oncallData.amount,
@@ -389,63 +299,44 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     }
     
     if (incidentData) {
-      // Check if there's description to extract details
-      if (incidentData.description) {
-        const hours = extractHoursData(incidentData.description);
-        const totalIncidentHours = 
-          hours.weekday + 
-          hours.weekend + 
-          hours.nightShift + 
-          hours.weekendNight;
+      const hours = incidentData.hours;
+      if (hours) {
+        const totalIncidentHours = hours.weekday + hours.weekend + hours.nightShift + hours.weekendNight;
         
-        // Only proceed with distribution if we have hours
         if (totalIncidentHours > 0) {
-          // Weekday incidents
           if (hours.weekday > 0) {
-            const proportion = hours.weekday / totalIncidentHours;
-            const amount = incidentData.amount * proportion;
             result.push({
               type: 'Weekday Incident',
-              amount,
+              amount: incidentData.amount * (hours.weekday / totalIncidentHours),
               color: '#dc2626'
             });
           }
           
-          // Weekend incidents
           if (hours.weekend > 0) {
-            const proportion = hours.weekend / totalIncidentHours;
-            const amount = incidentData.amount * proportion;
             result.push({
               type: 'Weekend Incident',
-              amount,
+              amount: incidentData.amount * (hours.weekend / totalIncidentHours),
               color: '#fca5a5'
             });
           }
           
-          // Night shift incidents
           if (hours.nightShift > 0) {
-            const proportion = hours.nightShift / totalIncidentHours;
-            const amount = incidentData.amount * proportion;
             result.push({
               type: 'Night Shift Incident',
-              amount,
+              amount: incidentData.amount * (hours.nightShift / totalIncidentHours),
               color: '#9f1239'
             });
           }
           
-          // Weekend night incidents
           if (hours.weekendNight > 0) {
-            const proportion = hours.weekendNight / totalIncidentHours;
-            const amount = incidentData.amount * proportion;
             result.push({
               type: 'Weekend Night Incident',
-              amount,
+              amount: incidentData.amount * (hours.weekendNight / totalIncidentHours),
               color: '#f43f5e'
             });
           }
         }
       } else {
-        // If no description, add the whole thing
         result.push({
           type: 'Incidents',
           amount: incidentData.amount,
@@ -454,7 +345,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
       }
     }
     
-    // Calculate percentages once we have all the data
     const totalAmount = result.reduce((sum, item) => sum + item.amount, 0);
     return result.map(item => ({
       ...item,
@@ -480,11 +370,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
     
     return result;
   }, [currentDate]);
-
-  // For debugging
-  useEffect(() => {
-    logger.info(`CompensationSection render - loading: ${loading}, breakdown items: ${breakdown.length}`);
-  });
 
   // Function to render the horizontal compensation bar
   const renderCompensationBar = () => {
@@ -668,6 +553,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
           </SidePanelHeader>
           <SidePanelBody>
             <SharedRatesPanelContent displayMode="full" />
+            <SalaryManagement onSalaryChange={onDataChange} />
           </SidePanelBody>
         </RatesSidePanel>
       </>
@@ -693,10 +579,6 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
         </MonthSelector>
         
         <Breakdown>
-          <LoadingOverlay className={loading ? 'active' : ''}>
-            Loading compensation data...
-          </LoadingOverlay>
-          
           {breakdown.length > 0 ? (
             breakdown.map((item, index) => (
               <BreakdownItem key={index}>
