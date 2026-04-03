@@ -7,6 +7,8 @@ import { logger } from '../../../utils/logger';
 import { Modal, ModalHeader, ModalTitle, ModalBody, CloseButton, Button } from '../common/ui';
 import { EventCompensationService } from '../../../domain/calendar/services/EventCompensationService';
 import { SubEventFactory } from '../../../domain/calendar/services/SubEventFactory';
+import { container } from '../../../config/container';
+import { SalaryService } from '../../../domain/calendar/services/SalaryService';
 import { useAppSelector } from '../../store/hooks'; // For accessing allEvents from Redux store
 import { RootState } from '../../store'; // For RootState type
 import { 
@@ -159,6 +161,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const subEventFactory = useMemo(() => new SubEventFactory(), []);
   const eventCompensationService = useMemo(() => EventCompensationService.getInstance(), []);
+  const salaryService = useMemo(() => container.get<SalaryService>('salaryService'), []);
   const allEventsFromStore = useAppSelector((state: RootState) => state.calendar.events);
 
   // Set up event listener for escape key
@@ -196,7 +199,11 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
       
       try {
         setIsCalculating(true);
-        
+
+        if (!salaryService.isLoaded()) {
+          await salaryService.loadRecords();
+        }
+
         // Create a temporary event with the current times from the modal
         const tempEventDetails: CalendarEventProps = {
           ...event.toJSON(), // Base properties from the original event (like id, type)
@@ -218,10 +225,13 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
           logger.warn('[EventDetailsModal] No temporary sub-events generated for on-call event preview. This might indicate an issue if the duration is valid.');
         }
         
+        const hourlyRate = salaryService.getHourlyRateForDate(startDate);
+
         // Calculate compensation summary using the event and its temporary sub-events
         const summary = eventCompensationService.calculateEventCompensation(
           temporaryEvent,
-          tempSubEvents
+          tempSubEvents,
+          hourlyRate
         );
         setCompensationSummary(summary);
         
@@ -239,7 +249,7 @@ export const EventDetailsModalComponent: React.FC<EventDetailsModalProps> = ({
     }, 300); // 300ms debounce
 
     return () => clearTimeout(debounceTimeout); // Cleanup timeout
-  }, [startTime, endTime, title, event, subEventFactory, eventCompensationService, allEventsFromStore, isTimeValid]); // Added title and allEventsFromStore
+  }, [startTime, endTime, title, event, subEventFactory, eventCompensationService, salaryService, allEventsFromStore, isTimeValid]); // Added title and allEventsFromStore
 
   const validateTimes = useCallback((start: string, end: string): boolean => {
     const startDate = new Date(start);

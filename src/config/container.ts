@@ -7,7 +7,6 @@ import { FirestoreSalaryRecordRepository } from '../infrastructure/storage/Fires
 import { CreateEventUseCase } from '../application/calendar/use-cases/CreateEventUseCase';
 import { UpdateEventUseCase } from '../application/calendar/use-cases/UpdateEventUseCase';
 import { DeleteEventUseCase } from '../application/calendar/use-cases/DeleteEvent';
-import { CalculateCompensationUseCase } from '../application/calendar/use-cases/CalculateCompensation';
 import { SubEventFactory } from '../domain/calendar/services/SubEventFactory';
 import { CompensationService } from '../domain/calendar/services/CompensationService';
 import { SalaryService } from '../domain/calendar/services/SalaryService';
@@ -69,13 +68,6 @@ class Container {
       )
     );
 
-    this.services.set(
-      'calculateCompensationUseCase',
-      new CalculateCompensationUseCase(
-        this.get<CalendarEventRepository>('calendarEventRepository'),
-        this.get<SubEventRepository>('subEventRepository')
-      )
-    );
   }
 
   get<T>(serviceName: string): T {

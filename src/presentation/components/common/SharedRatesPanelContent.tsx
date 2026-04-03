@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from '@emotion/styled';
 import {
   SharedCompensationTable,
@@ -10,17 +10,29 @@ import { container } from '../../../config/container';
 
 interface SharedRatesPanelContentProps {
   displayMode?: 'compact' | 'full';
+  /** Which date to use for salary lookup (e.g. calendar month). Defaults to today. */
+  referenceDate?: Date;
+  /** Increment after salary records load or change so rates re-read from SalaryService. */
+  refreshKey?: number;
 }
 
-const SharedRatesPanelContent: React.FC<SharedRatesPanelContentProps> = ({ displayMode = 'full' }) => {
-  const currentHourlyRate = useMemo(() => {
+const SharedRatesPanelContent: React.FC<SharedRatesPanelContentProps> = ({
+  displayMode: _displayMode = 'full',
+  referenceDate,
+  refreshKey = 0,
+}) => {
+  const [currentHourlyRate, setCurrentHourlyRate] = useState(COMPENSATION_RATES.baseHourlySalary);
+  const referenceTime = referenceDate?.getTime() ?? null;
+
+  useEffect(() => {
     try {
       const salaryService = container.get<SalaryService>('salaryService');
-      return salaryService.getHourlyRateForDate(new Date());
+      const d = referenceTime != null ? new Date(referenceTime) : new Date();
+      setCurrentHourlyRate(salaryService.getHourlyRateForDate(d));
     } catch {
-      return COMPENSATION_RATES.baseHourlySalary;
+      setCurrentHourlyRate(COMPENSATION_RATES.baseHourlySalary);
     }
-  }, []);
+  }, [referenceTime, refreshKey]);
 
   const weekdayEffective = (currentHourlyRate * COMPENSATION_RATES.weekdayIncidentMultiplier).toFixed(2);
   const weekendEffective = (currentHourlyRate * COMPENSATION_RATES.weekendIncidentMultiplier).toFixed(2);

@@ -120,9 +120,16 @@ interface MonthData {
 interface MonthlyCompensationSummaryProps {
   data: CompensationBreakdown[];
   onDataChange?: () => void;
+  ratesReferenceDate?: Date;
+  salaryRefreshKey?: number;
 }
 
-const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({ data, onDataChange }) => {
+const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
+  data,
+  onDataChange,
+  ratesReferenceDate,
+  salaryRefreshKey = 0,
+}) => {
   useEffect(() => {
     logger.debug(`MonthlyCompensationSummary received data with ${data.length} items`);
     if (data.length > 0) {
@@ -628,7 +635,11 @@ const MonthlyCompensationSummary: React.FC<MonthlyCompensationSummaryProps> = ({
             </>
           ) : (
             <>
-              <SharedRatesPanelContent displayMode="compact" />
+              <SharedRatesPanelContent
+                displayMode="compact"
+                referenceDate={selectedMonth ?? ratesReferenceDate ?? undefined}
+                refreshKey={salaryRefreshKey}
+              />
               <SalaryManagement onSalaryChange={onDataChange} />
             </>
           )}

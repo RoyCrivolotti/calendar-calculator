@@ -77,6 +77,7 @@ const Calendar: React.FC = () => {
   const [pendingEventDelete, setPendingEventDelete] = useState<CalendarEvent | null>(null);
   const [isHolidayConflict, setIsHolidayConflict] = useState(false);
   const [compensationSectionKey, setCompensationSectionKey] = useState(0);
+  const [salaryRefreshKey, setSalaryRefreshKey] = useState(0);
 
   const [notificationVisible, setNotificationVisible] = useState(false);
   const [notificationTitle, setNotificationTitle] = useState('');
@@ -120,14 +121,29 @@ const Calendar: React.FC = () => {
   }, [dispatch, currentUser]);
 
   useEffect(() => {
-    refreshCalendarEvents();
-    if (currentUser?.uid) {
-      salaryService.loadRecords().catch(err => 
-        logger.error('[Calendar] Failed to load salary records:', err)
-      );
-    }
+    let cancelled = false;
+
+    const run = async () => {
+      await refreshCalendarEvents();
+      if (currentUser?.uid) {
+        try {
+          await salaryService.loadRecords();
+        } catch (err) {
+          logger.error('[Calendar] Failed to load salary records:', err);
+        }
+      }
+      if (!cancelled) {
+        setSalaryRefreshKey((k) => k + 1);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [refreshCalendarEvents, currentUser, salaryService]);
-  
+
   const updateCompensationData = useCallback(async (calculationId: number) => {
     logger.info(`updateCompensationData triggered (calcId: ${calculationId})`); 
     
@@ -233,16 +249,30 @@ const Calendar: React.FC = () => {
     }, 300);
   }, [calculatorFacade]);
 
+  useEffect(() => {
+    if (salaryRefreshKey > 0) {
+      debouncedUpdateCompensationData();
+    }
+  }, [salaryRefreshKey, debouncedUpdateCompensationData]);
+
   const handleDataRefresh = useCallback(async () => {
     logger.info('[Calendar] Data changed in summary, triggering full refresh.');
     await refreshCalendarEvents();
+    if (currentUser?.uid) {
+      try {
+        await salaryService.loadRecords();
+      } catch (err) {
+        logger.error('[Calendar] Failed to reload salary records:', err);
+      }
+    }
+    setSalaryRefreshKey((k) => k + 1);
     debouncedUpdateCompensationData();
     if (calendarRef.current) {
       const calendarApi = calendarRef.current.getApi();
       calendarApi.refetchEvents();
       logger.info('[Calendar] Explicitly refetched FullCalendar events after data refresh.');
     }
-  }, [refreshCalendarEvents, debouncedUpdateCompensationData, calendarRef]);
+  }, [refreshCalendarEvents, debouncedUpdateCompensationData, calendarRef, currentUser, salaryService]);
 
   const handleEventUpdate = useCallback((eventDataFromWrapper: { id: string; start: Date; end: Date | null; viewType: string }) => {
     logger.info(
@@ -812,11 +842,14 @@ const Calendar: React.FC = () => {
         onDateChange={(date) => dispatch(setCurrentDate(date.toISOString()))}
         onDataChange={handleDataRefresh}
         compensationData={compensationData}
+        salaryRefreshKey={salaryRefreshKey}
       />
       {compensationData.length > 0 && (
-        <MonthlyCompensationSummary 
-          data={compensationData} 
+        <MonthlyCompensationSummary
+          data={compensationData}
           onDataChange={handleDataRefresh}
+          ratesReferenceDate={new Date(currentDate)}
+          salaryRefreshKey={salaryRefreshKey}
         />
       )}
       

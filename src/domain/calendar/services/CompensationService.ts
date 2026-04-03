@@ -33,7 +33,7 @@ export class CompensationService {
   calculateMonthlyCompensation(events: CalendarEvent[], subEvents: SubEvent[], date: Date, baseHourlySalary?: number): CompensationBreakdown[] {
     const monthKey = getMonthKey(date);
     
-    const cacheKey = this.generateCacheKey(events, subEvents, monthKey);
+    const cacheKey = this.generateCacheKey(events, subEvents, monthKey, baseHourlySalary);
     
     const cachedResult = this.cache.get(cacheKey);
     if (cachedResult && (Date.now() - cachedResult.timestamp) < this.CACHE_TTL_MS) {
@@ -323,12 +323,10 @@ export class CompensationService {
   /**
    * Generate a cache key based on events, sub-events, and month
    */
-  private generateCacheKey(events: CalendarEvent[], subEvents: SubEvent[], monthKey: string): string {
-    // Include the event IDs in the cache key
+  private generateCacheKey(events: CalendarEvent[], subEvents: SubEvent[], monthKey: string, baseHourlySalary?: number): string {
     const eventsHash = events.map(e => e.id).sort().join(',');
     const subEventsHash = subEvents.map(se => se.id).sort().join(',');
-    
-    // Using the full hash of IDs for a more reliable cache key
-    return `${monthKey}:${eventsHash}:${subEventsHash}`;
+    const salaryKey = baseHourlySalary ?? 'default';
+    return `${monthKey}:${eventsHash}:${subEventsHash}:${salaryKey}`;
   }
 } 

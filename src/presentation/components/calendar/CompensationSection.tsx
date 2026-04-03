@@ -201,6 +201,8 @@ interface CompensationSectionProps {
   onDateChange: (date: Date) => void;
   onDataChange?: () => void;
   compensationData: CompensationBreakdown[];
+  /** Bump after salary records load/change so the rates table re-reads hourly pay. */
+  salaryRefreshKey?: number;
 }
 
 interface CompensationData {
@@ -216,6 +218,7 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
   onDateChange,
   onDataChange,
   compensationData,
+  salaryRefreshKey = 0,
 }) => {
   
   // Filter compensationData for the currently viewed month
@@ -552,7 +555,11 @@ const CompensationSection: React.FC<CompensationSectionProps> = ({
             <SidePanelCloseButton onClick={closeSidePanelHook}><XIcon /></SidePanelCloseButton>
           </SidePanelHeader>
           <SidePanelBody>
-            <SharedRatesPanelContent displayMode="full" />
+            <SharedRatesPanelContent
+              displayMode="full"
+              referenceDate={currentDate}
+              refreshKey={salaryRefreshKey}
+            />
             <SalaryManagement onSalaryChange={onDataChange} />
           </SidePanelBody>
         </RatesSidePanel>
